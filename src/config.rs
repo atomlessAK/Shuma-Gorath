@@ -15,6 +15,7 @@ pub struct Config {
     pub browser_block: Vec<(String, u32)>,
     pub geo_risk: Vec<String>,
     pub whitelist: Vec<String>,
+    pub path_whitelist: Vec<String>,
     pub test_mode: bool,
 }
 
@@ -40,6 +41,7 @@ impl Config {
             browser_block: vec![("Chrome".to_string(), 120), ("Firefox".to_string(), 115), ("Safari".to_string(), 15)],
             geo_risk: vec![],
             whitelist: vec![],
+            path_whitelist: vec![],
             test_mode,
         }
     }

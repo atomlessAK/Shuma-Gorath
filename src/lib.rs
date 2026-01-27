@@ -4,6 +4,8 @@ mod quiz_tests;
 mod ban_tests;
 #[cfg(test)]
 mod whitelist_tests;
+#[cfg(test)]
+mod whitelist_path_tests;
 mod auth;
 // src/lib.rs
 // Entry point for the WASM Stealth Bot Trap Spin app
@@ -104,7 +106,11 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
     let store = store.as_ref().unwrap();
     let cfg = config::Config::load(store, site_id);
 
-    // Whitelist
+    // Path-based whitelist (for webhooks/integrations)
+    if whitelist::is_path_whitelisted(path, &cfg.path_whitelist) {
+        return Response::new(200, "OK (path whitelisted)");
+    }
+    // IP/CIDR whitelist
     if whitelist::is_whitelisted(&ip, &cfg.whitelist) {
         return Response::new(200, "OK (whitelisted)");
     }

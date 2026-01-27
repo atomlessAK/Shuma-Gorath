@@ -1,3 +1,19 @@
+/// Returns true if the given path matches any path whitelist entry (exact or prefix match, supports trailing * wildcard).
+pub fn is_path_whitelisted(path: &str, path_whitelist: &[String]) -> bool {
+    for entry in path_whitelist {
+        let entry = entry.split('#').next().unwrap_or("").trim();
+        if entry.is_empty() { continue; }
+        if entry.ends_with('*') {
+            let prefix = &entry[..entry.len()-1];
+            if path.starts_with(prefix) {
+                return true;
+            }
+        } else if path == entry {
+            return true;
+        }
+    }
+    false
+}
 // src/whitelist.rs
 // Whitelist logic for WASM Bot Trap
 // Supports single IPs, CIDR ranges, and inline comments (e.g., "192.168.1.0/24 # office")
