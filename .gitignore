@@ -1,0 +1,6 @@
+target/
+build/
+*.wasm
+*.lock
+.DS_Store
+.env

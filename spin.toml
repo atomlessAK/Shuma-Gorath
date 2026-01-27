@@ -1,0 +1,17 @@
+spin_manifest_version = 2
+[application]
+name = "wasm-bot-trap"
+version = "0.1.0"
+authors = ["Your Name <your@email.com>"]
+description = "Wasm-based stealth bot trap for Fermyon Spin."
+
+[[trigger.http]]
+route = "/..."
+component = "bot-trap"
+
+[component.bot-trap]
+source = "src/bot_trap.wasm"
+allowed_http_hosts = ["*"]
+
+[component.bot-trap.build]
+command = "cargo build --target wasm32-wasip1 --release && cp target/wasm32-wasip1/release/wasm_bot_trap.wasm src/bot_trap.wasm"
