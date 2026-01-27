@@ -1,3 +1,19 @@
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ban_entry_serialization() {
+        let entry = BanEntry {
+            reason: "test".to_string(),
+            expires: 1234567890,
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        let de: BanEntry = serde_json::from_str(&json).unwrap();
+        assert_eq!(de.reason, "test");
+        assert_eq!(de.expires, 1234567890);
+    }
+}
 // src/ban.rs
 // Ban list management for WASM Bot Trap
 // Handles persistent IP bans, expiry, and ban reasons using the Spin key-value store.

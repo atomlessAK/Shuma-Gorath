@@ -9,9 +9,11 @@ description = "Wasm-based stealth bot trap for Fermyon Spin."
 route = "/..."
 component = "bot-trap"
 
+
 [component.bot-trap]
 source = "src/bot_trap.wasm"
-allowed_http_hosts = ["*"]
+allowed_outbound_hosts = ["http://*", "https://*"]
+key_value_stores = ["default"]
 
 [component.bot-trap.build]
 command = "cargo build --target wasm32-wasip1 --release && cp target/wasm32-wasip1/release/wasm_bot_trap.wasm src/bot_trap.wasm"

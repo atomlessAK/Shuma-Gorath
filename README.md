@@ -36,7 +36,20 @@ All endpoints require an `Authorization: Bearer <API_KEY>` header.
 
 ---
 
-## Developer Notes
+
+## Manual Testing: Triggering Bot Trap Responses
+
+To manually trigger and test each bot trap response in your browser or with curl, you can simulate the following scenarios:
+
+1. **Whitelist**: Add your IP to the whitelist in the config (or remove it to test blocks).
+2. **Ban**: Manually ban your IP using the admin API, or trigger a honeypot or rate limit.
+3. **Honeypot**: Visit a honeypot path (e.g., http://127.0.0.1:3000/bot-trap).
+4. **Rate Limit**: Send many requests quickly (e.g., with a script or curl loop) to exceed the rate limit.
+5. **JS Challenge**: Clear cookies and visit the root endpoint; you should see the JS challenge page.
+6. **Outdated Browser**: Use a custom User-Agent string with an old version (e.g., Chrome/100) to trigger a block.
+7. **Geo Risk**: Add a high-risk country to the config and set the X-Geo-Country header.
+
+You can use browser dev tools or curl to set headers and test these scenarios. See the admin API section above for ban management.
 
 - Modular Rust code: see `src/` for ban, rate, JS, browser, geo, whitelist, honeypot, and admin logic.
 - Unit tests: see `src/ban_tests.rs` for ban logic tests (expand as needed).

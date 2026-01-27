@@ -1,3 +1,14 @@
+    #[test]
+    fn test_ban_entry_serialization() {
+        let entry = BanEntry {
+            reason: "test".to_string(),
+            expires: 1234567890,
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        let de: BanEntry = serde_json::from_str(&json).unwrap();
+        assert_eq!(de.reason, "test");
+        assert_eq!(de.expires, 1234567890);
+    }
 // src/ban_tests.rs
 // Unit tests for ban logic
 

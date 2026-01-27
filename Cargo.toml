@@ -6,7 +6,7 @@ authors = ["Your Name <your@email.com>"]
 description = "Wasm-based stealth bot trap for Fermyon Spin."
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 spin-sdk = "2.2.0"
