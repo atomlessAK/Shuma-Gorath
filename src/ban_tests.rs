@@ -1,3 +1,16 @@
+        #[test]
+        fn test_ban_and_unban_unknown_ip() {
+            let mut store = MockStore::default();
+            let site_id = "testsite";
+            let ip = "unknown";
+            // Ban 'unknown' IP
+            ban_ip(&store, site_id, ip, "test", 60);
+            assert!(is_banned(&store, site_id, ip));
+            // Unban 'unknown' IP (simulate admin unban)
+            let key = format!("ban:{}:{}", site_id, ip);
+            let _ = store.delete(&key);
+            assert!(!is_banned(&store, site_id, ip));
+        }
     #[test]
     fn test_ban_entry_serialization() {
         let entry = BanEntry {

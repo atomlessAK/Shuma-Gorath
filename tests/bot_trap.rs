@@ -2,7 +2,7 @@
 // Integration tests for WASM Bot Trap
 
 use spin_sdk::http::{Request, Response, Method};
-use wasm_bot_trap::handle_bot_trap;
+use wasm_bot_trap::handle_bot_trap_impl;
 
 fn make_request(path: &str, ip: &str, ua: &str) -> Request {
     let mut req = Request::new(Method::Get, path);
@@ -15,7 +15,7 @@ fn make_request(path: &str, ip: &str, ua: &str) -> Request {
 fn test_whitelisted_ip() {
     // Should return 200 for whitelisted IP
     let req = make_request("/", "1.2.3.4", "TestUA");
-    let resp = handle_bot_trap(req);
+    let resp = handle_bot_trap_impl(&req);
     assert_eq!(resp.status(), 200);
 }
 
@@ -29,7 +29,7 @@ fn test_banned_ip() {
 fn test_honeypot() {
     // Should ban and block on honeypot path
     let req = make_request("/bot-trap", "5.6.7.8", "TestUA");
-    let resp = handle_bot_trap(req);
+    let resp = handle_bot_trap_impl(&req);
     assert_eq!(resp.status(), 403);
 }
 
@@ -49,6 +49,6 @@ fn test_js_challenge() {
 fn test_admin_unauthorized() {
     // Should return 401 for missing API key
     let req = make_request("/admin", "1.2.3.4", "TestUA");
-    let resp = handle_bot_trap(req);
+    let resp = handle_bot_trap_impl(&req);
     assert_eq!(resp.status(), 401);
 }

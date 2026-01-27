@@ -16,6 +16,7 @@ This project implements a customizable, behavior-based bot defense system for de
 
 ---
 
+
 ## Usage
 
 ### As a Site Owner
@@ -23,13 +24,27 @@ This project implements a customizable, behavior-based bot defense system for de
 - Configure honeypot URLs, rate limits, browser blocklist, geo risk countries, and whitelist via the admin API.
 - Monitor and manage bans and analytics via the admin API.
 
+### Endpoints
+
+- `/health` — Health check endpoint. Returns `OK` only when accessed from localhost (127.0.0.1 or ::1). Used for liveness/readiness probes. All other sources receive 403 Forbidden.
+- `/` — Main endpoint. Applies bot trap logic: whitelist, ban, honeypot, rate limit, JS challenge, browser/geo checks.
+- `/admin/*` — Admin API endpoints (see below).
+
 ### Admin API Endpoints
-All endpoints require an `Authorization: Bearer <API_KEY>` header.
+All endpoints require an `Authorization: Bearer <API_KEY>` header. The API key is configurable via the `API_KEY` environment variable (see below).
 
 - `GET /admin/ban` — List all current bans (JSON: IP, reason, expiry)
-- `POST /admin/unban?ip=...` — Unban a specific IP
+- `POST /admin/unban?ip=...` — Unban a specific IP (removes ban immediately)
 - `GET /admin/analytics` — Get ban count analytics
 - `GET /admin` — Usage help
+
+#### API Key Configuration
+- The admin API key is set via the `API_KEY` environment variable in your Spin manifest or deployment environment. If not set, it defaults to `changeme-supersecret` for development.
+- Example (in `spin.toml`):
+	```toml
+	[component.bot-trap]
+	environment = { API_KEY = "changeme-supersecret" }
+	```
 
 ### Configuration
 - Ban duration, rate limit, honeypot URLs, browser blocklist, geo risk, and whitelist are stored in edge KV and can be managed via future admin endpoints or direct KV updates.
@@ -37,7 +52,27 @@ All endpoints require an `Authorization: Bearer <API_KEY>` header.
 ---
 
 
-## Manual Testing: Triggering Bot Trap Responses
+
+## Testing
+
+### Integration Tests (Automated)
+
+Run the full integration test suite with:
+
+```sh
+spin build && ./test_spin_colored.sh
+```
+
+This script will:
+- Test `/health` endpoint (OK from localhost only)
+- Test root endpoint (`/`) for JS challenge and normal OK
+- Test honeypot ban and verify ban logic
+- Test admin unban (`/admin/unban?ip=...`)
+- Test `/health` after ban/unban
+
+All results are color-coded for easy review. See `test_spin_colored.sh` for details.
+
+### Manual Testing: Triggering Bot Trap Responses
 
 To manually trigger and test each bot trap response in your browser or with curl, you can simulate the following scenarios:
 
@@ -51,8 +86,19 @@ To manually trigger and test each bot trap response in your browser or with curl
 
 You can use browser dev tools or curl to set headers and test these scenarios. See the admin API section above for ban management.
 
+### Unit Tests
+
+Unit tests for ban logic are in `src/ban_tests.rs`. Run with:
+
+```sh
+cargo test --lib
+```
+
+---
+
 - Modular Rust code: see `src/` for ban, rate, JS, browser, geo, whitelist, honeypot, and admin logic.
-- Unit tests: see `src/ban_tests.rs` for ban logic tests (expand as needed).
+- Integration test script: see `test_spin_colored.sh` for automated end-to-end tests.
+- Unit tests: see `src/ban_tests.rs` for ban logic tests.
 - Logging: Security events and ban actions are logged using Spin's logging macros.
 - Performance: Early returns, minimal KV access, lightweight parsing, and optimized WASM build.
 
