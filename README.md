@@ -155,6 +155,119 @@ Internet → Akamai Edge (CDN) → EdgeWorkers/Compute@Edge (WASM)
 - Seamless integration with existing Akamai properties
 - Global edge network with 4,000+ points of presence
 
+### 🤖 Integration with Akamai Bot Manager
+
+**Akamai Bot Manager** is Akamai's enterprise-grade bot detection and mitigation solution that uses machine learning, behavioral analysis, and fingerprinting to identify and manage bot traffic. When deploying the WASM bot trap on Akamai infrastructure, you should understand how these two solutions can work together.
+
+#### Understanding the Roles
+
+| Feature | Akamai Bot Manager | WASM Bot Trap |
+|---------|-------------------|---------------|
+| **Detection Method** | ML/AI, fingerprinting, behavioral analysis | Rule-based, honeypots, rate limiting |
+| **Bot Categories** | Known bots, unknown bots, bot scores | Binary (allow/block) with custom rules |
+| **Management** | Akamai Control Center | Self-hosted admin API/dashboard |
+| **Customization** | Policy-based configuration | Full code-level customization |
+| **Cost Model** | Licensed per traffic volume | Open source, self-managed |
+
+#### Recommended Architecture: Layered Defense
+
+For maximum protection, use **Bot Manager as the first line of defense** with the WASM bot trap providing **application-specific protections**:
+
+```
+Internet → Akamai Edge
+              ↓
+        Bot Manager (Layer 1)
+        - Known bot detection
+        - Bot scoring & categorization
+        - Fingerprinting
+        - Behavioral analysis
+              ↓
+        EdgeWorkers / WASM Bot Trap (Layer 2)
+        - Custom honeypots for your app
+        - Application-specific rate limits
+        - Business logic-based blocking
+        - Custom challenge flows
+              ↓
+        Origin Application
+```
+
+#### When to Use Each Solution
+
+**Use Akamai Bot Manager for:**
+- Detecting known commercial bots (scrapers, SEO tools, etc.)
+- Identifying sophisticated bots using ML-based behavioral analysis
+- Managing bot traffic with granular policies (allow, block, throttle, challenge)
+- Protecting against credential stuffing and account takeover (ATO)
+- Compliance with bot management SLAs and reporting
+
+**Use WASM Bot Trap for:**
+- Custom honeypot URLs specific to your application
+- Application-aware rate limiting (e.g., per-endpoint limits)
+- Custom JavaScript challenges tailored to your site
+- Rapid prototyping of new detection rules
+- Protecting specific high-value endpoints with custom logic
+- Cost-effective protection for smaller properties
+
+**Use Both Together for:**
+- Defense in depth with multiple detection layers
+- Catching bots that evade one layer with the other
+- Custom application logic that Bot Manager can't handle
+- Extending Bot Manager with application-specific rules
+
+#### Configuration: Bot Manager + WASM Bot Trap
+
+**Step 1: Configure Bot Manager First**
+
+In Akamai Control Center:
+1. Enable Bot Manager on your property
+2. Configure bot detection policies (e.g., block known bad bots)
+3. Set up conditional actions based on bot score
+4. Pass bot detection headers to origin/EdgeWorkers
+
+**Step 2: Forward Bot Manager Headers to WASM Bot Trap**
+
+Bot Manager can pass detection results via headers. Configure your property to forward:
+
+```
+Akamai-Bot-Score: 85
+Akamai-Bot-Category: AUTOMATED_TOOL
+Akamai-Bot-Action: MONITOR
+```
+
+**Step 3: Use Bot Manager Data in WASM Bot Trap (Future Enhancement)**
+
+The WASM bot trap can be extended to read these headers and make decisions:
+
+```rust
+// Example: Trust Bot Manager's high-confidence detections
+fn check_bot_manager_headers(req: &Request) -> Option<BotManagerResult> {
+    let score = req.header("Akamai-Bot-Score")?.parse::<u8>().ok()?;
+    let category = req.header("Akamai-Bot-Category")?;
+    
+    if score > 90 && category == "MALICIOUS_BOT" {
+        return Some(BotManagerResult::Block);
+    }
+    None
+}
+```
+
+#### When NOT to Integrate
+
+You may choose to run them independently if:
+- You want the WASM bot trap to catch what Bot Manager misses (no header sharing)
+- Bot Manager is configured in monitor-only mode for analytics
+- You're using different Akamai properties for different protection layers
+- Your application has unique requirements that don't fit Bot Manager's model
+
+#### Migration Path
+
+If you're currently using only Bot Manager and want to add custom protections:
+1. Deploy WASM bot trap in **test mode** (`TEST_MODE=1`) behind Bot Manager
+2. Monitor logs to see what additional traffic would be blocked
+3. Tune honeypot URLs and rate limits based on your application
+4. Gradually enable blocking for specific rules
+5. Use Bot Manager for broad protection, WASM bot trap for surgical precision
+
 ### Linode (Akamai Cloud Computing)
 
 Deploy on Linode compute instances with Spin installed:
