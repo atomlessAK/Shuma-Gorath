@@ -1,4 +1,4 @@
-.PHONY: dev local prod clean test test-unit test-integration test-dashboard deploy logs status stop help
+.PHONY: dev local run build prod clean test test-unit test-integration test-dashboard deploy logs status stop help
 
 # Default target
 .DEFAULT_GOAL := help
@@ -13,7 +13,18 @@ NC := \033[0m
 # Development
 #--------------------------
 
-dev: ## Build and run locally with auto-reload (development)
+dev: ## Build and run with file watching (auto-rebuild on save)
+	@echo "$(CYAN)🚀 Starting development server with file watching...$(NC)"
+	@echo "$(YELLOW)📊 Dashboard: http://127.0.0.1:3000/dashboard/index.html$(NC)"
+	@echo "$(YELLOW)📈 Metrics:   http://127.0.0.1:3000/metrics$(NC)"
+	@echo "$(YELLOW)❤️  Health:    http://127.0.0.1:3000/health$(NC)"
+	@echo "$(CYAN)👀 Watching for changes... (Ctrl+C to stop)$(NC)"
+	@pkill -f "spin up" 2>/dev/null || true
+	@cargo watch -x 'build --target wasm32-wasip1 --release' -s 'pkill -f "spin up" 2>/dev/null; cp target/wasm32-wasip1/release/wasm_bot_trap.wasm src/bot_trap.wasm && spin up --listen 127.0.0.1:3000'
+
+local: dev ## Alias for dev
+
+run: ## Build once and run (no file watching)
 	@echo "$(CYAN)🚀 Starting development server...$(NC)"
 	@pkill -f "spin up" 2>/dev/null || true
 	@sleep 1
@@ -24,13 +35,6 @@ dev: ## Build and run locally with auto-reload (development)
 	@echo "$(YELLOW)📈 Metrics:   http://127.0.0.1:3000/metrics$(NC)"
 	@echo "$(YELLOW)❤️  Health:    http://127.0.0.1:3000/health$(NC)"
 	@spin up --listen 127.0.0.1:3000
-
-local: dev ## Alias for dev
-
-watch: ## Build and run with file watching (requires cargo-watch)
-	@echo "$(CYAN)👀 Starting watch mode...$(NC)"
-	@pkill -f "spin up" 2>/dev/null || true
-	@cargo watch -x 'build --target wasm32-wasip1 --release' -s 'cp target/wasm32-wasip1/release/wasm_bot_trap.wasm src/bot_trap.wasm && spin up --listen 127.0.0.1:3000'
 
 #--------------------------
 # Production
@@ -113,7 +117,7 @@ help: ## Show this help message
 	@echo "$(CYAN)WASM Bot Trap - Available Commands$(NC)"
 	@echo ""
 	@echo "$(GREEN)Development:$(NC)"
-	@grep -E '^(dev|local|watch|build):.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-15s %s\n", $$1, $$2}'
+	@grep -E '^(dev|local|run|build):.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-15s %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Production:$(NC)"
 	@grep -E '^(prod|deploy):.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-15s %s\n", $$1, $$2}'
