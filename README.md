@@ -32,7 +32,12 @@ This bot trap is **primarily built and tested for deployment on Fermyon Cloud**.
 
 ## Structure
 - `src/`: Rust source code for the Spin app
+- `dashboard/`: Web-based monitoring dashboard
+- `assets/`: Documentation assets (screenshots)
 - `spin.toml`: Spin app manifest (primary deployment config)
+- `Makefile`: Build system with dev/prod/test commands
+- `setup.sh`: One-command dependency installation
+- `verify-setup.sh`: Dependency verification script
 - `README.md`: Project overview and setup
 - `.gitignore`: Standard ignores
 
@@ -40,38 +45,68 @@ This bot trap is **primarily built and tested for deployment on Fermyon Cloud**.
 
 ## Quick Start (Local Development)
 
-### One-Command Setup (macOS)
+### One-Command Setup (New Developers)
 
-New to the project? Run this single command to install all dependencies:
+New to the project? Just two commands to get fully set up:
 
 ```sh
 git clone https://github.com/atomlessAK/WASM-BOT-TRAP.git
 cd WASM-BOT-TRAP
-make setup    # Installs Rust, Spin, cargo-watch, and WASM target
+make setup    # Installs ALL dependencies automatically
 make dev      # Build and run with file watching
 ```
 
 The setup script automatically installs:
-- Homebrew (if missing)
-- Rust/Cargo via rustup
-- wasm32-wasip1 compilation target
-- Fermyon Spin CLI
-- cargo-watch for auto-rebuild
+- **Homebrew** (macOS only, if missing)
+- **Rust/Cargo** via rustup
+- **wasm32-wasip1** compilation target
+- **Fermyon Spin CLI** (v3.5+)
+- **cargo-watch** for auto-rebuild on file save
+
+✅ **Verified working** on fresh Ubuntu 22.04 and macOS systems.
 
 ### Already Have Dependencies?
 
 If you already have Rust and Spin installed:
 ```sh
+make verify   # Check all dependencies are correctly installed
 make dev      # Build and run with file watching (auto-rebuilds on save)
 make run      # Build once and run (no file watching)
 make help     # Show all available commands
 ```
 
-### Access Dashboard
-Once running, open the monitoring dashboard at:
-```
-http://127.0.0.1:3000/dashboard/index.html
-```
+### All Makefile Commands
+
+| Command | Description |
+|---------|-------------|
+| `make setup` | Install all dependencies (first-time setup) |
+| `make verify` | Verify all dependencies are installed |
+| `make dev` | Build + run with file watching (auto-rebuild) |
+| `make run` | Build once + run (no watching) |
+| `make build` | Build release binary only |
+| `make prod` | Build + start production server |
+| `make deploy` | Deploy to Fermyon Cloud |
+| `make test` | Run unit tests (+ integration if server running) |
+| `make test-unit` | Run Rust unit tests only |
+| `make test-integration` | Run integration tests (requires server) |
+| `make stop` | Stop running Spin server |
+| `make status` | Check if server is running |
+| `make clean` | Clean build artifacts |
+| `make logs` | View Spin component logs |
+| `make help` | Show all commands with descriptions |
+
+### Access Points (Local Development)
+
+Once running, you can access:
+
+| Endpoint | Description |
+|----------|-------------|
+| http://127.0.0.1:3000/dashboard/index.html | 📊 Monitoring Dashboard |
+| http://127.0.0.1:3000/metrics | 📈 Prometheus Metrics |
+| http://127.0.0.1:3000/health | ❤️ Health Check |
+| http://127.0.0.1:3000/admin | 🔧 Admin API Help |
+
+### Dashboard Features
 
 The dashboard provides:
 - 📊 Real-time statistics (total bans, active bans, events, unique IPs)
@@ -817,7 +852,7 @@ make test
 # Run individual test suites
 make test-unit          # Rust unit tests (13 tests)
 make test-integration   # Spin integration tests (5 scenarios)
-make test-dashboard     # Dashboard manual tests (instructions)
+make test-dashboard     # Dashboard testing instructions
 ```
 
 ### 1. Unit Tests (Native Rust - 13 tests)
@@ -1138,6 +1173,7 @@ src/
 ├── geo.rs              # Geolocation-based risk detection
 ├── honeypot.rs         # Honeypot URL detection
 ├── js.rs               # JavaScript challenge injection
+├── metrics.rs          # Prometheus metrics endpoint
 ├── quiz.rs             # Math quiz (currently unused)
 ├── rate.rs             # Rate limiting with time windows
 ├── whitelist.rs        # IP/CIDR and path whitelisting
@@ -1177,7 +1213,19 @@ src/
 
 ## Roadmap
 
+### ✅ Recently Completed
+- **Prometheus/OpenTelemetry Metrics**: `/metrics` endpoint for Grafana integration
+- **Test Mode (Dry-Run)**: Safe deployment/tuning without blocking users
+- **Configurable Ban Durations**: Per-ban-type TTLs (honeypot, rate_limit, browser, admin)
+- **Browser Version Detection**: Flag outdated browsers as suspicious
+- **One-Command Setup**: `make setup` installs all dependencies automatically
+- **File Watching**: `make dev` auto-rebuilds on save via cargo-watch
+
 ### Near-term
+- Tarpit mode: Optional slow infinite responses to waste bot resources
+- Link maze honeypot: Fake link trees that trap crawlers in infinite loops
+- Webhook notifications: Slack/Discord/PagerDuty alerts for bans
+- Dual GeoIP providers: Fallback when primary fails (MaxMind + IP-API)
 - Expand admin API for full configuration management (update config via API)
 - Add CSV/JSON export for event logs and analytics
 - Integrate with additional edge geo/IP intelligence sources
