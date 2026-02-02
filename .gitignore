@@ -4,3 +4,6 @@ build/
 *.lock
 .DS_Store
 .env
+
+# Spin runtime data
+.spin/
