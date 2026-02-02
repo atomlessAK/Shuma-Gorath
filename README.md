@@ -683,10 +683,35 @@ Test mode allows you to safely deploy and tune the bot trap in production withou
 **Check current status:**
 ```bash
 curl -H "Authorization: Bearer YOUR_API_KEY" http://127.0.0.1:3000/admin/config
-# Returns: {"test_mode": true/false, "ban_duration": ..., ...}
+# Returns: {"test_mode": true/false, "ban_durations": {...}, ...}
 ```
 
 **Disable test mode** via dashboard toggle or API to enforce real blocking/ban logic.
+
+---
+
+### Configurable Ban Durations
+
+Different offense types can have different ban durations. This allows proportional responses: honeypot access (severe) gets longer bans than rate limiting (temporary).
+
+**Default durations:**
+| Ban Type | Duration | Description |
+|----------|----------|-------------|
+| `honeypot` | 24 hours (86400s) | Accessing trap URLs - severe offense |
+| `rate_limit` | 1 hour (3600s) | Exceeding rate limits - temporary |
+| `browser` | 6 hours (21600s) | Outdated/suspicious browser |
+| `admin` | 6 hours (21600s) | Default for manual bans |
+
+**Configure via Dashboard:**
+Use the "Ban Durations" panel in Admin Controls to adjust per-type durations.
+
+**Configure via API:**
+```bash
+curl -X POST -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"ban_durations": {"honeypot": 172800, "rate_limit": 1800}}' \
+  http://127.0.0.1:3000/admin/config
+```
 
 ---
 

@@ -105,6 +105,17 @@
           <span id="test-mode-status">Loading...</span>
         </div>
         <div class="control-group">
+          <h3>Ban Durations</h3>
+          <p class="control-desc">Configure ban duration per offense type (seconds)</p>
+          <div class="duration-grid">
+            <label>Honeypot: <input id="dur-honeypot" type="number" value="86400" /></label>
+            <label>Rate Limit: <input id="dur-rate-limit" type="number" value="3600" /></label>
+            <label>Browser: <input id="dur-browser" type="number" value="21600" /></label>
+            <label>Admin: <input id="dur-admin" type="number" value="21600" /></label>
+          </div>
+          <button id="save-durations-btn">💾 Save Durations</button>
+        </div>
+        <div class="control-group">
           <h3>Ban IP</h3>
           <input id="ban-ip" type="text" placeholder="IP address" />
           <input id="ban-reason" type="text" placeholder="Reason (optional)" value="manual_ban" />

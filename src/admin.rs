@@ -267,6 +267,26 @@ pub fn handle_admin(req: &Request) -> Response {
                         changed = true;
                     }
                     
+                    // Update per-type ban durations if provided
+                    if let Some(ban_durations) = json.get("ban_durations") {
+                        if let Some(honeypot) = ban_durations.get("honeypot").and_then(|v| v.as_u64()) {
+                            cfg.ban_durations.honeypot = honeypot;
+                            changed = true;
+                        }
+                        if let Some(rate_limit) = ban_durations.get("rate_limit").and_then(|v| v.as_u64()) {
+                            cfg.ban_durations.rate_limit = rate_limit;
+                            changed = true;
+                        }
+                        if let Some(browser) = ban_durations.get("browser").and_then(|v| v.as_u64()) {
+                            cfg.ban_durations.browser = browser;
+                            changed = true;
+                        }
+                        if let Some(admin) = ban_durations.get("admin").and_then(|v| v.as_u64()) {
+                            cfg.ban_durations.admin = admin;
+                            changed = true;
+                        }
+                    }
+                    
                     // Save config to KV store
                     if changed {
                         let key = format!("config:{}", site_id);
@@ -280,6 +300,12 @@ pub fn handle_admin(req: &Request) -> Response {
                         "config": {
                             "test_mode": cfg.test_mode,
                             "ban_duration": cfg.ban_duration,
+                            "ban_durations": {
+                                "honeypot": cfg.ban_durations.honeypot,
+                                "rate_limit": cfg.ban_durations.rate_limit,
+                                "browser": cfg.ban_durations.browser,
+                                "admin": cfg.ban_durations.admin
+                            },
                             "rate_limit": cfg.rate_limit,
                             "honeypots": cfg.honeypots,
                             "geo_risk": cfg.geo_risk
@@ -303,6 +329,12 @@ pub fn handle_admin(req: &Request) -> Response {
             let body = serde_json::to_string(&json!({
                 "test_mode": cfg.test_mode,
                 "ban_duration": cfg.ban_duration,
+                "ban_durations": {
+                    "honeypot": cfg.ban_durations.honeypot,
+                    "rate_limit": cfg.ban_durations.rate_limit,
+                    "browser": cfg.ban_durations.browser,
+                    "admin": cfg.ban_durations.admin
+                },
                 "rate_limit": cfg.rate_limit,
                 "honeypots": cfg.honeypots,
                 "browser_block": cfg.browser_block,

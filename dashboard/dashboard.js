@@ -132,6 +132,16 @@ function updateStatCards(analytics, events, bans) {
   toggle.checked = testMode;
 }
 
+// Update ban duration fields from config
+function updateBanDurations(config) {
+  if (config.ban_durations) {
+    document.getElementById('dur-honeypot').value = config.ban_durations.honeypot || 86400;
+    document.getElementById('dur-rate-limit').value = config.ban_durations.rate_limit || 3600;
+    document.getElementById('dur-browser').value = config.ban_durations.browser || 21600;
+    document.getElementById('dur-admin').value = config.ban_durations.admin || 21600;
+  }
+}
+
 // Update event types chart
 function updateEventTypesChart(eventCounts) {
   const labels = Object.keys(eventCounts);
@@ -360,6 +370,19 @@ document.getElementById('refresh').onclick = async function() {
     updateBansTable(bansData.bans || []);
     updateEventsTable(events.recent_events || []);
     
+    // Fetch and update ban durations from config
+    try {
+      const configResp = await fetch(endpoint + '/admin/config', {
+        headers: { 'Authorization': 'Bearer ' + apikey }
+      });
+      if (configResp.ok) {
+        const config = await configResp.json();
+        updateBanDurations(config);
+      }
+    } catch (e) {
+      console.error('Failed to load ban durations:', e);
+    }
+    
     // Update last updated time
     document.getElementById('last-updated').textContent = 
       'Last updated: ' + new Date().toLocaleTimeString();
@@ -424,6 +447,45 @@ document.getElementById('unban-btn').onclick = async function() {
     msg.className = 'message success';
     document.getElementById('unban-ip').value = '';
     setTimeout(() => document.getElementById('refresh').click(), 500);
+  } catch (e) {
+    msg.textContent = '✗ Error: ' + e.message;
+    msg.className = 'message error';
+  }
+};
+
+// Save Ban Durations Handler
+document.getElementById('save-durations-btn').onclick = async function() {
+  const endpoint = document.getElementById('endpoint').value.replace(/\/$/, '');
+  const apikey = document.getElementById('apikey').value;
+  const msg = document.getElementById('admin-msg');
+  
+  const ban_durations = {
+    honeypot: parseInt(document.getElementById('dur-honeypot').value) || 86400,
+    rate_limit: parseInt(document.getElementById('dur-rate-limit').value) || 3600,
+    browser: parseInt(document.getElementById('dur-browser').value) || 21600,
+    admin: parseInt(document.getElementById('dur-admin').value) || 21600
+  };
+  
+  msg.textContent = 'Saving ban durations...';
+  msg.className = 'message info';
+  
+  try {
+    const resp = await fetch(`${endpoint}/admin/config`, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + apikey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ ban_durations })
+    });
+    
+    if (!resp.ok) {
+      throw new Error('Failed to save config');
+    }
+    
+    const data = await resp.json();
+    msg.textContent = '✓ Ban durations saved';
+    msg.className = 'message success';
   } catch (e) {
     msg.textContent = '✗ Error: ' + e.message;
     msg.className = 'message error';

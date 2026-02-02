@@ -193,7 +193,7 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
     }
     // Honeypot: ban and hard block
     if honeypot::is_honeypot(path, &cfg.honeypots) {
-        ban::ban_ip(store, site_id, &ip, "honeypot", cfg.ban_duration);
+        ban::ban_ip(store, site_id, &ip, "honeypot", cfg.get_ban_duration("honeypot"));
         // Log ban event
         crate::admin::log_event(store, &crate::admin::EventLogEntry {
             ts: crate::admin::now_ts(),
@@ -207,7 +207,7 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
     }
     // Rate limit: ban and hard block
     if !rate::check_rate_limit(store, site_id, &ip, cfg.rate_limit) {
-        ban::ban_ip(store, site_id, &ip, "rate", cfg.ban_duration);
+        ban::ban_ip(store, site_id, &ip, "rate", cfg.get_ban_duration("rate"));
         // Log ban event
         crate::admin::log_event(store, &crate::admin::EventLogEntry {
             ts: crate::admin::now_ts(),
@@ -247,7 +247,7 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
     }
     // Outdated browser
     if browser::is_outdated_browser(ua, &cfg.browser_block) {
-        ban::ban_ip(store, site_id, &ip, "browser", cfg.ban_duration);
+        ban::ban_ip(store, site_id, &ip, "browser", cfg.get_ban_duration("browser"));
         // Log ban event
         crate::admin::log_event(store, &crate::admin::EventLogEntry {
             ts: crate::admin::now_ts(),
