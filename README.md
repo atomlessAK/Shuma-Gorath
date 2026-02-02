@@ -2,6 +2,11 @@
 
 This project implements a customizable, behavior-based bot defense system designed for **Fermyon Spin**, running WebAssembly at the edge for ultra-low latency bot protection.
 
+
+![Dashboard Overview](assets/dashboard-screenshot1.jpg)
+
+![Dashboard Details](assets/dashboard-screenshot2.jpg)
+
 ## � Documentation
 
 | Document | Description |
