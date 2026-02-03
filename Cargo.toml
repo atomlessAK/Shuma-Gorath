@@ -6,7 +6,7 @@ authors = ["Your Name <your@email.com>"]
 description = "Shuma-Gorath: Many-Angled Bot Defence for Fermyon Spin."
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["rlib"]
 
 [dependencies]
 spin-sdk = "2.2.0"
