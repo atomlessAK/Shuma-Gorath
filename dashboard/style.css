@@ -13,7 +13,8 @@
   height: auto;
   display: block;
   margin: 0 auto;
-  filter: drop-shadow(0 4px 16px rgba(0,0,0,0.12));
+  /* no drop shadows for a flatter, monochrome look */
+  filter: none;
 }
 /* ===========================================
    CSS Custom Properties (Color Palette)
@@ -59,6 +60,16 @@
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
+
+    /* Override shadows and radii to remove drop-shadows and rounded corners
+      and use 0.5px borders instead for a flatter UI */
+    --shadow-sm: none;
+    --shadow-md: none;
+    --shadow-lg: none;
+    --shadow-xl: none;
+    --radius-sm: 0;
+    --radius-md: 0;
+    --radius-lg: 0;
   --radius-xl: 12px;
   --radius-full: 9999px;
 }
@@ -1006,6 +1017,35 @@ input:checked + .toggle-slider:before {
   white-space: pre-wrap;
   word-break: break-word;
   margin: 0;
+}
+
+/* Flat panel styling: remove shadows, remove radii, add thin mid-grey borders */
+.card,
+.chart-container,
+.info-panel,
+.robots-preview,
+.maze-section,
+.maze-crawlers,
+.maze-controls,
+.maze-stat,
+table,
+thead,
+tbody,
+th,
+td,
+.stats-cards .card {
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  border: 0.5px solid var(--color-gray-300) !important;
+}
+
+/* Ensure header and smaller UI controls are also bordered */
+.config,
+.slider-control,
+.maze-control,
+.input-row {
+  border: 0.5px solid var(--color-gray-300);
+  border-radius: 0 !important;
 }
 
 /* ===========================================
