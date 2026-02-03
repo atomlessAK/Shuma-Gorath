@@ -385,7 +385,7 @@ let robotsSavedState = {
 let cdpSavedState = {
   enabled: true,
   autoBan: true,
-  threshold: 0.8
+  threshold: 0.6
 };
 
 function updateRobotsConfig(config) {
