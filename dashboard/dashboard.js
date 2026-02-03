@@ -23,7 +23,7 @@ function initCharts() {
           position: 'bottom'
         },
         colorschemes: {
-          scheme: 'brewer.Greys3'
+          scheme: 'brewer.Greys6'
         }
       }
     }
@@ -55,7 +55,7 @@ function initCharts() {
           display: false
         },
         colorschemes: {
-          scheme: 'brewer.Greys3'
+          scheme: 'brewer.Greys6'
         }
       }
     }
@@ -89,7 +89,7 @@ function initCharts() {
           display: false
         },
         colorschemes: {
-          scheme: 'brewer.Greys3'
+          scheme: 'brewer.Greys6'
         }
       }
     }
@@ -156,8 +156,8 @@ function updateTopIpsChart(topIps) {
   const labels = topIps.map(([ip, _]) => ip);
   const data = topIps.map(([_, count]) => count);
 
-  // Greys3 colors: ["#f0f0f0", "#bdbdbd", "#636363"]
-  const greys = ["#f0f0f0", "#bdbdbd", "#636363"];
+  // Greys6 colors: ["#f7f7f7", "#cccccc", "#969696", "#636363", "#252525", "#000000"]
+  const greys = ["#f7f7f7", "#cccccc", "#969696", "#636363", "#252525", "#000000"];
   const barColors = data.map((_, i) => greys[i % greys.length]);
 
   topIpsChart.data.labels = labels;
@@ -251,11 +251,11 @@ function updateTimeSeriesChart() {
 
     const counts = sortedBuckets.map(time => buckets[time]);
 
-    // Greys3 colors: ["#f0f0f0", "#bdbdbd", "#636363"]
-    const greys = ["#f0f0f0", "#bdbdbd", "#636363"];
+    // Greys6 colors: ["#f7f7f7", "#cccccc", "#969696", "#636363", "#252525", "#000000"]
+    const greys = ["#f7f7f7", "#cccccc", "#969696", "#636363", "#252525", "#000000"];
     timeSeriesChart.data.labels = labels;
     timeSeriesChart.data.datasets[0].data = counts;
-    timeSeriesChart.data.datasets[0].borderColor = greys[2];
+    timeSeriesChart.data.datasets[0].borderColor = greys[3];
     timeSeriesChart.data.datasets[0].backgroundColor = greys[1];
     timeSeriesChart.update();
   })
