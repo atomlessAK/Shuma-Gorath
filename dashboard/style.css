@@ -79,6 +79,9 @@
   --panel-fg: var(--color-black);
   --muted-fg: var(--color-gray-500);
   --heading-fg: var(--color-black);
+  /* Foreground for buttons that use dark backgrounds in light mode
+     and become light in dark mode (swap text color accordingly) */
+  --btn-contrast-fg: var(--color-white);
 }
 
 * {
@@ -412,6 +415,7 @@ code {
 
 #ban-btn {
   background: var(--color-accent);
+  color: var(--btn-contrast-fg);
 }
 
 #ban-btn:hover {
@@ -420,6 +424,7 @@ code {
 
 #unban-btn {
   background: var(--color-gray-600);
+  color: var(--btn-contrast-fg);
 }
 
 #unban-btn:hover {
@@ -607,6 +612,7 @@ input:checked + .toggle-slider:before {
 #save-durations-btn {
   background: var(--color-accent);
   margin-top: 5px;
+  color: var(--btn-contrast-fg);
 }
 
 #save-durations-btn:hover {
@@ -1085,6 +1091,12 @@ td,
     --shadow-md: 0 4px 6px -1px rgba(255, 255, 255, 0.1);
     --shadow-lg: 0 10px 15px -3px rgba(255, 255, 255, 0.1), 0 4px 6px -2px rgba(255, 255, 255, 0.05);
     --shadow-xl: 0 20px 25px -5px rgba(255, 255, 255, 0.1), 0 10px 10px -5px rgba(255, 255, 255, 0.04);
+  }
+
+  /* When OS prefers dark theme, invert button-contrast foreground so
+     buttons that were dark become light-background with dark text */
+  :root {
+    --btn-contrast-fg: var(--color-black);
   }
 
   body, .container, .card, .info-panel, .robots-preview {
