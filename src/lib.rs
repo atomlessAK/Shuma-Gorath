@@ -86,20 +86,27 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
             return Response::new(403, "Forbidden");
         }
         let mode = shuma_fail_mode();
-        let mut rb = Response::builder().header("X-Shuma-Fail-Mode", mode.clone());
         if let Ok(store) = Store::open_default() {
             let test_key = "health:test";
             let _ = store.set(test_key, b"ok");
             let ok = store.get(test_key).is_ok();
             let _ = store.delete(test_key);
             if ok {
-                rb = rb.header("X-KV-Status", "available");
-                return rb.status(200).body("OK").build();
+                return Response::builder()
+                    .status(200)
+                    .header("X-KV-Status", "available")
+                    .header("X-Shuma-Fail-Mode", mode.as_str())
+                    .body("OK")
+                    .build();
             }
         }
         println!("[KV OUTAGE] Key-value store unavailable; SHUMA_FAIL_MODE={}", mode);
-        rb = rb.header("X-KV-Status", "unavailable");
-        return rb.status(500).body("Key-value store error").build();
+        return Response::builder()
+            .status(500)
+            .header("X-KV-Status", "unavailable")
+            .header("X-Shuma-Fail-Mode", mode.as_str())
+            .body("Key-value store error")
+            .build();
     }
 
     // Quiz POST handler
@@ -206,13 +213,20 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
     if store.is_none() {
         let mode = shuma_fail_mode();
         println!("[KV OUTAGE] Store unavailable during request handling; SHUMA_FAIL_MODE={}", mode);
-        let mut rb = Response::builder()
-            .header("X-KV-Status", "unavailable")
-            .header("X-Shuma-Fail-Mode", mode.as_str());
         if mode == "closed" {
-            return rb.status(500).body("Key-value store error (fail-closed)").build();
+            return Response::builder()
+                .status(500)
+                .header("X-KV-Status", "unavailable")
+                .header("X-Shuma-Fail-Mode", mode.as_str())
+                .body("Key-value store error (fail-closed)")
+                .build();
         }
-        return rb.status(200).body("OK (bot trap: store unavailable, all checks bypassed)").build();
+        return Response::builder()
+            .status(200)
+            .header("X-KV-Status", "unavailable")
+            .header("X-Shuma-Fail-Mode", mode.as_str())
+            .body("OK (bot trap: store unavailable, all checks bypassed)")
+            .build();
     }
     let store = store.as_ref().unwrap();
 
