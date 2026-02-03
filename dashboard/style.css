@@ -270,6 +270,14 @@ h1 {
   margin-bottom: 15px;
 }
 
+/* Outer admin section should not carry panel chrome; inner control groups keep their panels */
+.section.admin-controls {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin-bottom: 20px; /* keep spacing but no panel visuals */
+}
+
 /* Tables */
 table {
   width: 100%;
