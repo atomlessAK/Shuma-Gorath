@@ -54,7 +54,7 @@ use serde_json::json;
 
 /// Returns true if the path is a valid admin endpoint (prevents path traversal/abuse).
 fn sanitize_path(path: &str) -> bool {
-    matches!(path, "/admin" | "/admin/ban" | "/admin/unban" | "/admin/analytics" | "/admin/events" | "/admin/config" | "/admin/maze" | "/admin/robots")
+    matches!(path, "/admin" | "/admin/ban" | "/admin/unban" | "/admin/analytics" | "/admin/events" | "/admin/config" | "/admin/maze" | "/admin/robots" | "/admin/cdp")
 }
 
 /// Handles all /admin API endpoints. Requires valid API key in Authorization header.
@@ -323,6 +323,20 @@ pub fn handle_admin(req: &Request) -> Response {
                         changed = true;
                     }
                     
+                    // Update CDP detection settings if provided
+                    if let Some(cdp_detection_enabled) = json.get("cdp_detection_enabled").and_then(|v| v.as_bool()) {
+                        cfg.cdp_detection_enabled = cdp_detection_enabled;
+                        changed = true;
+                    }
+                    if let Some(cdp_auto_ban) = json.get("cdp_auto_ban").and_then(|v| v.as_bool()) {
+                        cfg.cdp_auto_ban = cdp_auto_ban;
+                        changed = true;
+                    }
+                    if let Some(cdp_detection_threshold) = json.get("cdp_detection_threshold").and_then(|v| v.as_f64()) {
+                        cfg.cdp_detection_threshold = cdp_detection_threshold as f32;
+                        changed = true;
+                    }
+                    
                     // Save config to KV store
                     if changed {
                         let key = format!("config:{}", site_id);
@@ -352,7 +366,10 @@ pub fn handle_admin(req: &Request) -> Response {
                             "robots_block_ai_training": cfg.robots_block_ai_training,
                             "robots_block_ai_search": cfg.robots_block_ai_search,
                             "robots_allow_search_engines": cfg.robots_allow_search_engines,
-                            "robots_crawl_delay": cfg.robots_crawl_delay
+                            "robots_crawl_delay": cfg.robots_crawl_delay,
+                            "cdp_detection_enabled": cfg.cdp_detection_enabled,
+                            "cdp_auto_ban": cfg.cdp_auto_ban,
+                            "cdp_detection_threshold": cfg.cdp_detection_threshold
                         }
                     })).unwrap();
                     return Response::new(200, body);
@@ -393,7 +410,10 @@ pub fn handle_admin(req: &Request) -> Response {
                 "robots_block_ai_training": cfg.robots_block_ai_training,
                 "robots_block_ai_search": cfg.robots_block_ai_search,
                 "robots_allow_search_engines": cfg.robots_allow_search_engines,
-                "robots_crawl_delay": cfg.robots_crawl_delay
+                "robots_crawl_delay": cfg.robots_crawl_delay,
+                "cdp_detection_enabled": cfg.cdp_detection_enabled,
+                "cdp_auto_ban": cfg.cdp_auto_ban,
+                "cdp_detection_threshold": cfg.cdp_detection_threshold
             })).unwrap();
             Response::new(200, body)
         }
@@ -407,7 +427,7 @@ pub fn handle_admin(req: &Request) -> Response {
                 outcome: None,
                 admin: Some(crate::auth::get_admin_id(req)),
             });
-            Response::new(200, "WASM Bot Trap Admin API. Endpoints: /admin/ban, /admin/unban?ip=IP, /admin/analytics, /admin/events, /admin/config, /admin/maze (GET for maze stats), /admin/robots (GET for robots.txt config & preview).")
+            Response::new(200, "WASM Bot Trap Admin API. Endpoints: /admin/ban, /admin/unban?ip=IP, /admin/analytics, /admin/events, /admin/config, /admin/maze (GET for maze stats), /admin/robots (GET for robots.txt config & preview), /admin/cdp (GET for CDP detection config & stats).")
         }
         "/admin/maze" => {
             // Return maze honeypot statistics
@@ -509,6 +529,55 @@ pub fn handle_admin(req: &Request) -> Response {
                 "ai_search_bots": crate::robots::AI_SEARCH_BOTS,
                 "search_engine_bots": crate::robots::SEARCH_ENGINE_BOTS,
                 "preview": preview
+            })).unwrap();
+            Response::new(200, body)
+        }
+        "/admin/cdp" => {
+            // Return CDP detection configuration and stats
+            let cfg = crate::config::Config::load(&store, site_id);
+            
+            // Get CDP detection stats from KV store
+            let cdp_detections: u64 = store.get("cdp:detections")
+                .ok()
+                .flatten()
+                .and_then(|v| String::from_utf8(v).ok())
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0);
+            
+            let cdp_auto_bans: u64 = store.get("cdp:auto_bans")
+                .ok()
+                .flatten()
+                .and_then(|v| String::from_utf8(v).ok())
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0);
+            
+            // Log admin action
+            log_event(&store, &EventLogEntry {
+                ts: now_ts(),
+                event: EventType::AdminAction,
+                ip: None,
+                reason: Some("cdp_config_view".to_string()),
+                outcome: None,
+                admin: Some(crate::auth::get_admin_id(req)),
+            });
+            
+            let body = serde_json::to_string(&json!({
+                "config": {
+                    "enabled": cfg.cdp_detection_enabled,
+                    "auto_ban": cfg.cdp_auto_ban,
+                    "detection_threshold": cfg.cdp_detection_threshold
+                },
+                "stats": {
+                    "total_detections": cdp_detections,
+                    "auto_bans": cdp_auto_bans
+                },
+                "detection_methods": [
+                    "Error stack timing analysis (Runtime.Enable leak)",
+                    "navigator.webdriver property check",
+                    "Automation-specific window properties",
+                    "Chrome object consistency verification",
+                    "Plugin array anomaly detection"
+                ]
             })).unwrap();
             Response::new(200, body)
         }

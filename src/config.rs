@@ -69,10 +69,22 @@ pub struct Config {
     pub robots_allow_search_engines: bool, // Allow legitimate search engines (Google, Bing, etc.)
     #[serde(default = "default_crawl_delay")]
     pub robots_crawl_delay: u32,        // Crawl-delay directive (seconds)
+    
+    // CDP (Chrome DevTools Protocol) detection configuration
+    #[serde(default = "default_true")]
+    pub cdp_detection_enabled: bool,     // Enable CDP automation detection
+    #[serde(default = "default_true")]
+    pub cdp_auto_ban: bool,              // Auto-ban when CDP automation detected
+    #[serde(default = "default_cdp_threshold")]
+    pub cdp_detection_threshold: f32,    // Score threshold for detection (0.0-1.0)
 }
 
 fn default_true() -> bool {
     true
+}
+
+fn default_cdp_threshold() -> f32 {
+    0.8  // Default: 80% confidence required for detection
 }
 
 fn default_maze_auto_ban() -> bool {
@@ -122,6 +134,10 @@ impl Config {
             robots_block_ai_search: false,
             robots_allow_search_engines: true,
             robots_crawl_delay: 2,
+            // CDP detection defaults: enabled with auto-ban
+            cdp_detection_enabled: true,
+            cdp_auto_ban: true,
+            cdp_detection_threshold: 0.8,
         }
     }
     

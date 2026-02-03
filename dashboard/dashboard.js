@@ -381,6 +381,13 @@ let robotsSavedState = {
   crawlDelay: 2
 };
 
+// Track CDP detection saved state for change detection
+let cdpSavedState = {
+  enabled: true,
+  autoBan: true,
+  threshold: 0.8
+};
+
 function updateRobotsConfig(config) {
   // Update toggles from server config
   if (config.robots_enabled !== undefined) {
@@ -589,6 +596,129 @@ document.getElementById('preview-robots').onclick = async function() {
   }
 };
 
+// Update CDP detection config controls from loaded config
+function updateCdpConfig(config) {
+  if (config.cdp_detection_enabled !== undefined) {
+    document.getElementById('cdp-enabled-toggle').checked = config.cdp_detection_enabled;
+  }
+  if (config.cdp_auto_ban !== undefined) {
+    document.getElementById('cdp-auto-ban-toggle').checked = config.cdp_auto_ban;
+  }
+  if (config.cdp_detection_threshold !== undefined) {
+    document.getElementById('cdp-threshold-slider').value = config.cdp_detection_threshold;
+    document.getElementById('cdp-threshold-value').textContent = config.cdp_detection_threshold;
+  }
+  // Store saved state for change detection
+  cdpSavedState = {
+    enabled: document.getElementById('cdp-enabled-toggle').checked,
+    autoBan: document.getElementById('cdp-auto-ban-toggle').checked,
+    threshold: parseFloat(document.getElementById('cdp-threshold-slider').value)
+  };
+  // Reset button state
+  const btn = document.getElementById('save-cdp-config');
+  btn.disabled = true;
+  btn.textContent = '💾 Save CDP Settings';
+}
+
+// Check if CDP config has changed from saved state
+function checkCdpConfigChanged() {
+  const current = {
+    enabled: document.getElementById('cdp-enabled-toggle').checked,
+    autoBan: document.getElementById('cdp-auto-ban-toggle').checked,
+    threshold: parseFloat(document.getElementById('cdp-threshold-slider').value)
+  };
+  const changed = (
+    current.enabled !== cdpSavedState.enabled ||
+    current.autoBan !== cdpSavedState.autoBan ||
+    current.threshold !== cdpSavedState.threshold
+  );
+  const btn = document.getElementById('save-cdp-config');
+  btn.disabled = !changed;
+}
+
+// Update threshold display when slider moves
+document.getElementById('cdp-threshold-slider').addEventListener('input', function() {
+  document.getElementById('cdp-threshold-value').textContent = this.value;
+  checkCdpConfigChanged();
+});
+
+// Add change listeners for CDP config controls
+['cdp-enabled-toggle', 'cdp-auto-ban-toggle'].forEach(id => {
+  document.getElementById(id).addEventListener('change', checkCdpConfigChanged);
+});
+
+// Save CDP detection configuration
+document.getElementById('save-cdp-config').onclick = async function() {
+  const endpoint = document.getElementById('endpoint').value.replace(/\/$/, '');
+  const apikey = document.getElementById('apikey').value;
+  const btn = this;
+  
+  const cdpEnabled = document.getElementById('cdp-enabled-toggle').checked;
+  const cdpAutoBan = document.getElementById('cdp-auto-ban-toggle').checked;
+  const cdpThreshold = parseFloat(document.getElementById('cdp-threshold-slider').value);
+  
+  btn.textContent = 'Saving...';
+  btn.disabled = true;
+  
+  try {
+    const resp = await fetch(endpoint + '/admin/config', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + apikey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        cdp_detection_enabled: cdpEnabled,
+        cdp_auto_ban: cdpAutoBan,
+        cdp_detection_threshold: cdpThreshold
+      })
+    });
+    
+    if (!resp.ok) throw new Error('Failed to save config');
+    
+    btn.textContent = '✓ Saved!';
+    // Update saved state to current values
+    cdpSavedState = {
+      enabled: cdpEnabled,
+      autoBan: cdpAutoBan,
+      threshold: cdpThreshold
+    };
+    setTimeout(() => {
+      btn.textContent = '💾 Save CDP Settings';
+      btn.disabled = true;
+    }, 1500);
+  } catch (e) {
+    btn.textContent = '✗ Error';
+    console.error('Failed to save CDP config:', e);
+    setTimeout(() => {
+      btn.textContent = '💾 Save CDP Settings';
+      btn.disabled = false;
+    }, 2000);
+  }
+};
+
+// Fetch CDP stats from admin endpoint
+async function refreshCdpStats() {
+  const endpoint = document.getElementById('endpoint').value.replace(/\/$/, '');
+  const apikey = document.getElementById('apikey').value;
+  
+  try {
+    const resp = await fetch(endpoint + '/admin/cdp', {
+      headers: { 'Authorization': 'Bearer ' + apikey }
+    });
+    
+    if (!resp.ok) return;
+    
+    const data = await resp.json();
+    if (data.stats) {
+      document.getElementById('cdp-total-detections').textContent = data.stats.total_detections || 0;
+      document.getElementById('cdp-auto-bans').textContent = data.stats.auto_bans || 0;
+    }
+  } catch (e) {
+    console.error('Failed to load CDP stats:', e);
+  }
+}
+
 // Main refresh function
 document.getElementById('refresh').onclick = async function() {
   const endpoint = document.getElementById('endpoint').value.replace(/\/$/, '');
@@ -649,10 +779,14 @@ document.getElementById('refresh').onclick = async function() {
         updateBanDurations(config);
         updateMazeConfig(config);
         updateRobotsConfig(config);
+        updateCdpConfig(config);
       }
     } catch (e) {
       console.error('Failed to load config:', e);
     }
+    
+    // Fetch CDP stats
+    refreshCdpStats();
     
     // Update last updated time
     document.getElementById('last-updated').textContent = 

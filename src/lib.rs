@@ -28,6 +28,7 @@ mod quiz;        // Interactive math quiz for banned users
 mod metrics;     // Prometheus metrics
 mod maze;        // Link maze honeypot
 mod robots;      // robots.txt generation
+mod cdp;         // CDP (Chrome DevTools Protocol) automation detection
 
 /// Main HTTP handler for the bot trap. This function is invoked for every HTTP request.
 /// It applies a series of anti-bot checks in order of cost and effectiveness, returning early on block/allow.
