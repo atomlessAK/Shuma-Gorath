@@ -38,7 +38,6 @@ Shuma-Gorath is **primarily built and tested for deployment on Fermyon Cloud**. 
 ## Structure
 - `src/`: Rust source code for the Spin app
 - `dashboard/`: Web-based monitoring dashboard
-- `assets/`: Documentation assets (screenshots)
 - `spin.toml`: Spin app manifest (primary deployment config)
 - `Makefile`: Build system with dev/prod/test commands
 - `setup.sh`: One-command dependency installation
