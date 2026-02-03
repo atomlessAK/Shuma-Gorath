@@ -23,7 +23,7 @@ function initCharts() {
           position: 'bottom'
         },
         colorschemes: {
-          scheme: 'brewer.Greys6'
+          scheme: 'brewer.Reds3'
         }
       }
     }
@@ -55,7 +55,7 @@ function initCharts() {
           display: false
         },
         colorschemes: {
-          scheme: 'brewer.Greys6'
+          scheme: 'brewer.Reds3'
         }
       }
     }
@@ -89,7 +89,7 @@ function initCharts() {
           display: false
         },
         colorschemes: {
-          scheme: 'brewer.Greys6'
+          scheme: 'brewer.Reds3'
         }
       }
     }
@@ -156,9 +156,9 @@ function updateTopIpsChart(topIps) {
   const labels = topIps.map(([ip, _]) => ip);
   const data = topIps.map(([_, count]) => count);
 
-  // Greys6 colors: ["#f7f7f7", "#cccccc", "#969696", "#636363", "#252525", "#000000"]
-  const greys = ["#f7f7f7", "#cccccc", "#969696", "#636363", "#252525", "#000000"];
-  const barColors = data.map((_, i) => greys[i % greys.length]);
+  // Reds3 palette (ColorBrewer 3-class reds)
+  const reds3 = ["#fee0d2", "#fc9272", "#de2d26"];
+  const barColors = data.map((_, i) => reds3[i % reds3.length]);
 
   topIpsChart.data.labels = labels;
   topIpsChart.data.datasets[0].data = data;
@@ -251,12 +251,12 @@ function updateTimeSeriesChart() {
 
     const counts = sortedBuckets.map(time => buckets[time]);
 
-    // Greys6 colors: ["#f7f7f7", "#cccccc", "#969696", "#636363", "#252525", "#000000"]
-    const greys = ["#f7f7f7", "#cccccc", "#969696", "#636363", "#252525", "#000000"];
+    // Use Reds3 palette for time series
+    const reds3 = ["#fee0d2", "#fc9272", "#de2d26"];
     timeSeriesChart.data.labels = labels;
     timeSeriesChart.data.datasets[0].data = counts;
-    timeSeriesChart.data.datasets[0].borderColor = greys[3];
-    timeSeriesChart.data.datasets[0].backgroundColor = greys[1];
+    timeSeriesChart.data.datasets[0].borderColor = reds3[2];
+    timeSeriesChart.data.datasets[0].backgroundColor = reds3[0];
     timeSeriesChart.update();
   })
   .catch(err => console.error('Failed to update time series:', err));
