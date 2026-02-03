@@ -307,11 +307,11 @@ function updateBansTable(bans) {
       
       try {
         await window.unbanIp(endpoint, apikey, ip);
-        msg.textContent = `✓ Unbanned ${ip}`;
+        msg.textContent = `Unbanned ${ip}`;
         msg.className = 'message success';
         setTimeout(() => document.getElementById('refresh').click(), 500);
       } catch (e) {
-        msg.textContent = '✗ Error: ' + e.message;
+        msg.textContent = 'Error: ' + e.message;
         msg.className = 'message error';
       }
     };
@@ -431,7 +431,7 @@ function updateRobotsConfig(config) {
   // Reset button state
   const btn = document.getElementById('save-robots-config');
   btn.disabled = true;
-  btn.textContent = '📝 Update Policy';
+  btn.textContent = 'Update Policy';
 }
 
 // Check if robots config has changed from saved state
@@ -453,7 +453,7 @@ function checkRobotsConfigChanged() {
   const btn = document.getElementById('save-robots-config');
   btn.disabled = !changed;
   if (changed) {
-    btn.textContent = '📝 Update Policy';
+    btn.textContent = 'Update Policy';
   }
 }
 
@@ -491,17 +491,17 @@ document.getElementById('save-maze-config').onclick = async function() {
     });
     
     if (!resp.ok) throw new Error('Failed to save config');
-    
-    btn.textContent = '✓ Saved!';
+
+    btn.textContent = 'Saved!';
     setTimeout(() => {
-      btn.textContent = '💾 Save Maze Settings';
+      btn.textContent = 'Save Maze Settings';
       btn.disabled = false;
     }, 1500);
   } catch (e) {
-    btn.textContent = '✗ Error';
+    btn.textContent = 'Error';
     console.error('Failed to save maze config:', e);
     setTimeout(() => {
-      btn.textContent = '💾 Save Maze Settings';
+      btn.textContent = 'Save Maze Settings';
       btn.disabled = false;
     }, 2000);
   }
@@ -540,8 +540,8 @@ document.getElementById('save-robots-config').onclick = async function() {
     });
     
     if (!resp.ok) throw new Error('Failed to save config');
-    
-    btn.textContent = '✓ Updated!';
+
+    btn.textContent = 'Updated!';
     // Update saved state to current values (store toggle states, not server values)
     robotsSavedState = {
       enabled: robotsEnabled,
@@ -556,14 +556,14 @@ document.getElementById('save-robots-config').onclick = async function() {
       refreshRobotsPreview();
     }
     setTimeout(() => {
-      btn.textContent = '📝 Update Policy';
+      btn.textContent = 'Update Policy';
       btn.disabled = true; // Disable since we just saved
     }, 1500);
   } catch (e) {
-    btn.textContent = '✗ Error';
+    btn.textContent = 'Error';
     console.error('Failed to save robots config:', e);
     setTimeout(() => {
-      btn.textContent = '📝 Update Policy';
+      btn.textContent = 'Update Policy';
       btn.disabled = false; // Keep enabled so they can retry
     }, 2000);
   }
@@ -601,12 +601,12 @@ document.getElementById('preview-robots').onclick = async function() {
     btn.disabled = true;
     await refreshRobotsPreview();
     preview.classList.remove('hidden');
-    btn.textContent = '🙈 Hide robots.txt';
+    btn.textContent = 'Hide robots.txt';
     btn.disabled = false;
   } else {
     // Hide preview
     preview.classList.add('hidden');
-    btn.textContent = '👁️ Show robots.txt';
+    btn.textContent = 'Show robots.txt';
   }
 };
 
@@ -631,7 +631,7 @@ function updateCdpConfig(config) {
   // Reset button state
   const btn = document.getElementById('save-cdp-config');
   btn.disabled = true;
-  btn.textContent = '💾 Save CDP Settings';
+  btn.textContent = 'Save CDP Settings';
 }
 
 // Check if CDP config has changed from saved state
@@ -691,7 +691,7 @@ document.getElementById('save-cdp-config').onclick = async function() {
     
     if (!resp.ok) throw new Error('Failed to save config');
     
-    btn.textContent = '✓ Saved!';
+    btn.textContent = 'Saved!';
     // Update saved state to current values
     cdpSavedState = {
       enabled: cdpEnabled,
@@ -699,14 +699,14 @@ document.getElementById('save-cdp-config').onclick = async function() {
       threshold: cdpThreshold
     };
     setTimeout(() => {
-      btn.textContent = '💾 Save CDP Settings';
+      btn.textContent = 'Save CDP Settings';
       btn.disabled = true;
     }, 1500);
   } catch (e) {
-    btn.textContent = '✗ Error';
+    btn.textContent = 'Error';
     console.error('Failed to save CDP config:', e);
     setTimeout(() => {
-      btn.textContent = '💾 Save CDP Settings';
+      btn.textContent = 'Save CDP Settings';
       btn.disabled = false;
     }, 2000);
   }
@@ -835,12 +835,12 @@ document.getElementById('ban-btn').onclick = async function() {
   
   try {
     await window.banIp(endpoint, apikey, ip, reason, duration);
-    msg.textContent = `✓ Banned ${ip} for ${duration}s`;
+    msg.textContent = `Banned ${ip} for ${duration}s`;
     msg.className = 'message success';
     document.getElementById('ban-ip').value = '';
     setTimeout(() => document.getElementById('refresh').click(), 500);
   } catch (e) {
-    msg.textContent = '✗ Error: ' + e.message;
+    msg.textContent = 'Error: ' + e.message;
     msg.className = 'message error';
   }
 };
@@ -863,12 +863,12 @@ document.getElementById('unban-btn').onclick = async function() {
   
   try {
     await window.unbanIp(endpoint, apikey, ip);
-    msg.textContent = `✓ Unbanned ${ip}`;
+    msg.textContent = `Unbanned ${ip}`;
     msg.className = 'message success';
     document.getElementById('unban-ip').value = '';
     setTimeout(() => document.getElementById('refresh').click(), 500);
   } catch (e) {
-    msg.textContent = '✗ Error: ' + e.message;
+    msg.textContent = 'Error: ' + e.message;
     msg.className = 'message error';
   }
 };
@@ -904,10 +904,10 @@ document.getElementById('save-durations-btn').onclick = async function() {
     }
     
     const data = await resp.json();
-    msg.textContent = '✓ Ban durations saved';
+    msg.textContent = 'Ban durations saved';
     msg.className = 'message success';
   } catch (e) {
-    msg.textContent = '✗ Error: ' + e.message;
+    msg.textContent = 'Error: ' + e.message;
     msg.className = 'message error';
   }
 };
@@ -941,13 +941,13 @@ document.getElementById('test-mode-toggle').addEventListener('change', async fun
     }
     
     const data = await resp.json();
-    msg.textContent = `✓ Test mode ${data.config.test_mode ? 'enabled' : 'disabled'}`;
+    msg.textContent = `Test mode ${data.config.test_mode ? 'enabled' : 'disabled'}`;
     msg.className = 'message success';
     
     // Refresh dashboard to update banner
     setTimeout(() => document.getElementById('refresh').click(), 500);
   } catch (e) {
-    msg.textContent = '✗ Error: ' + e.message;
+    msg.textContent = 'Error: ' + e.message;
     msg.className = 'message error';
     // Revert toggle on error
     this.checked = !testMode;
