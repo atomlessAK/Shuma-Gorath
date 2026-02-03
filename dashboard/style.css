@@ -1136,8 +1136,7 @@ td,
   /* Improve admin panel separation in dark mode: slightly darker panels,
      stronger border, and subtle highlight shadow to make them stand out */
   .control-group,
-  .controls-grid .control-group,
-  .admin-controls {
+  .controls-grid .control-group {
     background: var(--color-gray-200);
     border: 0.5px solid var(--color-gray-300);
     box-shadow: var(--shadow-sm);
@@ -1145,15 +1144,14 @@ td,
 
   /* Make control headings more prominent */
   .control-group h3 {
-    color: var(--color-gray-100);
+    color: var(--color-gray-900);
   }
 
   /* Admin controls: make panels match other panels and ensure inputs/buttons contrast */
   .control-group,
-  .controls-grid .control-group,
-  .admin-controls {
+  .controls-grid .control-group {
     background: var(--color-gray-200);
-    color: var(--color-gray-800);
+    color: var(--color-gray-900);
     border-color: var(--color-gray-300);
   }
 
@@ -1171,7 +1169,7 @@ td,
 
   .control-group button {
     background: var(--color-gray-400);
-    color: var(--color-gray-100);
+    color: var(--color-gray-900);
     border-color: var(--color-gray-300);
   }
 }
