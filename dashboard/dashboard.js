@@ -155,9 +155,15 @@ function updateEventTypesChart(eventCounts) {
 function updateTopIpsChart(topIps) {
   const labels = topIps.map(([ip, _]) => ip);
   const data = topIps.map(([_, count]) => count);
-  
+
+  // Greys3 colors: ["#f0f0f0", "#bdbdbd", "#636363"]
+  const greys = ["#f0f0f0", "#bdbdbd", "#636363"];
+  const barColors = data.map((_, i) => greys[i % greys.length]);
+
   topIpsChart.data.labels = labels;
   topIpsChart.data.datasets[0].data = data;
+  topIpsChart.data.datasets[0].backgroundColor = barColors;
+  topIpsChart.data.datasets[0].borderColor = barColors;
   topIpsChart.update();
 }
 
@@ -245,8 +251,12 @@ function updateTimeSeriesChart() {
 
     const counts = sortedBuckets.map(time => buckets[time]);
 
+    // Greys3 colors: ["#f0f0f0", "#bdbdbd", "#636363"]
+    const greys = ["#f0f0f0", "#bdbdbd", "#636363"];
     timeSeriesChart.data.labels = labels;
     timeSeriesChart.data.datasets[0].data = counts;
+    timeSeriesChart.data.datasets[0].borderColor = greys[2];
+    timeSeriesChart.data.datasets[0].backgroundColor = greys[1];
     timeSeriesChart.update();
   })
   .catch(err => console.error('Failed to update time series:', err));
