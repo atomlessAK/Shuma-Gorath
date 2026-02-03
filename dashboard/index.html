@@ -153,28 +153,28 @@
           <input id="unban-ip" type="text" placeholder="IP address" />
           <button id="unban-btn">✅ Unban</button>
         </div>
-        <div class="control-group maze-control-group">
+        <div class="control-group">
           <h3>🕸️ Link Maze</h3>
           <p class="control-desc">Honeypot trap for crawlers</p>
-          <div class="maze-admin-controls">
-            <div class="maze-toggle-row">
-              <label class="maze-admin-label">Maze Enabled</label>
+          <div class="admin-controls">
+            <div class="toggle-row">
+              <label class="control-label">Maze Enabled</label>
               <label class="toggle-switch">
                 <input type="checkbox" id="maze-enabled-toggle" checked>
                 <span class="toggle-slider"></span>
               </label>
             </div>
-            <div class="maze-toggle-row">
-              <label class="maze-admin-label">Auto-Ban</label>
+            <div class="toggle-row">
+              <label class="control-label">Auto-Ban</label>
               <label class="toggle-switch">
                 <input type="checkbox" id="maze-auto-ban-toggle" checked>
                 <span class="toggle-slider"></span>
               </label>
             </div>
-            <div class="maze-threshold-row">
-              <label class="maze-admin-label">Ban Threshold</label>
+            <div class="input-row">
+              <label class="control-label">Ban Threshold</label>
               <input type="number" id="maze-threshold" value="50" min="5" max="500">
-              <span class="threshold-unit">pages</span>
+              <span class="input-unit">pages</span>
             </div>
           </div>
           <button id="save-maze-config">💾 Save Maze Settings</button>
@@ -182,42 +182,42 @@
         <div class="control-group">
           <h3>📜 AI Training Opt-Out Policy</h3>
           <p class="control-desc">Declare crawling policies via robots.txt (advisory, not enforcement)</p>
-          <div class="maze-admin-controls">
-            <div class="maze-toggle-row">
-              <label class="maze-admin-label robots-label-wide">Serve robots.txt</label>
+          <div class="admin-controls">
+            <div class="toggle-row">
+              <label class="control-label control-label--wide">Serve robots.txt</label>
               <label class="toggle-switch">
                 <input type="checkbox" id="robots-enabled-toggle" checked>
                 <span class="toggle-slider"></span>
               </label>
             </div>
-            <div class="maze-toggle-row">
-              <label class="maze-admin-label robots-label-wide">Opt-out AI Training</label>
+            <div class="toggle-row">
+              <label class="control-label control-label--wide">Opt-out AI Training</label>
               <label class="toggle-switch">
                 <input type="checkbox" id="robots-block-training-toggle" checked>
                 <span class="toggle-slider"></span>
               </label>
               <span class="toggle-hint">GPTBot, CCBot, ClaudeBot</span>
             </div>
-            <div class="maze-toggle-row">
-              <label class="maze-admin-label robots-label-wide">Opt-out AI Search</label>
+            <div class="toggle-row">
+              <label class="control-label control-label--wide">Opt-out AI Search</label>
               <label class="toggle-switch">
                 <input type="checkbox" id="robots-block-search-toggle">
                 <span class="toggle-slider"></span>
               </label>
               <span class="toggle-hint">PerplexityBot, etc.</span>
             </div>
-            <div class="maze-toggle-row">
-              <label class="maze-admin-label robots-label-wide">Restrict Search Engines</label>
+            <div class="toggle-row">
+              <label class="control-label control-label--wide">Restrict Search Engines</label>
               <label class="toggle-switch">
                 <input type="checkbox" id="robots-allow-search-toggle">
                 <span class="toggle-slider"></span>
               </label>
               <span class="toggle-hint">Google, Bing, etc.</span>
             </div>
-            <div class="maze-threshold-row">
-              <label class="maze-admin-label robots-label-wide">Crawl Delay</label>
+            <div class="input-row">
+              <label class="control-label control-label--wide">Crawl Delay</label>
               <input type="number" id="robots-crawl-delay" value="2" min="0" max="60">
-              <span class="threshold-unit">seconds</span>
+              <span class="input-unit">seconds</span>
             </div>
           </div>
           <button id="save-robots-config" disabled>📝 Update Policy</button>
@@ -231,42 +231,42 @@
           <h3>🔍 CDP (Detect Browser Automation)</h3>
           <p class="control-desc">Detects bots controlling browsers on behalf of human users (Puppeteer, Playwright,
             Selenium, etc.)</p>
-          <div class="cdp-admin-controls">
-            <div class="cdp-toggle-row">
-              <label class="cdp-admin-label">Enable Detection</label>
+          <div class="admin-controls">
+            <div class="toggle-row">
+              <label class="control-label control-label--wide">Enable Detection</label>
               <label class="toggle-switch">
                 <input type="checkbox" id="cdp-enabled-toggle" checked>
                 <span class="toggle-slider"></span>
               </label>
             </div>
-            <div class="cdp-toggle-row">
-              <label class="cdp-admin-label">Auto-ban on Detection</label>
+            <div class="toggle-row">
+              <label class="control-label control-label--wide">Auto-ban on Detection</label>
               <label class="toggle-switch">
                 <input type="checkbox" id="cdp-auto-ban-toggle" checked>
                 <span class="toggle-slider"></span>
               </label>
             </div>
-            <div class="cdp-threshold-control">
-              <div class="cdp-threshold-header">
-                <label class="cdp-admin-label">Detection Threshold</label>
-                <span id="cdp-threshold-value" class="cdp-threshold-badge">0.8</span>
+            <div class="slider-control">
+              <div class="slider-header">
+                <label class="control-label control-label--wide">Detection Threshold</label>
+                <span id="cdp-threshold-value" class="slider-badge">0.8</span>
               </div>
               <input type="range" id="cdp-threshold-slider" min="0.1" max="1.0" step="0.1" value="0.8">
-              <div class="cdp-threshold-labels">
+              <div class="slider-labels">
                 <span>Sensitive</span>
                 <span>Strict</span>
               </div>
             </div>
           </div>
           <button id="save-cdp-config" disabled>💾 Save CDP Settings</button>
-          <div id="cdp-stats" class="cdp-stats">
+          <div id="cdp-stats" class="info-panel">
             <h4>Detection Stats</h4>
-            <div class="stats-row">
-              <span class="stat-label">Total Detections:</span>
+            <div class="info-row">
+              <span class="info-label">Total Detections:</span>
               <span id="cdp-total-detections">0</span>
             </div>
-            <div class="stats-row">
-              <span class="stat-label">Auto-bans:</span>
+            <div class="info-row">
+              <span class="info-label">Auto-bans:</span>
               <span id="cdp-auto-bans">0</span>
             </div>
           </div>
