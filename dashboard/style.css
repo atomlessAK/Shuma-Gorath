@@ -614,11 +614,14 @@ input:checked + .toggle-slider:before {
 }
 
 /* Maze Section */
+/* Maze Section */
 .maze-section {
   background: var(--panel-bg);
   color: var(--panel-fg);
-  padding: 25px;
-  border-radius: var(--radius-xl);
+  padding: 20px;
+  border-radius: 0;
+  border: 0.5px solid var(--color-gray-300);
+  box-shadow: none;
   margin-bottom: 30px;
 }
 
@@ -643,7 +646,8 @@ input:checked + .toggle-slider:before {
 .maze-stat {
   background: var(--panel-bg);
   padding: 20px;
-  border-radius: var(--radius-lg);
+  border-radius: 0;
+  border: 0.5px solid var(--color-gray-300);
   text-align: center;
 }
 
@@ -663,8 +667,9 @@ input:checked + .toggle-slider:before {
 
 .maze-crawlers {
   background: var(--panel-bg);
-  border-radius: var(--radius-lg);
+  border-radius: 0;
   padding: 20px;
+  border: 0.5px solid var(--color-gray-300);
 }
 
 .maze-crawlers h3 {
@@ -675,9 +680,10 @@ input:checked + .toggle-slider:before {
 
 .maze-controls {
   background: var(--panel-bg);
-  border-radius: var(--radius-lg);
+  border-radius: 0;
   padding: 15px 20px;
   margin-bottom: 20px;
+  border: 0.5px solid var(--color-gray-300);
 }
 
 .maze-control-row {
@@ -765,7 +771,8 @@ input:checked + .toggle-slider:before {
   align-items: center;
   background: var(--panel-bg);
   padding: 12px 15px;
-  border-radius: var(--radius-lg);
+  border-radius: 0;
+  border: 0.5px solid var(--color-gray-300);
   transition: background 0.2s;
 }
 
