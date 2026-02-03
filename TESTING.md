@@ -7,25 +7,28 @@ This project has **three distinct types of tests** that run in different environ
 ## Quick Test Commands
 
 ```bash
-# Run all backend tests (unit + integration)
-./test_all_colored.sh
+# Run all tests (unit + integration if server running)
+make test
 
 # Run only unit tests
-cargo test
+make test-unit
 
-# Run only integration tests
-./test_spin_colored.sh
+# Run only integration tests (requires Spin server)
+make dev          # In one terminal
+make test-integration  # In another terminal
 
 # Test dashboard (manual)
 open http://127.0.0.1:3000/dashboard/index.html
 ```
 
+> **Preferred**: Always use Makefile commands instead of running scripts directly.
+
 ## Test Environment Summary
 
 | Test Type | Count | Environment | Command | Requirements |
 |-----------|-------|-------------|---------|--------------|
-| **Unit Tests** | 13 | Native Rust | `cargo test` | None (just Rust) |
-| **Integration Tests** | 10 | Spin Environment | `./test_spin_colored.sh` | Spin server running |
+| **Unit Tests** | 34 | Native Rust | `make test-unit` | None (just Rust) |
+| **Integration Tests** | 15 | Spin Environment | `make test-integration` | Spin server running |
 | **Dashboard Tests** | Manual | Browser | Open dashboard URL | Spin server running |
 
 ---
@@ -37,16 +40,19 @@ Unit tests verify individual functions and logic in isolation. They run in the n
 
 ### How to Run
 ```bash
-cargo test              # Run all 13 unit tests
+make test-unit          # Run all 34 unit tests
 cargo test ban          # Run ban-related tests only
 cargo test whitelist    # Run whitelist-related tests only
+cargo test cdp          # Run CDP-related tests only
 ```
 
 ### What They Test
-- **ban_tests.rs** (3 tests)
+- **ban_tests.rs** (5 tests)
   - IP banning logic
   - Ban expiry handling
   - Ban entry serialization
+  - Unban IP functionality
+  - Unban non-existent IP handling
 
 - **quiz_tests.rs** (2 tests)
   - Quiz question generation
@@ -63,6 +69,20 @@ cargo test whitelist    # Run whitelist-related tests only
   - Wildcard prefix matching
   - Comment parsing
   - Empty line handling
+
+- **cdp_tests.rs** (8 tests)
+  - CDP detection script generation
+  - CDP report script with endpoint
+  - CDP injection into HTML head
+  - CDP injection into body fallback
+  - CDP injection with report endpoint
+  - Minimal HTML injection
+  - CDP report deserialization
+  - CDP report serialization
+
+- **robots.rs tests** (2 tests)
+  - robots.txt generation for AI training block
+  - Honeypot path inclusion
 
 ### Why Native Rust?
 - Fast execution (no server startup)
@@ -86,18 +106,18 @@ Integration tests verify the full HTTP API end-to-end. They **MUST** run in the 
 #### Option A: Manual (recommended for debugging)
 ```bash
 # Terminal 1: Start Spin server
-spin up
+make dev
 
 # Terminal 2: Run integration tests
-./test_spin_colored.sh
+make test-integration
 ```
 
 #### Option B: Makefile (automatic)
 ```bash
-make local    # Starts Spin in background, then runs tests
+make test     # Runs unit tests + integration if server running
 ```
 
-### What They Test (10 Scenarios)
+### What They Test (15 Scenarios)
 
 1. **Health Check Endpoint**
    - `GET /health`
@@ -139,6 +159,26 @@ make local    # Starts Spin in background, then runs tests
     - `GET /bot-trap` after test_mode disabled
     - Verifies real blocking resumes
 
+11. **Prometheus Metrics Endpoint**
+    - `GET /metrics`
+    - Verifies Prometheus-formatted metrics with counters
+
+12. **CDP Report Endpoint**
+    - `POST /cdp-report`
+    - Tests CDP detection report submission
+
+13. **CDP Auto-Ban with High Score**
+    - `POST /cdp-report` with score >= threshold
+    - Verifies automation detection triggers appropriate action
+
+14. **CDP Config via Admin API**
+    - `GET /admin/cdp`
+    - Returns CDP detection configuration and stats
+
+15. **Unban Functionality Test**
+    - `POST /admin/ban` then `POST /admin/unban`
+    - Verifies ban/unban cycle works correctly
+
 ### Why Spin Environment?
 Integration tests **cannot** run in native Rust because:
 - They need HTTP server (Spin provides routing)
@@ -151,39 +191,46 @@ Integration tests **cannot** run in native Rust because:
 
 ## 3. Run All Tests
 
-### Recommended: Use test_all_colored.sh
+### Recommended: Use Makefile
+```bash
+make test          # Runs unit tests + integration if server running
+make test-unit     # Unit tests only (34 tests)
+make test-integration  # Integration tests only (15 scenarios)
+```
+
+Or use the combined script:
 ```bash
 ./test_all_colored.sh
 ```
 
 This script:
-1. Runs all 13 unit tests in native Rust
+1. Runs all 34 unit tests in native Rust
 2. Builds the Spin app
-3. Runs all 10 integration test scenarios in Spin
+3. Runs all 15 integration test scenarios in Spin
 4. Provides clear, colorized output showing which environment each test runs in
 
 ### Output Example
 ```
 ============================================
   UNIT TESTS (Native Rust Environment)
-  Run via: cargo test
-  Count: 13 tests
+  Run via: make test-unit
+  Count: 34 tests
 ============================================
 
-PASS All 13 unit tests passed
+PASS All 34 unit tests passed
 
 ============================================
   INTEGRATION TESTS (Spin Environment)
-  Run via: test_spin_colored.sh
-  Count: 10 scenarios
+  Run via: make test-integration
+  Count: 15 scenarios
 ============================================
 
-PASS All 10 integration test scenarios passed
+PASS All 15 integration test scenarios passed
 
 ============================================
   ALL TESTS COMPLETE
-  Unit tests: 13/13 passed
-  Integration tests: 10/10 scenarios passed
+  Unit tests: 34/34 passed
+  Integration tests: 15/15 scenarios passed
 ============================================
 ```
 
@@ -193,7 +240,7 @@ PASS All 10 integration test scenarios passed
 
 ### Issue: "Integration tests fail"
 **Problem:** Spin server not running  
-**Solution:** Run `spin up` in a separate terminal first
+**Solution:** Run `make dev` in a separate terminal first, then `make test-integration`
 
 ### Issue: "cargo test shows wrong output"
 **Problem:** Stale build artifacts with wrong crate-type  
@@ -207,7 +254,7 @@ PASS All 10 integration test scenarios passed
 **Problem:** Confusing placeholder Rust test with real integration tests  
 **Solution:** 
 - `tests/bot_trap.rs` = 1 placeholder (not a real test)
-- `test_spin_colored.sh` = 10 real integration test scenarios
+- `test_spin_colored.sh` = 15 real integration test scenarios
 
 ---
 
@@ -225,31 +272,32 @@ The `tests/bot_trap.rs` file contains only a placeholder test that exists to:
 
 When setting up CI/CD, ensure your pipeline:
 
-1. **Runs unit tests** with `cargo test`
+1. **Runs unit tests** with `make test-unit`
    - Fast, no external dependencies
    - Should run on every commit
 
 2. **Runs integration tests** in Spin environment
    - Requires Spin installation
-   - Requires `spin up` (can use background mode)
-   - Runs `./test_spin_colored.sh`
+   - Requires `make dev` (can use background mode)
+   - Runs `make test-integration`
    - Should run before deployment
 
 ### Example CI/CD Flow
 ```bash
 # Step 1: Unit tests (fast)
-cargo test
+make test-unit
 
 # Step 2: Build
-spin build
+make build
 
 # Step 3: Integration tests (requires Spin)
-spin up --detach
-./test_spin_colored.sh
-spin down
+make dev &      # Start in background
+sleep 5         # Wait for server
+make test-integration
+make stop
 
 # Step 4: Deploy
-spin deploy
+make deploy
 ```
 
 ---
@@ -262,7 +310,7 @@ Dashboard tests verify the web UI functionality, charts, and admin controls. Cur
 ### How to Run (Manual)
 ```bash
 # 1. Start Spin server
-spin up --listen 127.0.0.1:3000
+make dev
 
 # 2. Open dashboard
 open http://127.0.0.1:3000/dashboard/index.html
@@ -313,22 +361,22 @@ npm run test:e2e      # Cypress/Playwright end-to-end tests
 ## Quick Reference
 
 ```bash
-# Unit tests only (13 tests, native Rust)
-cargo test
+# Unit tests only (34 tests, native Rust)
+make test-unit
 
-# Integration tests only (10 scenarios, Spin required)
-spin up  # In separate terminal
-./test_spin_colored.sh
+# Integration tests only (15 scenarios, Spin required)
+make dev            # In one terminal
+make test-integration  # In another terminal
 
 # Dashboard tests (manual checklist)
-spin up  # In separate terminal
+make dev            # Start server
 open http://127.0.0.1:3000/dashboard/index.html
 
-# All backend tests (recommended)
-./test_all_colored.sh
+# All tests (recommended)
+make test
 
 # Clean build artifacts
-cargo clean
+make clean
 ```
 
 ---
@@ -336,10 +384,10 @@ cargo clean
 ## Test Counts Reference
 
 **Always remember:**
-- **13 unit tests** = Native Rust (`cargo test`)
-- **10 integration tests** = Spin environment (`test_spin_colored.sh`)
+- **34 unit tests** = Native Rust (`make test-unit`)
+- **15 integration tests** = Spin environment (`make test-integration`)
 - **12+ dashboard checks** = Browser manual testing
-- **Total: 35+ test scenarios**
+- **Total: 61+ test scenarios**
 
 ---
 

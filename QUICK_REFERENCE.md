@@ -4,22 +4,26 @@
 
 ### Build & Run
 ```bash
-make local          # Clean, build, and run locally
-make prod           # Clean, build, and run production mode
+make dev            # Build and run with file watching (auto-rebuild)
+make run            # Build once and run (no watching)
+make build          # Build release binary only
+make prod           # Build for production and start server
+make stop           # Stop running Spin server
+make status         # Check if server is running
 make clean          # Clean build artifacts
 ```
 
 ### Testing
 ```bash
 # All tests (recommended)
-./test_all_colored.sh      # Run 13 unit tests + 5 integration tests
+make test                  # Run unit tests + integration if server running
 
-# Unit tests only (native Rust, NO Spin required)
-cargo test                 # Run all 13 unit tests
+# Unit tests only (34 tests, native Rust, NO Spin required)
+make test-unit             # Run all 34 unit tests
 
-# Integration tests only (Spin environment required)
-spin up                    # In terminal 1
-./test_spin_colored.sh     # In terminal 2 - runs 5 scenarios
+# Integration tests only (15 scenarios, Spin environment required)
+make dev                   # In terminal 1
+make test-integration      # In terminal 2
 ```
 **Important:** Unit tests run in native Rust. Integration tests MUST run in Spin environment.
 
@@ -43,6 +47,11 @@ spin up
 - `POST /admin/unban?ip=x.x.x.x` - Unban an IP
 - `GET /admin/analytics` - Get ban statistics
 - `GET /admin/events?hours=24` - Get recent events
+- `GET /admin/config` - Get current configuration
+- `POST /admin/config` - Update configuration (test_mode, ban_durations, robots, CDP, etc.)
+- `GET /admin/maze` - Link maze honeypot statistics
+- `GET /admin/robots` - robots.txt configuration and preview
+- `GET /admin/cdp` - CDP detection configuration and stats
 - `GET /admin` - API help
 
 ## Configuration
