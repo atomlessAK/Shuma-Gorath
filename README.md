@@ -54,19 +54,19 @@ See `docs/deployment.md` for deployment wiring and secret handling.
 
 ## 🐙 Documentation
 
-- `docs/index.md` - Docs index
-- `QUICK_REFERENCE.md` - Command and API cheat sheet
-- `docs/testing.md` - Testing guide (Makefile-only)
-- `docs/dashboard.md` - Dashboard and admin UI
-- `docs/deployment.md` - Production/deploy configuration
-- `docs/api.md` - API usage and endpoint details
-- `docs/configuration.md` - Runtime configuration reference
-- `docs/security-hardening.md` - Deployment security checklist
-- `docs/observability.md` - Prometheus/Grafana integration
-- `docs/akamai-bot-manager.md` - Positioning and layered defense
-- `docs/features.md` - Feature list and roadmap
-- `docs/maze.md` - Link maze honeypot
-- `SECURITY_REVIEW.md` - Security audit notes
+- [`docs/index.md`](docs/index.md) - Docs index
+- [`QUICK_REFERENCE.md`](QUICK_REFERENCE.md) - Command and API cheat sheet
+- [`docs/testing.md`](docs/testing.md) - Testing guide (Makefile-only)
+- [`docs/dashboard.md`](docs/dashboard.md) - Dashboard and admin UI
+- [`docs/deployment.md`](docs/deployment.md) - Production/deploy configuration
+- [`docs/api.md`](docs/api.md) - API usage and endpoint details
+- [`docs/configuration.md`](docs/configuration.md) - Runtime configuration reference
+- [`docs/security-hardening.md`](docs/security-hardening.md) - Deployment security checklist
+- [`docs/observability.md`](docs/observability.md) - Prometheus/Grafana integration
+- [`docs/akamai-bot-manager.md`](docs/akamai-bot-manager.md) - Positioning and layered defense
+- [`docs/features.md`](docs/features.md) - Feature list and roadmap
+- [`docs/maze.md`](docs/maze.md) - Link maze honeypot
+- [`SECURITY_REVIEW.md`](SECURITY_REVIEW.md) - Security audit notes
 
 ## 🐙 Repository Structure (High Level)
 
