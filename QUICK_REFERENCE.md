@@ -79,6 +79,7 @@ environment = { API_KEY = "your-secret-key-here", JS_SECRET = "your-js-secret-he
 `POW_DIFFICULTY` sets the leading-zero bit target (default: 15).
 `POW_TTL_SECONDS` controls PoW seed expiry (default: 90).
 `POW_SECRET` optionally overrides the PoW signing secret (falls back to `JS_SECRET`).
+`POW_CONFIG_MUTABLE` allows admin config updates for PoW difficulty/TTL (default: false).
 
 ### 🐙 Forwarded IP Secret (Deployment)
 Local dev (Makefile): `make dev` sets a dev-only default and passes it to Spin. Override as needed:

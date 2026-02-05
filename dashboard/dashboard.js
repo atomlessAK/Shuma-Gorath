@@ -417,6 +417,13 @@ let cdpSavedState = {
   threshold: 0.6
 };
 
+// Track PoW saved state for change detection
+let powSavedState = {
+  difficulty: 15,
+  ttl: 90,
+  mutable: false
+};
+
 function updateRobotsConfig(config) {
   // Update toggles from server config
   if (config.robots_enabled !== undefined) {
@@ -649,6 +656,103 @@ function updateCdpConfig(config) {
   btn.textContent = 'Save CDP Settings';
 }
 
+// Update PoW config controls from loaded config
+function updatePowConfig(config) {
+  const powEnabled = config.pow_enabled === true;
+  const powMutable = config.pow_config_mutable === true;
+  const difficulty = parseInt(config.pow_difficulty, 10);
+  const ttl = parseInt(config.pow_ttl_seconds, 10);
+
+  document.getElementById('pow-status').textContent = powEnabled ? 'Enabled' : 'Disabled';
+  document.getElementById('pow-config-status').textContent = powMutable ? 'Editable' : 'Read-only (env)';
+
+  if (!Number.isNaN(difficulty)) {
+    document.getElementById('pow-difficulty').value = difficulty;
+  }
+  if (!Number.isNaN(ttl)) {
+    document.getElementById('pow-ttl').value = ttl;
+  }
+
+  // Disable inputs when config is immutable
+  document.getElementById('pow-difficulty').disabled = !powMutable;
+  document.getElementById('pow-ttl').disabled = !powMutable;
+
+  powSavedState = {
+    difficulty: parseInt(document.getElementById('pow-difficulty').value, 10) || 15,
+    ttl: parseInt(document.getElementById('pow-ttl').value, 10) || 90,
+    mutable: powMutable
+  };
+
+  const btn = document.getElementById('save-pow-config');
+  btn.disabled = !powMutable;
+  btn.textContent = 'Save PoW Settings';
+}
+
+function checkPowConfigChanged() {
+  const btn = document.getElementById('save-pow-config');
+  if (!powSavedState.mutable) {
+    btn.disabled = true;
+    return;
+  }
+  const current = {
+    difficulty: parseInt(document.getElementById('pow-difficulty').value, 10) || 15,
+    ttl: parseInt(document.getElementById('pow-ttl').value, 10) || 90
+  };
+  const changed = current.difficulty !== powSavedState.difficulty || current.ttl !== powSavedState.ttl;
+  btn.disabled = !changed;
+}
+
+document.getElementById('pow-difficulty').addEventListener('input', checkPowConfigChanged);
+document.getElementById('pow-ttl').addEventListener('input', checkPowConfigChanged);
+
+// Save PoW configuration
+document.getElementById('save-pow-config').onclick = async function() {
+  const endpoint = document.getElementById('endpoint').value.replace(/\/$/, '');
+  const apikey = document.getElementById('apikey').value;
+  const btn = this;
+  const msg = document.getElementById('admin-msg');
+
+  const powDifficulty = parseInt(document.getElementById('pow-difficulty').value, 10);
+  const powTtl = parseInt(document.getElementById('pow-ttl').value, 10);
+
+  btn.textContent = 'Saving...';
+  btn.disabled = true;
+
+  try {
+    const resp = await fetch(`${endpoint}/admin/config`, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + apikey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        pow_difficulty: powDifficulty,
+        pow_ttl_seconds: powTtl
+      })
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(text || 'Failed to save PoW config');
+    }
+
+    powSavedState = {
+      difficulty: powDifficulty,
+      ttl: powTtl,
+      mutable: true
+    };
+    msg.textContent = 'PoW settings saved';
+    msg.className = 'message success';
+    btn.textContent = 'Save PoW Settings';
+    btn.disabled = true;
+  } catch (e) {
+    msg.textContent = 'Error: ' + e.message;
+    msg.className = 'message error';
+    btn.textContent = 'Save PoW Settings';
+    btn.disabled = false;
+  }
+};
+
 // Check if CDP config has changed from saved state
 function checkCdpConfigChanged() {
   const current = {
@@ -810,6 +914,7 @@ document.getElementById('refresh').onclick = async function() {
         updateMazeConfig(config);
         updateRobotsConfig(config);
         updateCdpConfig(config);
+        updatePowConfig(config);
       }
     } catch (e) {
       console.error('Failed to load config:', e);

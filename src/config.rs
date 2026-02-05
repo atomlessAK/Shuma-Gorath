@@ -3,6 +3,7 @@
 // Loads and manages per-site configuration (ban duration, rate limits, honeypots, etc.)
 
 use spin_sdk::key_value::Store;
+use std::env;
 
 use serde::{Serialize, Deserialize};
 
@@ -85,6 +86,11 @@ pub struct Config {
     pub cdp_auto_ban: bool,              // Auto-ban when CDP automation detected
     #[serde(default = "default_cdp_threshold")]
     pub cdp_detection_threshold: f32,    // Score threshold for detection (0.0-1.0)
+
+    #[serde(default = "default_pow_difficulty")]
+    pub pow_difficulty: u8,             // PoW leading-zero bits
+    #[serde(default = "default_pow_ttl_seconds")]
+    pub pow_ttl_seconds: u64,           // PoW seed expiry in seconds
 }
 
 fn default_true() -> bool {
@@ -93,6 +99,41 @@ fn default_true() -> bool {
 
 fn default_cdp_threshold() -> f32 {
     0.8  // Default: 80% confidence required for detection
+}
+
+pub const POW_DIFFICULTY_MIN: u8 = 12;
+pub const POW_DIFFICULTY_MAX: u8 = 20;
+pub const POW_TTL_MIN: u64 = 30;
+pub const POW_TTL_MAX: u64 = 300;
+
+pub fn pow_config_mutable() -> bool {
+    env::var("POW_CONFIG_MUTABLE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+fn clamp_pow_difficulty(value: u8) -> u8 {
+    value.clamp(POW_DIFFICULTY_MIN, POW_DIFFICULTY_MAX)
+}
+
+fn clamp_pow_ttl(value: u64) -> u64 {
+    value.clamp(POW_TTL_MIN, POW_TTL_MAX)
+}
+
+fn default_pow_difficulty() -> u8 {
+    let v = env::var("POW_DIFFICULTY")
+        .ok()
+        .and_then(|val| val.parse::<u8>().ok())
+        .unwrap_or(15);
+    clamp_pow_difficulty(v)
+}
+
+fn default_pow_ttl_seconds() -> u64 {
+    let v = env::var("POW_TTL_SECONDS")
+        .ok()
+        .and_then(|val| val.parse::<u64>().ok())
+        .unwrap_or(90);
+    clamp_pow_ttl(v)
 }
 
 fn default_maze_auto_ban() -> bool {
@@ -114,14 +155,20 @@ impl Config {
         if let Ok(Some(val)) = store.get(&key) {
             if let Ok(mut cfg) = serde_json::from_slice::<Config>(&val) {
                 // Allow override from env for test_mode
-                if let Ok(val) = std::env::var("TEST_MODE") {
+                if let Ok(val) = env::var("TEST_MODE") {
                     cfg.test_mode = val == "1" || val.eq_ignore_ascii_case("true");
                 }
+                if !pow_config_mutable() {
+                    cfg.pow_difficulty = default_pow_difficulty();
+                    cfg.pow_ttl_seconds = default_pow_ttl_seconds();
+                }
+                cfg.pow_difficulty = clamp_pow_difficulty(cfg.pow_difficulty);
+                cfg.pow_ttl_seconds = clamp_pow_ttl(cfg.pow_ttl_seconds);
                 return cfg;
             }
         }
         // Defaults for all config fields
-        let test_mode = std::env::var("TEST_MODE").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false);
+        let test_mode = env::var("TEST_MODE").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false);
         Config {
             ban_duration: 21600, // 6 hours (legacy default)
             ban_durations: BanDurations::default(),
@@ -146,6 +193,8 @@ impl Config {
             cdp_detection_enabled: true,
             cdp_auto_ban: true,
             cdp_detection_threshold: 0.8,
+            pow_difficulty: default_pow_difficulty(),
+            pow_ttl_seconds: default_pow_ttl_seconds(),
         }
     }
     

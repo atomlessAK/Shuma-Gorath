@@ -69,11 +69,11 @@ pub fn needs_js_verification(req: &Request, _store: &Store, _site_id: &str, ip: 
 
 /// Returns a Response with a JS challenge page that sets the js_verified cookie for the client IP.
 /// Also injects CDP detection if enabled in the config.
-pub fn inject_js_challenge(ip: &str) -> Response {
+pub fn inject_js_challenge(ip: &str, pow_difficulty: u8, pow_ttl_seconds: u64) -> Response {
     let cdp_script = crate::cdp::get_cdp_detection_script();
 
     if crate::pow::pow_enabled() {
-        let challenge = crate::pow::issue_pow_challenge(ip);
+        let challenge = crate::pow::issue_pow_challenge(ip, pow_difficulty, pow_ttl_seconds);
         let html = format!(r#"
         <html><head><script>{cdp_script}</script></head><body>
         <script>

@@ -38,7 +38,10 @@ curl -X POST -H "Authorization: Bearer $API_KEY" \
 - `POW_ENABLED` (env) - Enable proof-of-work step before JS verification
 - `POW_DIFFICULTY` (env) - Leading zero bits required (default: 15)
 - `POW_TTL_SECONDS` (env) - Seed expiry in seconds (default: 90)
+- `POW_CONFIG_MUTABLE` (env) - Allow admin API to update PoW difficulty/TTL (default: false)
 - `POW_SECRET` (env, optional) - HMAC secret for PoW seeds (falls back to `JS_SECRET`)
+- `pow_difficulty` (config) - Runtime PoW difficulty (12–20, requires `POW_CONFIG_MUTABLE=1`)
+- `pow_ttl_seconds` (config) - Runtime PoW TTL (30–300, requires `POW_CONFIG_MUTABLE=1`)
 
 ## 🐙 Example Config (Partial)
 
@@ -68,6 +71,8 @@ curl -X POST -H "Authorization: Bearer $API_KEY" \
   "robots_crawl_delay": 2,
   "cdp_detection_enabled": true,
   "cdp_auto_ban": true,
-  "cdp_detection_threshold": 0.8
+  "cdp_detection_threshold": 0.8,
+  "pow_difficulty": 15,
+  "pow_ttl_seconds": 90
 }
 ```

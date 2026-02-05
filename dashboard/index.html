@@ -276,6 +276,31 @@
             </div>
           </div>
         </div>
+        <div class="control-group">
+          <h3>Proof-of-Work (PoW)</h3>
+          <p class="control-desc">Lightweight PoW before JS verification (tunable when allowed)</p>
+          <div class="admin-controls">
+            <div class="input-row">
+              <label class="control-label" for="pow-difficulty">Difficulty</label>
+              <input type="number" id="pow-difficulty" min="12" max="20" value="15" aria-label="PoW difficulty in leading zero bits">
+              <span class="input-unit">bits</span>
+            </div>
+            <div class="input-row">
+              <label class="control-label" for="pow-ttl">Seed TTL</label>
+              <input type="number" id="pow-ttl" min="30" max="300" value="90" aria-label="PoW seed TTL in seconds">
+              <span class="input-unit">seconds</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">PoW Status:</span>
+              <span id="pow-status">--</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Config:</span>
+              <span id="pow-config-status">--</span>
+            </div>
+          </div>
+          <button id="save-pow-config" disabled>Save PoW Settings</button>
+        </div>
       </div>
       <div id="admin-msg" class="message"></div>
     </div>

@@ -34,6 +34,10 @@ pub struct EventLogEntry {
 const EVENT_PAGE_SIZE: usize = 500; // max entries per page
 const EVENT_MAX_PAGES_PER_HOUR: usize = 256; // safety cap
 const DEFAULT_EVENT_RETENTION_HOURS: u64 = 168; // 7 days
+const POW_DIFFICULTY_MIN: u8 = crate::config::POW_DIFFICULTY_MIN;
+const POW_DIFFICULTY_MAX: u8 = crate::config::POW_DIFFICULTY_MAX;
+const POW_TTL_MIN: u64 = crate::config::POW_TTL_MIN;
+const POW_TTL_MAX: u64 = crate::config::POW_TTL_MAX;
 
 static LAST_EVENTLOG_CLEANUP_HOUR: Lazy<Mutex<u64>> = Lazy::new(|| Mutex::new(0));
 
@@ -475,6 +479,27 @@ pub fn handle_admin(req: &Request) -> Response {
                         cfg.cdp_detection_threshold = cdp_detection_threshold as f32;
                         changed = true;
                     }
+
+                    // Update PoW settings if provided (guarded by env flag)
+                    if json.get("pow_difficulty").is_some() || json.get("pow_ttl_seconds").is_some() {
+                        if !crate::config::pow_config_mutable() {
+                            return Response::new(403, "PoW config is immutable (set POW_CONFIG_MUTABLE=1 to allow changes)");
+                        }
+                    }
+                    if let Some(pow_difficulty) = json.get("pow_difficulty").and_then(|v| v.as_u64()) {
+                        if pow_difficulty < POW_DIFFICULTY_MIN as u64 || pow_difficulty > POW_DIFFICULTY_MAX as u64 {
+                            return Response::new(400, "pow_difficulty out of range (12-20)");
+                        }
+                        cfg.pow_difficulty = pow_difficulty as u8;
+                        changed = true;
+                    }
+                    if let Some(pow_ttl_seconds) = json.get("pow_ttl_seconds").and_then(|v| v.as_u64()) {
+                        if pow_ttl_seconds < POW_TTL_MIN || pow_ttl_seconds > POW_TTL_MAX {
+                            return Response::new(400, "pow_ttl_seconds out of range (30-300)");
+                        }
+                        cfg.pow_ttl_seconds = pow_ttl_seconds;
+                        changed = true;
+                    }
                     
                     // Save config to KV store
                     if changed {
@@ -508,7 +533,11 @@ pub fn handle_admin(req: &Request) -> Response {
                             "robots_crawl_delay": cfg.robots_crawl_delay,
                             "cdp_detection_enabled": cfg.cdp_detection_enabled,
                             "cdp_auto_ban": cfg.cdp_auto_ban,
-                            "cdp_detection_threshold": cfg.cdp_detection_threshold
+                            "cdp_detection_threshold": cfg.cdp_detection_threshold,
+                            "pow_enabled": crate::pow::pow_enabled(),
+                            "pow_config_mutable": crate::config::pow_config_mutable(),
+                            "pow_difficulty": cfg.pow_difficulty,
+                            "pow_ttl_seconds": cfg.pow_ttl_seconds
                         }
                     })).unwrap();
                     return Response::new(200, body);
@@ -552,7 +581,11 @@ pub fn handle_admin(req: &Request) -> Response {
                 "robots_crawl_delay": cfg.robots_crawl_delay,
                 "cdp_detection_enabled": cfg.cdp_detection_enabled,
                 "cdp_auto_ban": cfg.cdp_auto_ban,
-                "cdp_detection_threshold": cfg.cdp_detection_threshold
+                "cdp_detection_threshold": cfg.cdp_detection_threshold,
+                "pow_enabled": crate::pow::pow_enabled(),
+                "pow_config_mutable": crate::config::pow_config_mutable(),
+                "pow_difficulty": cfg.pow_difficulty,
+                "pow_ttl_seconds": cfg.pow_ttl_seconds
             })).unwrap();
             Response::new(200, body)
         }

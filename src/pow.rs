@@ -41,20 +41,6 @@ pub fn pow_enabled() -> bool {
         .unwrap_or(true)
 }
 
-fn pow_difficulty() -> u8 {
-    std::env::var("POW_DIFFICULTY")
-        .ok()
-        .and_then(|v| v.parse::<u8>().ok())
-        .unwrap_or(15)
-}
-
-fn pow_ttl_seconds() -> u64 {
-    std::env::var("POW_TTL_SECONDS")
-        .ok()
-        .and_then(|v| v.parse::<u64>().ok())
-        .unwrap_or(90)
-}
-
 fn sign_payload(payload: &str) -> Vec<u8> {
     let secret = get_pow_secret();
     let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
@@ -124,10 +110,9 @@ fn verify_pow(seed_token: &str, nonce: &str, difficulty: u8) -> bool {
     has_leading_zero_bits(&hash, difficulty)
 }
 
-pub fn issue_pow_challenge(ip: &str) -> PowChallenge {
+pub fn issue_pow_challenge(ip: &str, difficulty: u8, ttl_seconds: u64) -> PowChallenge {
     let now = now_ts();
-    let ttl = pow_ttl_seconds();
-    let difficulty = pow_difficulty();
+    let ttl = ttl_seconds;
     let seed_id = format!("{:016x}", rand::thread_rng().gen::<u64>());
     let payload = PowPayload {
         seed_id,
@@ -144,11 +129,11 @@ pub fn issue_pow_challenge(ip: &str) -> PowChallenge {
     }
 }
 
-pub fn handle_pow_challenge(ip: &str) -> Response {
+pub fn handle_pow_challenge(ip: &str, difficulty: u8, ttl_seconds: u64) -> Response {
     if !pow_enabled() {
         return Response::new(404, "PoW disabled");
     }
-    let challenge = issue_pow_challenge(ip);
+    let challenge = issue_pow_challenge(ip, difficulty, ttl_seconds);
     let body = serde_json::to_string(&challenge).unwrap();
     Response::builder()
         .status(200)

@@ -204,6 +204,8 @@ mod tests {
             cdp_detection_enabled: false,
             cdp_detection_threshold: 3.0,
             cdp_auto_ban: false,
+            pow_difficulty: crate::config::POW_DIFFICULTY_MIN,
+            pow_ttl_seconds: crate::config::POW_TTL_MIN,
         }
     }
 

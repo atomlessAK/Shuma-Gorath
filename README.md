@@ -51,6 +51,7 @@ Key environment variables:
 - `POW_DIFFICULTY` - Leading zero bits required (default: 15)
 - `POW_TTL_SECONDS` - PoW seed expiry in seconds (default: 90)
 - `POW_SECRET` - Optional PoW signing secret (defaults to `JS_SECRET`)
+- `POW_CONFIG_MUTABLE` - Allow admin API to tune PoW difficulty/TTL
 
 Deployment policy note: `SHUMA_FAIL_MODE` is a critical choice (fail-open vs fail-closed) when the KV store is unavailable. See `docs/security-hardening.md` and `docs/deployment.md`.
 

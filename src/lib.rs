@@ -398,7 +398,7 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
         if *req.method() != spin_sdk::http::Method::Get {
             return Response::new(405, "Method Not Allowed");
         }
-        return pow::handle_pow_challenge(&ip);
+        return pow::handle_pow_challenge(&ip, cfg.pow_difficulty, cfg.pow_ttl_seconds);
     }
     if path == "/pow/verify" {
         return pow::handle_pow_verify(req, &ip);
@@ -415,7 +415,7 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
             outcome: Some("js challenge".to_string()),
             admin: None,
         });
-        return js::inject_js_challenge(&ip);
+        return js::inject_js_challenge(&ip, cfg.pow_difficulty, cfg.pow_ttl_seconds);
     }
     // Outdated browser
     if browser::is_outdated_browser(ua, &cfg.browser_block) {
@@ -445,7 +445,7 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
             outcome: Some("js challenge".to_string()),
             admin: None,
         });
-        return js::inject_js_challenge(&ip);
+        return js::inject_js_challenge(&ip, cfg.pow_difficulty, cfg.pow_ttl_seconds);
     }
     Response::new(200, "OK (passed bot trap)")
 }
