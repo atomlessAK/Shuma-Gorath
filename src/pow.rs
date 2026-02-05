@@ -45,14 +45,14 @@ fn pow_difficulty() -> u8 {
     std::env::var("POW_DIFFICULTY")
         .ok()
         .and_then(|v| v.parse::<u8>().ok())
-        .unwrap_or(16)
+        .unwrap_or(15)
 }
 
 fn pow_ttl_seconds() -> u64 {
     std::env::var("POW_TTL_SECONDS")
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
-        .unwrap_or(60)
+        .unwrap_or(90)
 }
 
 fn sign_payload(payload: &str) -> Vec<u8> {

@@ -115,7 +115,7 @@ test: ## Run ALL tests: unit tests first, then integration tests (requires serve
 	@./scripts/set_crate_type.sh rlib
 	@cargo test || exit 1
 	@echo ""
-	@echo "$(CYAN)Step 2/2: Integration Tests (15 scenarios)$(NC)"
+	@echo "$(CYAN)Step 2/2: Integration Tests (16 scenarios)$(NC)"
 	@echo "$(CYAN)--------------------------------------------$(NC)"
 	@if curl -sf -H "X-Forwarded-For: 127.0.0.1" $(FORWARDED_SECRET_HEADER) http://127.0.0.1:3000/health > /dev/null 2>&1; then \
 		./test_spin_colored.sh || exit 1; \
@@ -135,7 +135,7 @@ test-unit: ## Run Rust unit tests only (34 tests)
 	@./scripts/set_crate_type.sh rlib
 	@cargo test
 
-test-integration: ## Run integration tests only (15 scenarios, requires running server)
+test-integration: ## Run integration tests only (16 scenarios, requires running server)
 	@echo "$(CYAN)🧪 Running integration tests...$(NC)"
 	@if curl -sf -H "X-Forwarded-For: 127.0.0.1" $(FORWARDED_SECRET_HEADER) http://127.0.0.1:3000/health > /dev/null 2>&1; then \
 		./test_spin_colored.sh; \

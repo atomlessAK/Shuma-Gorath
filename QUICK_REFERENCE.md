@@ -29,7 +29,7 @@ make test                  # Run unit tests + integration if server running
 # Unit tests only (native Rust, NO Spin required)
 make test-unit             # Run all unit tests
 
-# Integration tests only (15 scenarios, Spin environment required)
+# Integration tests only (16 scenarios, Spin environment required)
 make dev                   # In terminal 1
 make test-integration      # In terminal 2
 ```
@@ -76,8 +76,8 @@ environment = { API_KEY = "your-secret-key-here", JS_SECRET = "your-js-secret-he
 `ADMIN_IP_ALLOWLIST` limits admin API access to specific IPs/CIDRs (comma-separated).
 `SHUMA_FAIL_MODE` controls fail-open/closed behavior when the KV store is unavailable.
 `POW_ENABLED` enables proof-of-work before JS verification (default: true in dev).
-`POW_DIFFICULTY` sets the leading-zero bit target (default: 16).
-`POW_TTL_SECONDS` controls PoW seed expiry (default: 60).
+`POW_DIFFICULTY` sets the leading-zero bit target (default: 15).
+`POW_TTL_SECONDS` controls PoW seed expiry (default: 90).
 `POW_SECRET` optionally overrides the PoW signing secret (falls back to `JS_SECRET`).
 
 ### 🐙 Forwarded IP Secret (Deployment)

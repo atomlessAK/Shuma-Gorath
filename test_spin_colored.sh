@@ -11,20 +11,21 @@
 #
 # This script runs integration test scenarios:
 #   1. Health check endpoint (GET /health)
-#   2. Root endpoint behavior (GET /)
-#   3. Honeypot ban detection (POST /bot-trap)
-#   4. Admin API unban (POST /admin/unban)
-#   5. Health check after ban/unban (GET /health)
-#   6. Config API - get config (GET /admin/config)
-#   7. Test mode toggle (POST /admin/config)
-#   8. Test mode behavior verification
-#   9. Test mode disable and blocking resumes
-#   10. Verify blocking after test mode disabled
-#   11. Prometheus metrics endpoint
-#   12. CDP report endpoint (POST /cdp-report)
-#   13. CDP auto-ban with high score
-#   14. CDP config via admin API
-#   15. Unban functionality test
+#   2. PoW challenge + verification (if enabled)
+#   3. Root endpoint behavior (GET /)
+#   4. Honeypot ban detection (POST /bot-trap)
+#   5. Admin API unban (POST /admin/unban)
+#   6. Health check after ban/unban (GET /health)
+#   7. Config API - get config (GET /admin/config)
+#   8. Test mode toggle (POST /admin/config)
+#   9. Test mode behavior verification
+#   10. Test mode disable and blocking resumes
+#   11. Verify blocking after test mode disabled
+#   12. Prometheus metrics endpoint
+#   13. CDP report endpoint (POST /cdp-report)
+#   14. CDP auto-ban with high score
+#   15. CDP config via admin API
+#   16. Unban functionality test
 
 set -e
 
@@ -58,7 +59,83 @@ else
   echo -e "${YELLOW}DEBUG /health response:${NC} $health_resp"
 fi
 
-# Test 2: Root endpoint (should return JS challenge or OK)
+# Test 2: PoW challenge (if enabled)
+info "Testing PoW challenge..."
+pow_resp=$(curl -s -w "HTTPSTATUS:%{http_code}" "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" "$BASE_URL/pow")
+pow_body=$(echo "$pow_resp" | sed -e 's/HTTPSTATUS:.*//')
+pow_status=$(echo "$pow_resp" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+if [[ "$pow_status" == "404" ]]; then
+  info "PoW disabled; skipping PoW verification"
+else
+  seed=$(python3 - <<PY
+import json,sys
+data=json.loads(sys.stdin.read())
+print(data["seed"])
+PY
+<<< "$pow_body")
+  difficulty=$(python3 - <<PY
+import json,sys
+data=json.loads(sys.stdin.read())
+print(int(data["difficulty"]))
+PY
+<<< "$pow_body")
+  nonce=$(python3 - <<PY
+import hashlib
+import sys
+
+seed = sys.argv[1]
+bits = int(sys.argv[2])
+max_iter = 5000000
+
+def has_leading_zero_bits(h, bits):
+    remaining = bits
+    for b in h:
+        if remaining <= 0:
+            return True
+        if remaining >= 8:
+            if b != 0:
+                return False
+            remaining -= 8
+        else:
+            mask = 0xFF << (8 - remaining)
+            return (b & mask) == 0
+    return True
+
+nonce = 0
+while True:
+    msg = f"{seed}:{nonce}".encode()
+    digest = hashlib.sha256(msg).digest()
+    if has_leading_zero_bits(digest, bits):
+        print(nonce)
+        break
+    nonce += 1
+    if nonce >= max_iter:
+        print(-1)
+        break
+PY
+"$seed" "$difficulty")
+  if [[ "$nonce" == "-1" ]]; then
+    fail "PoW solve exceeded iteration cap"
+  else
+  payload=$(python3 - <<PY
+import json,sys
+seed=sys.argv[1]
+nonce=sys.argv[2]
+print(json.dumps({"seed": seed, "nonce": nonce}))
+PY
+"$seed" "$nonce")
+  verify_resp=$(curl -s -w "HTTPSTATUS:%{http_code}" "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" \
+    -H "Content-Type: application/json" -X POST -d "$payload" "$BASE_URL/pow/verify")
+  verify_status=$(echo "$verify_resp" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+  if [[ "$verify_status" == "200" ]]; then
+    pass "PoW verification succeeded"
+  else
+    fail "PoW verification failed"
+  fi
+  fi
+fi
+
+# Test 3: Root endpoint (should return JS challenge or OK)
 info "Testing root endpoint..."
 
 root_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" "$BASE_URL/")
@@ -69,7 +146,7 @@ else
   echo -e "${YELLOW}DEBUG / response:${NC} $root_resp"
 fi
 
-# Test 3: Honeypot triggers ban
+# Test 4: Honeypot triggers ban
 info "Testing honeypot ban..."
 curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" "$BASE_URL/bot-trap" > /dev/null
 resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" "$BASE_URL/")
@@ -79,7 +156,7 @@ else
   fail "Honeypot did not trigger ban as expected"
 fi
 
-# Test 4: Unban 'unknown' via admin API
+# Test 5: Unban 'unknown' via admin API
 info "Testing admin unban for 'unknown'..."
 curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" "$BASE_URL/admin/unban?ip=unknown" -H "Authorization: Bearer $API_KEY" > /dev/null
 resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" "$BASE_URL/")
@@ -89,7 +166,7 @@ else
   fail "Unban for 'unknown' did not work"
 fi
 
-# Test 5: Health check after ban/unban
+# Test 6: Health check after ban/unban
 info "Testing /health endpoint again..."
 if curl -sf "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" "$BASE_URL/health" | grep -q OK; then
   pass "/health returns OK after ban/unban"
@@ -97,7 +174,7 @@ else
   fail "/health did not return OK after ban/unban"
 fi
 
-# Test 6: Get config via admin API
+# Test 7: Get config via admin API
 info "Testing GET /admin/config..."
 config_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin/config")
 if echo "$config_resp" | grep -q '"test_mode"'; then
@@ -107,7 +184,7 @@ else
   echo -e "${YELLOW}DEBUG config response:${NC} $config_resp"
 fi
 
-# Test 7: Enable test mode
+# Test 8: Enable test mode
 info "Testing POST /admin/config to enable test_mode..."
 enable_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
   -d '{"test_mode": true}' "$BASE_URL/admin/config")
@@ -118,7 +195,7 @@ else
   echo -e "${YELLOW}DEBUG enable response:${NC} $enable_resp"
 fi
 
-# Test 8: Test mode allows honeypot access without blocking
+# Test 9: Test mode allows honeypot access without blocking
 info "Testing test_mode behavior (honeypot should not block)..."
 # First, unban the test IP to ensure clean state
 curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin/unban?ip=10.0.0.99" > /dev/null
@@ -140,7 +217,7 @@ else
   echo -e "${YELLOW}DEBUG subsequent response:${NC} $subsequent_resp"
 fi
 
-# Test 9: Disable test mode and verify blocking resumes
+# Test 10: Disable test mode and verify blocking resumes
 info "Testing POST /admin/config to disable test_mode..."
 disable_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
   -d '{"test_mode": false}' "$BASE_URL/admin/config")
@@ -151,7 +228,7 @@ else
   echo -e "${YELLOW}DEBUG disable response:${NC} $disable_resp"
 fi
 
-# Test 10: Verify blocking works again after test mode disabled
+# Test 11: Verify blocking works again after test mode disabled
 info "Testing that blocking resumes after test_mode disabled..."
 # Unban first to get clean state
 curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin/unban?ip=10.0.0.100" > /dev/null
@@ -169,7 +246,7 @@ fi
 curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin/unban?ip=10.0.0.99" > /dev/null
 curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin/unban?ip=10.0.0.100" > /dev/null
 
-# Test 11: Prometheus metrics endpoint
+# Test 12: Prometheus metrics endpoint
 info "Testing GET /metrics (Prometheus format)..."
 metrics_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" "$BASE_URL/metrics")
 if echo "$metrics_resp" | grep -q 'bot_trap_requests_total'; then
@@ -186,7 +263,7 @@ else
   fail "/metrics missing ban counters"
 fi
 
-# Test 12: CDP report endpoint exists
+# Test 13: CDP report endpoint exists
 info "Testing POST /cdp-report endpoint..."
 cdp_report='{"cdp_detected":true,"score":0.5,"checks":["webdriver"]}'
 cdp_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Content-Type: application/json" -H "X-Forwarded-For: 10.0.0.200" -d "$cdp_report" "$BASE_URL/cdp-report")
@@ -197,7 +274,7 @@ else
   echo -e "${YELLOW}DEBUG cdp response:${NC} $cdp_resp"
 fi
 
-# Test 13: CDP report with high score triggers action (when enabled)
+# Test 14: CDP report with high score triggers action (when enabled)
 info "Testing CDP auto-ban with high score..."
 cdp_high='{"cdp_detected":true,"score":0.95,"checks":["webdriver","automation_props","cdp_timing"]}'
 cdp_high_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Content-Type: application/json" -H "X-Forwarded-For: 10.0.0.201" -d "$cdp_high" "$BASE_URL/cdp-report")
@@ -208,7 +285,7 @@ else
   echo -e "${YELLOW}DEBUG cdp high response:${NC} $cdp_high_resp"
 fi
 
-# Test 14: CDP config available via admin API
+# Test 15: CDP config available via admin API
 info "Testing CDP config in /admin/cdp..."
 cdp_config=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin/cdp")
 if echo "$cdp_config" | grep -qE '"enabled"|cdp_detection'; then
@@ -218,7 +295,7 @@ else
   echo -e "${YELLOW}DEBUG cdp config:${NC} $cdp_config"
 fi
 
-# Test 15: unban_ip function works via admin endpoint  
+# Test 16: unban_ip function works via admin endpoint  
 info "Testing unban functionality..."
 # First ban an IP
 curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin/ban?ip=10.0.0.202&reason=test" > /dev/null

@@ -48,8 +48,8 @@ Key environment variables:
 - `EVENT_LOG_RETENTION_HOURS` - Event log retention window
 - `SHUMA_FAIL_MODE` - `open` or `closed`
 - `POW_ENABLED` - Enable proof-of-work before JS verification
-- `POW_DIFFICULTY` - Leading zero bits required (default: 16)
-- `POW_TTL_SECONDS` - PoW seed expiry in seconds (default: 60)
+- `POW_DIFFICULTY` - Leading zero bits required (default: 15)
+- `POW_TTL_SECONDS` - PoW seed expiry in seconds (default: 90)
 - `POW_SECRET` - Optional PoW signing secret (defaults to `JS_SECRET`)
 
 Deployment policy note: `SHUMA_FAIL_MODE` is a critical choice (fail-open vs fail-closed) when the KV store is unavailable. See `docs/security-hardening.md` and `docs/deployment.md`.

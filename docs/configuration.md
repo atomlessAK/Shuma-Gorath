@@ -36,8 +36,8 @@ curl -X POST -H "Authorization: Bearer $API_KEY" \
 - `cdp_auto_ban` (bool)
 - `cdp_detection_threshold` (f32)
 - `POW_ENABLED` (env) - Enable proof-of-work step before JS verification
-- `POW_DIFFICULTY` (env) - Leading zero bits required (default: 16)
-- `POW_TTL_SECONDS` (env) - Seed expiry in seconds (default: 60)
+- `POW_DIFFICULTY` (env) - Leading zero bits required (default: 15)
+- `POW_TTL_SECONDS` (env) - Seed expiry in seconds (default: 90)
 - `POW_SECRET` (env, optional) - HMAC secret for PoW seeds (falls back to `JS_SECRET`)
 
 ## 🐙 Example Config (Partial)
