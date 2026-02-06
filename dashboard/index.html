@@ -28,7 +28,7 @@
       <input id="endpoint" value="http://127.0.0.1:3000" size="30" aria-label="API endpoint">
       <label for="apikey">API Key:</label>
       <input id="apikey" value="changeme-supersecret" size="30" type="password" aria-label="API key">
-      <button id="refresh" aria-label="Refresh dashboard">Refresh</button>
+      <button id="refresh" class="btn" aria-label="Refresh dashboard">Refresh</button>
     </div>
 
     <!-- Stats Summary Cards -->
@@ -144,19 +144,19 @@
             <label for="dur-browser">Browser:</label> <input id="dur-browser" type="number" value="21600" />
             <label for="dur-admin">Admin:</label> <input id="dur-admin" type="number" value="21600" />
           </div>
-          <button id="save-durations-btn">Save Durations</button>
+          <button id="save-durations-btn" class="btn btn-dark">Save Durations</button>
         </div>
         <div class="control-group panel-soft">
           <h3>Ban IP</h3>
           <input id="ban-ip" type="text" placeholder="IP address" aria-label="IP address to ban" />
           <input id="ban-reason" type="text" placeholder="Reason (optional)" value="manual_ban" aria-label="Ban reason" />
           <input id="ban-duration" type="number" placeholder="Duration (seconds)" value="3600" aria-label="Ban duration in seconds" />
-          <button id="ban-btn">Ban</button>
+          <button id="ban-btn" class="btn btn-dark">Ban</button>
         </div>
         <div class="control-group panel-soft">
           <h3>Unban IP</h3>
           <input id="unban-ip" type="text" placeholder="IP address" aria-label="IP address to unban" />
-          <button id="unban-btn">Unban</button>
+          <button id="unban-btn" class="btn btn-subtle">Unban</button>
         </div>
         <div class="control-group panel-soft">
           <h3>Link Maze</h3>
@@ -182,7 +182,7 @@
               <span class="input-unit">pages</span>
             </div>
           </div>
-          <button id="save-maze-config">Save Maze Settings</button>
+          <button id="save-maze-config" class="btn">Save Maze Settings</button>
         </div>
         <div class="control-group panel-soft">
           <h3>AI Training Opt-Out Policy</h3>
@@ -225,8 +225,8 @@
               <span class="input-unit">seconds</span>
             </div>
           </div>
-          <button id="save-robots-config" disabled>Update Policy</button>
-          <button id="preview-robots">Show robots.txt</button>
+          <button id="save-robots-config" class="btn" disabled>Update Policy</button>
+          <button id="preview-robots" class="btn btn-subtle">Show robots.txt</button>
           <div id="robots-preview" class="robots-preview panel hidden">
             <h4>robots.txt Preview</h4>
             <pre id="robots-preview-content"></pre>
@@ -263,7 +263,7 @@
               </div>
             </div>
           </div>
-          <button id="save-cdp-config" disabled>Save CDP Settings</button>
+          <button id="save-cdp-config" class="btn" disabled>Save CDP Settings</button>
           <div id="cdp-stats" class="info-panel panel-muted">
             <h4>Detection Stats</h4>
             <div class="info-row">
@@ -302,7 +302,7 @@
               </div>
             </div>
           </div>
-          <button id="save-pow-config" disabled>Save PoW Settings</button>
+          <button id="save-pow-config" class="btn" disabled>Save PoW Settings</button>
         </div>
       </div>
       <div id="admin-msg" class="message"></div>

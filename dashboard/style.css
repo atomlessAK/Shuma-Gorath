@@ -1,20 +1,3 @@
-/* Shuma-Gorath image styling for dashboard header */
-.shuma-image-wrapper {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.shuma-gorath-img {
-  max-width: 220px;
-  width: 100%;
-  height: auto;
-  display: block;
-  margin: 0 auto;
-  /* no drop shadows for a flatter, monochrome look */
-  filter: none;
-}
 /* ===========================================
    CSS Custom Properties (Color Palette)
    High-contrast monochrome with accent
@@ -37,7 +20,7 @@
   /* Primary accent (used sparingly) */
   --color-accent: #18181b;
   --color-accent-hover: #09090b;
-  
+
   /* Semantic colors */
   --color-success: #27272a;
   --color-success-bg: #e4e4e7;
@@ -45,10 +28,10 @@
   --color-error-bg: #e4e4e7;
   --color-warning: #3f3f46;
   --color-warning-bg: #f4f4f5;
-  
+
   /* Toggle active state */
   --color-toggle-active: #18181b;
-  
+
   /* Borders */
   --border-hairline: 0.5px solid var(--color-gray-300);
   /* Semantic panel colors that follow the page theme. */
@@ -61,6 +44,18 @@
   /* Foreground for buttons that use dark backgrounds in light mode
      and become light in dark mode (swap text color accordingly) */
   --btn-contrast-fg: var(--color-white);
+
+  /* Typography scale */
+  --text-xs: 0.75rem;
+  --text-sm: 0.85rem;
+  --text-base: 0.875rem;
+  --text-md: 0.9rem;
+  --text-lg: 1rem;
+  --text-xl: 1.1rem;
+  --text-2xl: 1.25rem;
+  --text-3xl: 1.5rem;
+  --text-4xl: 2rem;
+  --text-5xl: 2.5rem;
 }
 
 /* ===========================================
@@ -84,6 +79,55 @@
   border: var(--border-hairline);
 }
 
+/* ===========================================
+   Shared Button Base
+   =========================================== */
+
+/* Light button: gray-200 bg, gray-800 fg, hover to gray-300 */
+.btn {
+  padding: 10px 20px;
+  background: var(--color-gray-200);
+  color: var(--color-gray-800);
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn:hover {
+  background: var(--color-gray-300);
+}
+
+/* Dark/accent button: dark bg, contrast fg */
+.btn-dark {
+  background: var(--color-accent);
+  color: var(--btn-contrast-fg);
+}
+
+.btn-dark:hover {
+  background: var(--color-accent-hover);
+}
+
+/* Subtle dark button (gray-600) */
+.btn-subtle {
+  background: var(--color-gray-600);
+  color: var(--btn-contrast-fg);
+}
+
+.btn-subtle:hover {
+  background: var(--color-gray-700);
+}
+
+.btn:disabled {
+  background: var(--color-gray-400);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* ===========================================
+   Global Reset & Body
+   =========================================== */
+
 * {
   margin: 0;
   padding: 0;
@@ -97,6 +141,31 @@ body {
   padding: 20px;
   min-height: 100vh;
 }
+
+/* ===========================================
+   Shuma-Gorath Image (Dashboard Header)
+   =========================================== */
+
+.shuma-image-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.shuma-gorath-img {
+  max-width: 220px;
+  width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+  /* no drop shadows for a flatter, monochrome look */
+  filter: none;
+}
+
+/* ===========================================
+   Layout
+   =========================================== */
 
 .container {
   max-width: 1400px;
@@ -112,15 +181,19 @@ header {
 }
 
 h1 {
-  font-size: 2.5rem;
+  font-size: var(--text-5xl);
   color: var(--heading-fg);
   margin-bottom: 8px;
 }
 
 .subtitle {
   color: var(--muted-fg);
-  font-size: 1.1rem;
+  font-size: var(--text-xl);
 }
+
+/* ===========================================
+   Config Bar
+   =========================================== */
 
 .config {
   padding: 20px;
@@ -143,27 +216,16 @@ h1 {
   font-family: 'Courier New', monospace;
 }
 
-.config button {
-  padding: 10px 20px;
-  background: var(--color-gray-200);
-  color: var(--color-gray-800);
-  border: none;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.config button:hover {
-  background: var(--color-gray-300);
-}
-
 #last-updated {
   margin-left: auto;
   font-size: 14px;
   color: var(--color-gray-500);
 }
 
-/* Stats Cards */
+/* ===========================================
+   Stats Cards
+   =========================================== */
+
 .stats-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -176,7 +238,7 @@ h1 {
 }
 
 .card h3 {
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -185,11 +247,14 @@ h1 {
 }
 
 .stat-value {
-  font-size: 2.5rem;
+  font-size: var(--text-5xl);
   font-weight: 700;
 }
 
-/* Charts */
+/* ===========================================
+   Charts
+   =========================================== */
+
 .charts-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
@@ -220,16 +285,13 @@ h1 {
   background: var(--color-gray-100);
   color: var(--color-gray-700);
   border: 1px solid var(--color-gray-300);
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
 }
 
-.time-btn:hover {
-  background: var(--color-gray-200);
-}
-
+.time-btn:hover,
 .time-btn.active {
   background: var(--color-gray-200);
   color: var(--color-gray-800);
@@ -237,7 +299,7 @@ h1 {
 }
 
 .chart-container h2 {
-  font-size: 1.25rem;
+  font-size: var(--text-2xl);
   color: var(--heading-fg);
   margin-bottom: 15px;
 }
@@ -246,13 +308,16 @@ h1 {
   max-height: 300px;
 }
 
-/* Sections */
+/* ===========================================
+   Sections
+   =========================================== */
+
 .section {
   margin-bottom: 30px;
 }
 
 .section h2 {
-  font-size: 1.5rem;
+  font-size: var(--text-3xl);
   color: var(--color-black);
   margin-bottom: 15px;
 }
@@ -265,7 +330,10 @@ h1 {
   margin-bottom: 20px; /* keep spacing but no panel visuals */
 }
 
-/* Tables */
+/* ===========================================
+   Tables
+   =========================================== */
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -276,11 +344,18 @@ thead {
   background: var(--color-gray-100);
 }
 
+thead,
+tbody,
+th,
+td {
+  border: var(--border-hairline);
+}
+
 th {
   padding: 12px 16px;
   text-align: left;
   font-weight: 600;
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   color: var(--color-gray-700);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -289,7 +364,7 @@ th {
 td {
   padding: 12px 16px;
   border-top: 1px solid var(--color-gray-200);
-  font-size: 0.875rem;
+  font-size: var(--text-base);
 }
 
 tr:hover {
@@ -300,7 +375,7 @@ code {
   background: var(--color-gray-100);
   padding: 2px 6px;
   font-family: 'Courier New', monospace;
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   color: var(--color-gray-700);
 }
 
@@ -309,29 +384,31 @@ code {
   font-weight: 600;
 }
 
+.table-wrapper {
+  overflow-x: auto;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+/* ===========================================
+   Badges
+   =========================================== */
+
 .badge {
   display: inline-block;
   padding: 4px 8px;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
 }
 
-.badge.ban {
-  background: var(--color-gray-200);
-  color: var(--color-gray-800);
-}
-
+.badge.ban,
 .badge.unban {
   background: var(--color-gray-200);
   color: var(--color-gray-800);
 }
 
-.badge.challenge {
-  background: var(--color-gray-300);
-  color: var(--color-gray-800);
-}
-
+.badge.challenge,
 .badge.block {
   background: var(--color-gray-300);
   color: var(--color-gray-800);
@@ -342,12 +419,16 @@ code {
   color: var(--color-black);
 }
 
+/* ===========================================
+   Quick Unban Button (table rows)
+   =========================================== */
+
 .unban-quick {
   padding: 6px 12px;
   background: var(--color-gray-200);
   color: var(--color-gray-800);
   border: none;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   cursor: pointer;
   transition: background 0.2s;
@@ -357,7 +438,10 @@ code {
   background: var(--color-gray-300);
 }
 
-/* Admin Controls */
+/* ===========================================
+   Admin Controls
+   =========================================== */
+
 .controls-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -370,7 +454,7 @@ code {
 }
 
 .control-group h3 {
-  font-size: 1rem;
+  font-size: var(--text-lg);
   color: var(--color-gray-700);
   margin-bottom: 15px;
 }
@@ -383,38 +467,22 @@ code {
   font-size: 14px;
 }
 
-.control-group button {
+/* Buttons inside control groups inherit .btn base via HTML;
+   full-width override for the control-group context */
+.control-group .btn {
   width: 100%;
   padding: 12px;
-  background: var(--color-gray-200);
-  color: var(--color-gray-800);
-  border: none;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s;
 }
 
-.control-group button:hover {
-  background: var(--color-gray-300);
+.control-desc {
+  font-size: var(--text-sm);
+  color: var(--color-gray-500);
+  margin-bottom: 10px;
 }
 
-#ban-btn {
-  background: var(--color-accent);
-  color: var(--btn-contrast-fg);
-}
-
-#ban-btn:hover {
-  background: var(--color-accent-hover);
-}
-
-#unban-btn {
-  background: var(--color-gray-600);
-  color: var(--btn-contrast-fg);
-}
-
-#unban-btn:hover {
-  background: var(--color-gray-700);
-}
+/* ===========================================
+   Status Messages
+   =========================================== */
 
 .message {
   padding: 12px 16px;
@@ -446,45 +514,10 @@ code {
   border: 1px solid var(--color-gray-300);
 }
 
-.table-wrapper {
-  overflow-x: auto;
-  max-height: 500px;
-  overflow-y: auto;
-}
+/* ===========================================
+   Test Mode & Fail Mode Banners
+   =========================================== */
 
-/* Responsive */
-@media (max-width: 768px) {
-  .container {
-    padding: 15px;
-  }
-  
-  h1 {
-    font-size: 1.75rem;
-  }
-  
-  .config {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  
-  .config input {
-    width: 100%;
-  }
-  
-  .stats-cards {
-    grid-template-columns: 1fr;
-  }
-  
-  .charts-row {
-    grid-template-columns: 1fr;
-  }
-  
-  .controls-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Test Mode Banner */
 .test-mode-banner {
   background: var(--color-warning-bg);
   color: var(--color-warning);
@@ -509,10 +542,7 @@ code {
   border: var(--border-hairline);
 }
 
-.fail-mode-banner.open {
-  background: var(--color-gray-100);
-  color: var(--color-gray-800);
-}
+/* .open intentionally omitted — inherits base .fail-mode-banner styles */
 
 .fail-mode-banner.closed {
   background: #fee2e2;
@@ -528,7 +558,10 @@ code {
   display: none;
 }
 
-/* Toggle Switch */
+/* ===========================================
+   Toggle Switch
+   =========================================== */
+
 .toggle-switch {
   position: relative;
   display: inline-block;
@@ -579,13 +612,10 @@ input:checked + .toggle-slider:before {
   color: var(--color-gray-700);
 }
 
-.control-desc {
-  font-size: 0.85rem;
-  color: var(--color-gray-500);
-  margin-bottom: 10px;
-}
+/* ===========================================
+   Ban Durations Grid
+   =========================================== */
 
-/* Ban Durations Grid */
 .duration-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -596,7 +626,7 @@ input:checked + .toggle-slider:before {
 .duration-grid label {
   display: flex;
   flex-direction: column;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   color: var(--color-gray-700);
 }
@@ -610,16 +640,13 @@ input:checked + .toggle-slider:before {
 }
 
 #save-durations-btn {
-  background: var(--color-accent);
   margin-top: 5px;
-  color: var(--btn-contrast-fg);
 }
 
-#save-durations-btn:hover {
-  background: var(--color-accent-hover);
-}
+/* ===========================================
+   Maze Section
+   =========================================== */
 
-/* Maze Section */
 .maze-section {
   padding: 20px;
   margin-bottom: 30px;
@@ -632,7 +659,7 @@ input:checked + .toggle-slider:before {
 
 .maze-section .section-desc {
   color: var(--muted-fg);
-  font-size: 0.9rem;
+  font-size: var(--text-md);
   margin-bottom: 20px;
 }
 
@@ -650,7 +677,7 @@ input:checked + .toggle-slider:before {
 
 .maze-label {
   display: block;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   opacity: 0.8;
@@ -658,7 +685,7 @@ input:checked + .toggle-slider:before {
 }
 
 .maze-value {
-  font-size: 2rem;
+  font-size: var(--text-4xl);
   font-weight: 700;
 }
 
@@ -667,85 +694,9 @@ input:checked + .toggle-slider:before {
 }
 
 .maze-crawlers h3 {
-  font-size: 1rem;
+  font-size: var(--text-lg);
   margin-bottom: 15px;
   color: var(--panel-fg);
-}
-
-.maze-controls {
-  padding: 15px 20px;
-  margin-bottom: 20px;
-}
-
-.maze-control-row {
-  display: flex;
-  align-items: center;
-  gap: 25px;
-  flex-wrap: wrap;
-}
-
-.maze-control {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.maze-control label {
-  font-size: 0.85rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  opacity: 0.8;
-}
-
-.maze-toggle {
-  transform: scale(0.9);
-}
-
-.threshold-input {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.threshold-input input {
-  width: 80px;
-  padding: 8px 10px;
-  border: 1px solid var(--color-gray-300);
-  background: var(--panel-bg);
-  color: var(--panel-fg);
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.threshold-input input:focus {
-  outline: none;
-  border-color: var(--color-gray-400);
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.threshold-label {
-  font-size: 0.85rem;
-  opacity: 0.7;
-}
-
-.maze-save-btn {
-  padding: 10px 20px;
-  background: var(--color-gray-200);
-  color: var(--color-gray-800);
-  border: none;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  margin-left: auto;
-}
-
-.maze-save-btn:hover {
-  background: var(--color-gray-300);
-  transform: translateY(-1px);
-}
-
-.maze-save-btn:active {
-  transform: translateY(0);
 }
 
 .crawler-list {
@@ -775,7 +726,7 @@ input:checked + .toggle-slider:before {
   background: var(--color-gray-300);
   color: var(--color-gray-800);
   padding: 4px 12px;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   font-weight: 600;
 }
 
@@ -808,14 +759,8 @@ input:checked + .toggle-slider:before {
   margin: 15px 0;
 }
 
-/* Row with toggle switch */
-.toggle-row {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-
-/* Row with number/text input */
+/* Row with toggle switch or number/text input */
+.toggle-row,
 .input-row {
   display: flex;
   align-items: center;
@@ -825,7 +770,7 @@ input:checked + .toggle-slider:before {
 /* Label for controls */
 .control-label {
   min-width: 100px;
-  font-size: 0.9rem;
+  font-size: var(--text-md);
   color: var(--color-gray-700);
 }
 
@@ -840,7 +785,7 @@ input:checked + .toggle-slider:before {
   padding: 8px 10px;
   background: var(--panel-bg);
   color: var(--panel-fg);
-  font-size: 1rem;
+  font-size: var(--text-lg);
 }
 
 .input-row input:focus {
@@ -850,13 +795,13 @@ input:checked + .toggle-slider:before {
 
 /* Unit labels (e.g., "pages", "seconds") */
 .input-unit {
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   color: var(--color-gray-500);
 }
 
 /* Hint text next to toggles */
 .toggle-hint {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   color: var(--color-gray-400);
   margin-left: 8px;
 }
@@ -882,7 +827,7 @@ input:checked + .toggle-slider:before {
   background: var(--color-gray-200);
   color: var(--color-gray-800);
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: var(--text-md);
   padding: 4px 12px;
   min-width: 45px;
   text-align: center;
@@ -917,7 +862,7 @@ input:checked + .toggle-slider:before {
 .slider-labels {
   display: flex;
   justify-content: space-between;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   color: var(--color-gray-400);
 }
 
@@ -925,17 +870,39 @@ input:checked + .toggle-slider:before {
    Info Panel Component (stats display)
    =========================================== */
 
-.info-panel {
+/* ===========================================
+   Info Panel & Robots Preview (shared base)
+   =========================================== */
+
+.info-panel,
+.robots-preview {
   margin-top: 15px;
   padding: 15px;
 }
 
-.info-panel h4 {
-  color: var(--color-gray-700);
-  font-size: 0.9rem;
+#preview-robots {
+  margin-top: 8px;
+}
+
+.robots-preview {
+  overflow-x: auto;
+}
+
+.info-panel h4,
+.robots-preview h4 {
   margin-bottom: 10px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.info-panel h4 {
+  color: var(--color-gray-700);
+  font-size: var(--text-md);
+}
+
+.robots-preview h4 {
+  color: var(--muted-fg);
+  font-size: var(--text-sm);
 }
 
 .info-row {
@@ -951,7 +918,7 @@ input:checked + .toggle-slider:before {
 
 .info-label {
   color: var(--color-gray-500);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 .info-row span:last-child {
@@ -960,51 +927,38 @@ input:checked + .toggle-slider:before {
 }
 
 /* ===========================================
-   Disabled Button State (shared)
+   Responsive
    =========================================== */
 
-.control-group button:disabled {
-  background: var(--color-gray-400);
-  cursor: not-allowed;
-  opacity: 0.7;
-}
+@media (max-width: 768px) {
+  .container {
+    padding: 15px;
+  }
 
-/* ===========================================
-   Robots.txt Preview
-   =========================================== */
+  h1 {
+    font-size: 1.75rem;
+  }
 
-#preview-robots {
-  margin-top: 8px;
-  background: var(--color-gray-600);
-}
+  .config {
+    flex-direction: column;
+    align-items: stretch;
+  }
 
-#preview-robots:hover {
-  background: var(--color-gray-700);
-}
+  .config input {
+    width: 100%;
+  }
 
-.robots-preview {
-  margin-top: 15px;
-  padding: 15px;
-  overflow-x: auto;
-}
-.robots-preview h4 {
-  color: var(--muted-fg);
-  font-size: 0.85rem;
-  margin-bottom: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
- 
-thead,
-tbody,
-th,
-td {
-  border: var(--border-hairline);
-}
+  .stats-cards {
+    grid-template-columns: 1fr;
+  }
 
-/* Ensure header and smaller UI controls are also bordered */
-.maze-control {
-  border: var(--border-hairline);
+  .charts-row {
+    grid-template-columns: 1fr;
+  }
+
+  .controls-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ===========================================
@@ -1036,11 +990,6 @@ td {
     --color-warning: #d4d4d8;
     --color-warning-bg: #232326;
     --color-toggle-active: #fafafa;
-  }
-
-  /* When OS prefers dark theme, invert button-contrast foreground so
-     buttons that were dark become light-background with dark text */
-  :root {
     --btn-contrast-fg: var(--color-black);
   }
 
@@ -1049,7 +998,7 @@ td {
     color: var(--color-gray-800);
   }
 
-  .chart-container, .maze-section, .maze-crawlers, .maze-controls, .maze-stat {
+  .chart-container, .maze-section, .maze-crawlers, .maze-stat {
     background: var(--color-gray-200);
     color: var(--color-gray-800);
   }
@@ -1063,11 +1012,6 @@ td {
     background: var(--color-gray-200);
     color: var(--color-gray-800);
     border-color: var(--color-gray-400);
-  }
-
-  .test-mode-banner {
-    background: var(--color-warning-bg);
-    color: var(--color-warning);
   }
 
   /* Improve admin panel separation in dark mode: slightly darker panels
@@ -1084,21 +1028,20 @@ td {
     color: var(--color-gray-900);
   }
 
-  /* Buttons that are dark in light-mode become light in dark-mode; force dark text on them here */
-  #ban-btn,
-  #unban-btn,
-  #save-durations-btn,
-  #save-maze-config,
-  #save-cdp-config,
-  #save-robots-config,
-  #preview-robots {
-    /* In dark mode these buttons may have light backgrounds; use a dark foreground for contrast */
-    color: var(--color-white);
-  }
-
-  .control-group button {
+  .control-group .btn {
     background: var(--color-gray-400);
     color: var(--color-gray-900);
     border-color: var(--color-gray-300);
+  }
+
+  /* Dark/subtle buttons retain their distinct bg & contrast-fg inside control groups */
+  .control-group .btn-dark {
+    background: var(--color-accent);
+    color: var(--color-white);
+  }
+
+  .control-group .btn-subtle {
+    background: var(--color-gray-600);
+    color: var(--color-white);
   }
 }
