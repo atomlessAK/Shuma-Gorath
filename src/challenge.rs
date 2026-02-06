@@ -122,12 +122,10 @@ pub(crate) fn build_puzzle(seed: &ChallengeSeed) -> ChallengePuzzle {
     let mut rng = StdRng::seed_from_u64(seed.seed);
     let mut training_pairs = Vec::new();
     for _ in 0..seed.training_count {
-        let input = generate_grid(&mut rng, size, active);
-        let output = apply_transforms(&input, size, &seed.transforms);
+        let (input, output) = generate_pair(&mut rng, size, active, &seed.transforms);
         training_pairs.push((input, output));
     }
-    let test_input = generate_grid(&mut rng, size, active);
-    let test_output = apply_transforms(&test_input, size, &seed.transforms);
+    let (test_input, test_output) = generate_pair(&mut rng, size, active, &seed.transforms);
     ChallengePuzzle {
         training_pairs,
         test_input,
@@ -136,7 +134,7 @@ pub(crate) fn build_puzzle(seed: &ChallengeSeed) -> ChallengePuzzle {
     }
 }
 
-fn generate_grid(rng: &mut StdRng, size: usize, active: usize) -> Vec<u8> {
+fn generate_grid(rng: &mut impl Rng, size: usize, active: usize) -> Vec<u8> {
     let mut grid = vec![0u8; size * size];
     let mut indices: Vec<usize> = (0..grid.len()).collect();
     indices.shuffle(rng);
@@ -146,7 +144,14 @@ fn generate_grid(rng: &mut StdRng, size: usize, active: usize) -> Vec<u8> {
     grid
 }
 
-fn random_transforms(rng: &mut impl Rng, count: usize) -> Vec<Transform> {
+fn is_inverse_rotation_pair(a: Transform, b: Transform) -> bool {
+    matches!(
+        (a, b),
+        (Transform::RotateCw90, Transform::RotateCcw90) | (Transform::RotateCcw90, Transform::RotateCw90)
+    )
+}
+
+pub(crate) fn select_transform_pair(rng: &mut impl Rng) -> Vec<Transform> {
     let mut options = vec![
         Transform::RotateCw90,
         Transform::RotateCcw90,
@@ -161,8 +166,14 @@ fn random_transforms(rng: &mut impl Rng, count: usize) -> Vec<Transform> {
         Transform::DropLeft,
         Transform::DropRight,
     ];
-    options.shuffle(rng);
-    options.into_iter().take(count).collect()
+    loop {
+        options.shuffle(rng);
+        let a = options[0];
+        let b = options[1];
+        if !is_inverse_rotation_pair(a, b) {
+            return vec![a, b];
+        }
+    }
 }
 
 fn apply_transforms(grid: &[u8], size: usize, transforms: &[Transform]) -> Vec<u8> {
@@ -171,6 +182,27 @@ fn apply_transforms(grid: &[u8], size: usize, transforms: &[Transform]) -> Vec<u
         current = apply_transform(&current, size, *t);
     }
     current
+}
+
+pub(crate) fn generate_pair(
+    rng: &mut impl Rng,
+    size: usize,
+    active: usize,
+    transforms: &[Transform],
+) -> (Vec<u8>, Vec<u8>) {
+    const MAX_PAIR_ATTEMPTS: usize = 64;
+    let mut last_input = Vec::new();
+    let mut last_output = Vec::new();
+    for _ in 0..MAX_PAIR_ATTEMPTS {
+        let input = generate_grid(rng, size, active);
+        let output = apply_transforms(&input, size, transforms);
+        if output != input {
+            return (input, output);
+        }
+        last_input = input;
+        last_output = output;
+    }
+    (last_input, last_output)
 }
 
 pub(crate) fn apply_transform(grid: &[u8], size: usize, transform: Transform) -> Vec<u8> {
@@ -317,7 +349,7 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
     let mut rng = rand::rng();
     let grid_size = 4u8;
     let active_cells = rng.random_range(3..=6);
-    let transforms = random_transforms(&mut rng, 2);
+    let transforms = select_transform_pair(&mut rng);
     let seed = ChallengeSeed {
         seed_id: format!("{:016x}", rng.random::<u64>()),
         issued_at: now,
@@ -368,7 +400,9 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             .pair-grids {{ display: flex; gap: 24px; align-items: flex-start; }}
             .grid-label {{ font-size: 12px; color: #6b7280; margin-bottom: 6px; }}
             .test-block {{ margin-top: 20px; padding-top: 16px; border-top: 1px solid #eee; }}
-            .submit-row {{ margin-top: 16px; }}
+            .test-grids {{ display: inline-grid; grid-template-columns: auto auto; gap: 24px; align-items: start; }}
+            .submit-row {{ grid-column: 1 / -1; margin-top: 12px; }}
+            .submit-row button {{ width: 100%; }}
             button {{ padding: 8px 14px; font-size: 14px; }}
           </style>
         </head>
@@ -379,7 +413,7 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             {training_html}
             <div class=\"test-block\">
               <div class=\"pair-title\">Your turn</div>
-              <div class=\"pair-grids\">
+              <div class=\"test-grids\">
                 <div>
                   <div class=\"grid-label\">Input</div>
                   {test_input}
@@ -388,12 +422,12 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
                   <div class=\"grid-label\">Output</div>
                   {test_output}
                 </div>
+                <form method=\"POST\" action=\"/challenge\" class=\"submit-row\">
+                  <input type=\"hidden\" name=\"seed\" value=\"{seed_token}\" />
+                  <input type=\"hidden\" name=\"output\" id=\"challenge-output\" value=\"{empty_bitstring}\" />
+                  <button type=\"submit\">Submit</button>
+                </form>
               </div>
-              <form method=\"POST\" action=\"/challenge\" class=\"submit-row\">
-                <input type=\"hidden\" name=\"seed\" value=\"{seed_token}\" />
-                <input type=\"hidden\" name=\"output\" id=\"challenge-output\" value=\"{empty_bitstring}\" />
-                <button type=\"submit\">Submit</button>
-              </form>
             </div>
           </div>
           <script>

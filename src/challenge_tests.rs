@@ -6,13 +6,17 @@ mod tests {
     use super::super::challenge::{
         apply_transform,
         build_puzzle,
+        generate_pair,
         handle_challenge_submit,
         make_seed_token,
         parse_submission,
+        select_transform_pair,
         serve_challenge_page,
         ChallengeSeed,
         Transform,
     };
+    use rand::rngs::StdRng;
+    use rand::SeedableRng;
     use spin_sdk::http::{Method, Request};
     use std::cell::RefCell;
     use std::collections::HashMap;
@@ -60,6 +64,29 @@ mod tests {
         let a = build_puzzle(&seed);
         let b = build_puzzle(&seed);
         assert_eq!(a.test_output, b.test_output);
+    }
+
+    #[test]
+    fn transform_pair_avoids_inverse_rotation() {
+        let mut rng = StdRng::seed_from_u64(123);
+        for _ in 0..50 {
+            let pair = select_transform_pair(&mut rng);
+            let a = pair[0];
+            let b = pair[1];
+            let inverse = matches!(
+                (a, b),
+                (Transform::RotateCw90, Transform::RotateCcw90) | (Transform::RotateCcw90, Transform::RotateCw90)
+            );
+            assert!(!inverse);
+        }
+    }
+
+    #[test]
+    fn generate_pair_avoids_identity_output() {
+        let mut rng = StdRng::seed_from_u64(999);
+        let transforms = vec![Transform::MirrorHorizontal, Transform::ShiftLeft];
+        let (input, output) = generate_pair(&mut rng, 4, 4, &transforms);
+        assert_ne!(input, output);
     }
 
     #[test]
