@@ -6,13 +6,42 @@ mod tests {
     use super::super::challenge::{
         apply_transform,
         build_puzzle,
+        handle_challenge_submit,
+        make_seed_token,
         parse_submission,
+        serve_challenge_page,
         ChallengeSeed,
         Transform,
     };
+    use spin_sdk::http::{Method, Request};
+    use std::cell::RefCell;
+    use std::collections::HashMap;
 
     fn grid_4x4() -> Vec<u8> {
         (1u8..=16u8).collect()
+    }
+
+    fn grid_to_bitstring(grid: &[u8]) -> String {
+        grid.iter().map(|v| if *v > 0 { '1' } else { '0' }).collect()
+    }
+
+    #[derive(Default)]
+    struct TestStore {
+        map: RefCell<HashMap<String, Vec<u8>>>,
+    }
+
+    impl super::super::challenge::KeyValueStore for TestStore {
+        fn get(&self, key: &str) -> Result<Option<Vec<u8>>, ()> {
+            Ok(self.map.borrow().get(key).cloned())
+        }
+        fn set(&self, key: &str, value: &[u8]) -> Result<(), ()> {
+            self.map.borrow_mut().insert(key.to_string(), value.to_vec());
+            Ok(())
+        }
+        fn delete(&self, key: &str) -> Result<(), ()> {
+            self.map.borrow_mut().remove(key);
+            Ok(())
+        }
     }
 
     #[test]
@@ -102,5 +131,77 @@ mod tests {
     fn parse_submission_rejects_invalid_length() {
         let err = parse_submission("10", 4).unwrap_err();
         assert_eq!(err, "invalid length");
+    }
+
+    #[test]
+    fn serve_challenge_page_requires_test_mode() {
+        let req = Request::builder()
+            .method(Method::Get)
+            .uri("/challenge")
+            .body(Vec::new())
+            .build();
+        let resp = serve_challenge_page(&req, false);
+        assert_eq!(*resp.status(), 404u16);
+        let resp_ok = serve_challenge_page(&req, true);
+        assert_eq!(*resp_ok.status(), 200u16);
+    }
+
+    #[test]
+    fn handle_challenge_submit_accepts_correct_solution() {
+        let store = TestStore::default();
+        let now = crate::admin::now_ts();
+        let seed = ChallengeSeed {
+            seed_id: "seed-2".to_string(),
+            issued_at: now,
+            expires_at: now + 300,
+            ip_bucket: crate::ip::bucket_ip("unknown"),
+            grid_size: 4,
+            active_cells: 4,
+            transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
+            training_count: 2,
+            seed: 9999,
+        };
+        let puzzle = build_puzzle(&seed);
+        let output = grid_to_bitstring(&puzzle.test_output);
+        let seed_token = make_seed_token(&seed);
+        let body = format!("seed={}&output={}", seed_token, output);
+        let req = Request::builder()
+            .method(Method::Post)
+            .uri("/challenge")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(body.as_bytes().to_vec())
+            .build();
+        let resp = handle_challenge_submit(&store, &req);
+        assert_eq!(*resp.status(), 200u16);
+    }
+
+    #[test]
+    fn handle_challenge_submit_rejects_incorrect_solution() {
+        let store = TestStore::default();
+        let now = crate::admin::now_ts();
+        let seed = ChallengeSeed {
+            seed_id: "seed-3".to_string(),
+            issued_at: now,
+            expires_at: now + 300,
+            ip_bucket: crate::ip::bucket_ip("unknown"),
+            grid_size: 4,
+            active_cells: 4,
+            transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
+            training_count: 2,
+            seed: 4242,
+        };
+        let puzzle = build_puzzle(&seed);
+        let mut output = grid_to_bitstring(&puzzle.test_output);
+        output.replace_range(0..1, if &output[0..1] == "1" { "0" } else { "1" });
+        let seed_token = make_seed_token(&seed);
+        let body = format!("seed={}&output={}", seed_token, output);
+        let req = Request::builder()
+            .method(Method::Post)
+            .uri("/challenge")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(body.as_bytes().to_vec())
+            .build();
+        let resp = handle_challenge_submit(&store, &req);
+        assert_eq!(*resp.status(), 403u16);
     }
 }

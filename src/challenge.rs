@@ -25,14 +25,11 @@ impl KeyValueStore for Store {
 use base64::{engine::general_purpose, Engine as _};
 use hmac::{Hmac, Mac};
 use percent_encoding;
-use rand::prelude::*;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
-
-const CHALLENGE_PREFIX: &str = "challenge:";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ChallengeSeed {
@@ -92,8 +89,7 @@ fn verify_signature(payload: &str, sig: &[u8]) -> bool {
     mac.verify_slice(sig).is_ok()
 }
 
-#[allow(dead_code)]
-fn make_seed_token(payload: &ChallengeSeed) -> String {
+pub(crate) fn make_seed_token(payload: &ChallengeSeed) -> String {
     let payload_json = serde_json::to_string(payload).unwrap();
     let sig = sign_payload(&payload_json);
     let payload_b64 = general_purpose::STANDARD.encode(payload_json.as_bytes());
@@ -101,8 +97,7 @@ fn make_seed_token(payload: &ChallengeSeed) -> String {
     format!("{}.{}", payload_b64, sig_b64)
 }
 
-#[allow(dead_code)]
-fn parse_seed_token(token: &str) -> Result<ChallengeSeed, &'static str> {
+pub(crate) fn parse_seed_token(token: &str) -> Result<ChallengeSeed, &'static str> {
     let mut parts = token.splitn(2, '.');
     let payload_b64 = parts.next().ok_or("missing payload")?;
     let sig_b64 = parts.next().ok_or("missing signature")?;
@@ -149,6 +144,25 @@ fn generate_grid(rng: &mut StdRng, size: usize, active: usize) -> Vec<u8> {
         grid[idx] = 1;
     }
     grid
+}
+
+fn random_transforms(rng: &mut impl Rng, count: usize) -> Vec<Transform> {
+    let mut options = vec![
+        Transform::RotateCw90,
+        Transform::RotateCcw90,
+        Transform::MirrorHorizontal,
+        Transform::MirrorVertical,
+        Transform::ShiftUp,
+        Transform::ShiftDown,
+        Transform::ShiftLeft,
+        Transform::ShiftRight,
+        Transform::DropTop,
+        Transform::DropBottom,
+        Transform::DropLeft,
+        Transform::DropRight,
+    ];
+    options.shuffle(rng);
+    options.into_iter().take(count).collect()
 }
 
 fn apply_transforms(grid: &[u8], size: usize, transforms: &[Transform]) -> Vec<u8> {
@@ -267,86 +281,199 @@ pub(crate) fn parse_submission(input: &str, size: usize) -> Result<Vec<u8>, &'st
     Ok(out)
 }
 
+fn grid_to_bitstring(grid: &[u8]) -> String {
+    grid.iter().map(|v| if *v > 0 { '1' } else { '0' }).collect()
+}
+
+fn render_grid(grid: &[u8], size: usize, class_name: &str, clickable: bool) -> String {
+    let mut html = String::new();
+    html.push_str(&format!(
+        "<div class=\"grid {}\" style=\"grid-template-columns: repeat({}, 28px);\">",
+        class_name,
+        size
+    ));
+    for (idx, val) in grid.iter().enumerate() {
+        let mut classes = String::from("cell");
+        if *val > 0 {
+            classes.push_str(" active");
+        }
+        if clickable {
+            classes.push_str(" clickable");
+        }
+        html.push_str(&format!("<div class=\"{}\" data-idx=\"{}\"></div>", classes, idx));
+    }
+    html.push_str("</div>");
+    html
+}
+
 fn idx(row: usize, col: usize, size: usize) -> usize {
     row * size + col
 }
 
-/// Generates a random math challenge (add, sub, mul) and stores the answer and question type in KV for the IP.
-/// NOTE: This function is currently unused - banned users now see block page directly.
-/// Kept for potential future use if challenge-on-ban is re-enabled.
-#[allow(dead_code)]
-pub fn serve_challenge<S: KeyValueStore>(store: &S, ip: &str) -> Response {
+pub(crate) fn serve_challenge_page(req: &Request, test_mode: bool) -> Response {
+    if !test_mode {
+        return Response::new(404, "Not Found");
+    }
+
+    let ip = crate::extract_client_ip(req);
+    let ip_bucket = crate::ip::bucket_ip(&ip);
+    let now = crate::admin::now_ts();
     let mut rng = rand::rng();
-    let a: u32 = rng.random_range(10..=99);
-    let b: u32 = rng.random_range(10..=99);
-    let question_types = ["add", "sub", "mul"];
-    let qtype = *question_types.choose(&mut rng).unwrap_or(&"add");
-    let (question, answer) = match qtype {
-        "add" => (format!("{a} + {b}"), a + b),
-        "sub" => {
-            let (x, y) = if a > b { (a, b) } else { (b, a) };
-            (format!("{x} - {y}"), x - y)
-        },
-        "mul" => {
-            let a = rng.random_range(2..=12);
-            let b = rng.random_range(2..=12);
-            (format!("{a} × {b}"), a * b)
-        },
-        _ => (format!("{a} + {b}"), a + b),
+    let grid_size = 4u8;
+    let active_cells = rng.random_range(3..=6);
+    let transforms = random_transforms(&mut rng, 2);
+    let seed = ChallengeSeed {
+        seed_id: format!("{:016x}", rng.random::<u64>()),
+        issued_at: now,
+        expires_at: now + 300,
+        ip_bucket,
+        grid_size,
+        active_cells,
+        transforms,
+        training_count: 2,
+        seed: rng.random::<u64>(),
     };
-    let key = format!("{}{}", CHALLENGE_PREFIX, ip);
-    let value = format!("{}:{}", answer, qtype);
-    let _ = store.set(&key, value.as_bytes());
+    let puzzle = build_puzzle(&seed);
+    let seed_token = make_seed_token(&seed);
+    let output_size = grid_size as usize * grid_size as usize;
+    let empty_output = vec![0u8; output_size];
+
+    let training_html: String = puzzle
+        .training_pairs
+        .iter()
+        .enumerate()
+        .map(|(idx, (input, output))| {
+            format!(
+                "<div class=\"pair\"><div class=\"pair-title\">Example {}</div>{}{}{}</div>",
+                idx + 1,
+                "<div class=\"pair-grids\">",
+                format!(
+                    "<div><div class=\"grid-label\">Input</div>{}</div><div><div class=\"grid-label\">Output</div>{}</div>",
+                    render_grid(input, puzzle.grid_size, "grid-static", false),
+                    render_grid(output, puzzle.grid_size, "grid-static", false),
+                ),
+                "</div>"
+            )
+        })
+        .collect();
+
     let html = format!(r#"
-        <html><head><style>
-        body {{ font-family: sans-serif; background: #f9f9f9; margin: 2em; }}
-        .challenge-container {{ background: #fff; padding: 2em; border-radius: 8px; box-shadow: 0 2px 8px #ccc; max-width: 400px; margin: auto; }}
-        label {{ font-size: 1.2em; }}
-        input[type=number] {{ font-size: 1.2em; width: 80px; }}
-        button {{ font-size: 1em; padding: 0.5em 1em; }}
-        </style></head><body>
-        <div class="challenge-container">
-        <h2>Are you human?</h2>
-        <form method='POST' action='/challenge'>
-            <label>Solve: {question} = </label>
-            <input name='answer' type='number' required autofocus />
-            <input type='hidden' name='ip' value='{ip}' />
-            <button type='submit'>Submit</button>
-        </form>
-        <p style="color: #888; font-size: 0.9em;">Prove you are not a bot to regain access.</p>
-        </div>
-        </body></html>
-    "#);
+        <html>
+        <head>
+          <style>
+            body {{ font-family: sans-serif; background: #f7f7f7; margin: 24px; color: #111; }}
+            .challenge {{ max-width: 900px; margin: 0 auto; background: #fff; padding: 24px; border: 1px solid #e5e7eb; }}
+            .grid {{ display: grid; grid-template-columns: repeat(4, 28px); gap: 4px; }}
+            .cell {{ width: 28px; height: 28px; border: 1px solid #ddd; background: #fff; }}
+            .cell.active {{ background: #111; }}
+            .cell.clickable {{ cursor: pointer; }}
+            .pair {{ margin-bottom: 16px; }}
+            .pair-title {{ font-weight: 600; margin-bottom: 8px; }}
+            .pair-grids {{ display: flex; gap: 24px; align-items: flex-start; }}
+            .grid-label {{ font-size: 12px; color: #6b7280; margin-bottom: 6px; }}
+            .test-block {{ margin-top: 20px; padding-top: 16px; border-top: 1px solid #eee; }}
+            .submit-row {{ margin-top: 16px; }}
+            button {{ padding: 8px 14px; font-size: 14px; }}
+          </style>
+        </head>
+        <body>
+          <div class=\"challenge\">
+            <h2>Human Verification Challenge</h2>
+            <p>Infer the rule from the examples, then complete the output grid.</p>
+            {training_html}
+            <div class=\"test-block\">
+              <div class=\"pair-title\">Your turn</div>
+              <div class=\"pair-grids\">
+                <div>
+                  <div class=\"grid-label\">Input</div>
+                  {test_input}
+                </div>
+                <div>
+                  <div class=\"grid-label\">Output</div>
+                  {test_output}
+                </div>
+              </div>
+              <form method=\"POST\" action=\"/challenge\" class=\"submit-row\">
+                <input type=\"hidden\" name=\"seed\" value=\"{seed_token}\" />
+                <input type=\"hidden\" name=\"output\" id=\"challenge-output\" value=\"{empty_bitstring}\" />
+                <button type=\"submit\">Submit</button>
+              </form>
+            </div>
+          </div>
+          <script>
+            const size = {grid_size};
+            const output = Array(size * size).fill(0);
+            const outputField = document.getElementById('challenge-output');
+            function updateOutput() {{
+              outputField.value = output.join('');
+            }}
+            updateOutput();
+            document.querySelectorAll('.grid-output .cell').forEach(cell => {{
+              cell.addEventListener('click', () => {{
+                const idx = parseInt(cell.dataset.idx, 10);
+                output[idx] = output[idx] ? 0 : 1;
+                cell.classList.toggle('active');
+                updateOutput();
+              }});
+            }});
+          </script>
+        </body>
+        </html>
+    "#,
+    training_html = training_html,
+    test_input = render_grid(&puzzle.test_input, puzzle.grid_size, "grid-static", false),
+    test_output = render_grid(&empty_output, puzzle.grid_size, "grid-output", true),
+    seed_token = seed_token,
+    grid_size = grid_size,
+    empty_bitstring = grid_to_bitstring(&empty_output),
+    );
     Response::new(200, html)
 }
 
-/// Validates the challenge answer. If correct, unbans the IP and returns a success page.
 pub fn handle_challenge_submit<S: KeyValueStore>(store: &S, req: &Request) -> Response {
     let form = String::from_utf8_lossy(req.body()).to_string();
-    let answer = get_form_field(&form, "answer");
-    let ip = get_form_field(&form, "ip");
-    if let (Some(answer), Some(ip)) = (answer, ip) {
-        let key = format!("{}{}", CHALLENGE_PREFIX, ip);
-        if let Ok(Some(val)) = store.get(&key) {
-            if let Ok(stored) = String::from_utf8(val) {
-                let mut parts = stored.splitn(2, ':');
-                if let (Some(expected), _) = (parts.next(), parts.next()) {
-                    // Compare as integers for robustness
-                    if let (Ok(expected_num), Ok(answer_num)) = (expected.trim().parse::<i64>(), answer.trim().parse::<i64>()) {
-                        if answer_num == expected_num {
-                            // Unban the IP
-                            let ban_key = format!("ban:default:{}", ip);
-                            let _ = store.delete(&ban_key);
-                            let _ = store.delete(&key);
-                            return Response::new(200, "<html><body><h2>Thank you! You are unbanned. Please reload the page.</h2></body></html>");
-                        }
-                    }
+    let seed_token = match get_form_field(&form, "seed") {
+        Some(v) => v,
+        None => return Response::new(400, "Missing seed"),
+    };
+    let output_raw = match get_form_field(&form, "output") {
+        Some(v) => v,
+        None => return Response::new(400, "Missing output"),
+    };
+    let seed = match parse_seed_token(&seed_token) {
+        Ok(s) => s,
+        Err(_) => return Response::new(400, "Invalid seed"),
+    };
+    let now = crate::admin::now_ts();
+    if now > seed.expires_at {
+        return Response::new(400, "Seed expired");
+    }
+    let ip = crate::extract_client_ip(req);
+    let ip_bucket = crate::ip::bucket_ip(&ip);
+    if seed.ip_bucket != ip_bucket {
+        return Response::new(400, "IP bucket mismatch");
+    }
+    let used_key = format!("challenge_used:{}", seed.seed_id);
+    if let Ok(Some(val)) = store.get(&used_key) {
+        if let Ok(stored) = String::from_utf8(val) {
+            if let Ok(exp) = stored.parse::<u64>() {
+                if now <= exp {
+                    return Response::new(400, "Seed already used");
                 }
             }
         }
+        let _ = store.delete(&used_key);
     }
-    let html = "<html><body><h2 style='color:red;'>Incorrect answer. Please try again.</h2><a href='/challenge'>Back to challenge</a></body></html>";
-    Response::new(403, html)
+    let output = match parse_submission(&output_raw, seed.grid_size as usize) {
+        Ok(v) => v,
+        Err(e) => return Response::new(400, e),
+    };
+    let puzzle = build_puzzle(&seed);
+    if output == puzzle.test_output {
+        let _ = store.set(&used_key, seed.expires_at.to_string().as_bytes());
+        return Response::new(200, "<html><body><h2>Thank you! Challenge complete.</h2></body></html>");
+    }
+    Response::new(403, "<html><body><h2 style='color:red;'>Incorrect. Try again.</h2><a href='/challenge'>Back to challenge</a></body></html>")
 }
 
 fn get_form_field(form: &str, name: &str) -> Option<String> {

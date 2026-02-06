@@ -56,7 +56,7 @@ fn forwarded_ip_trusted(req: &Request) -> bool {
 }
 
 /// Extract the best available client IP from the request.
-fn extract_client_ip(req: &Request) -> String {
+pub(crate) fn extract_client_ip(req: &Request) -> String {
     // Prefer X-Forwarded-For (may be a comma-separated list) when trusted
     if forwarded_ip_trusted(req) {
         if let Some(h) = req.header("x-forwarded-for") {
@@ -132,6 +132,13 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
     if path == "/challenge" && *req.method() == spin_sdk::http::Method::Post {
         if let Ok(store) = Store::open_default() {
             return challenge::handle_challenge_submit(&store, req);
+        }
+        return Response::new(500, "Key-value store error");
+    }
+    if path == "/challenge" && *req.method() == spin_sdk::http::Method::Get {
+        if let Ok(store) = Store::open_default() {
+            let cfg = config::Config::load(&store, "default");
+            return challenge::serve_challenge_page(req, cfg.test_mode);
         }
         return Response::new(500, "Key-value store error");
     }
