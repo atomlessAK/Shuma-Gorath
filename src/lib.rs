@@ -2,6 +2,8 @@ mod block_page;
 #[cfg(test)]
 mod challenge_tests;
 #[cfg(test)]
+mod config_tests;
+#[cfg(test)]
 mod ban_tests;
 #[cfg(test)]
 mod whitelist_tests;

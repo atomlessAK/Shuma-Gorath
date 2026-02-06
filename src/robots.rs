@@ -206,6 +206,7 @@ mod tests {
             cdp_auto_ban: false,
             pow_difficulty: crate::config::POW_DIFFICULTY_MIN,
             pow_ttl_seconds: crate::config::POW_TTL_MIN,
+            challenge_risk_threshold: 3,
         }
     }
 

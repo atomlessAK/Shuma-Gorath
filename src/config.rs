@@ -91,6 +91,8 @@ pub struct Config {
     pub pow_difficulty: u8,             // PoW leading-zero bits
     #[serde(default = "default_pow_ttl_seconds")]
     pub pow_ttl_seconds: u64,           // PoW seed expiry in seconds
+    #[serde(default = "default_challenge_threshold")]
+    pub challenge_risk_threshold: u8,   // Risk score threshold for serving challenges
 }
 
 fn default_true() -> bool {
@@ -105,11 +107,24 @@ pub const POW_DIFFICULTY_MIN: u8 = 12;
 pub const POW_DIFFICULTY_MAX: u8 = 20;
 pub const POW_TTL_MIN: u64 = 30;
 pub const POW_TTL_MAX: u64 = 300;
+const CHALLENGE_THRESHOLD_MIN: u8 = 1;
+const CHALLENGE_THRESHOLD_MAX: u8 = 10;
+const CHALLENGE_THRESHOLD_DEFAULT: u8 = 3;
 
 pub fn pow_config_mutable() -> bool {
     env::var("POW_CONFIG_MUTABLE")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
+}
+
+pub(crate) fn challenge_config_mutable_from_env(value: Option<&str>) -> bool {
+    value
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+pub fn challenge_config_mutable() -> bool {
+    challenge_config_mutable_from_env(env::var("CHALLENGE_CONFIG_MUTABLE").ok().as_deref())
 }
 
 fn clamp_pow_difficulty(value: u8) -> u8 {
@@ -118,6 +133,15 @@ fn clamp_pow_difficulty(value: u8) -> u8 {
 
 fn clamp_pow_ttl(value: u64) -> u64 {
     value.clamp(POW_TTL_MIN, POW_TTL_MAX)
+}
+
+fn clamp_challenge_threshold(value: u8) -> u8 {
+    value.clamp(CHALLENGE_THRESHOLD_MIN, CHALLENGE_THRESHOLD_MAX)
+}
+
+pub(crate) fn parse_challenge_threshold(value: Option<&str>) -> u8 {
+    let parsed = value.and_then(|v| v.parse::<u8>().ok()).unwrap_or(CHALLENGE_THRESHOLD_DEFAULT);
+    clamp_challenge_threshold(parsed)
 }
 
 fn default_pow_difficulty() -> u8 {
@@ -134,6 +158,10 @@ fn default_pow_ttl_seconds() -> u64 {
         .and_then(|val| val.parse::<u64>().ok())
         .unwrap_or(90);
     clamp_pow_ttl(v)
+}
+
+fn default_challenge_threshold() -> u8 {
+    parse_challenge_threshold(env::var("CHALLENGE_RISK_THRESHOLD").ok().as_deref())
 }
 
 fn default_maze_auto_ban() -> bool {
@@ -164,6 +192,11 @@ impl Config {
                 }
                 cfg.pow_difficulty = clamp_pow_difficulty(cfg.pow_difficulty);
                 cfg.pow_ttl_seconds = clamp_pow_ttl(cfg.pow_ttl_seconds);
+                if !challenge_config_mutable() {
+                    cfg.challenge_risk_threshold = default_challenge_threshold();
+                } else {
+                    cfg.challenge_risk_threshold = clamp_challenge_threshold(cfg.challenge_risk_threshold);
+                }
                 return cfg;
             }
         }
@@ -195,6 +228,7 @@ impl Config {
             cdp_detection_threshold: 0.8,
             pow_difficulty: default_pow_difficulty(),
             pow_ttl_seconds: default_pow_ttl_seconds(),
+            challenge_risk_threshold: default_challenge_threshold(),
         }
     }
     
