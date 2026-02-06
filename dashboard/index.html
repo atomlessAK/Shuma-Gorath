@@ -17,9 +17,9 @@
         <img src="assets/shuma-gorath.png" alt="Shuma-Gorath" class="shuma-gorath-img">
       </div>
       <h1>Shuma-Gorath</h1>
-      <p class="subtitle">Many-Angled Bot Defence</p>
+      <p class="subtitle text-muted">Many-Angled Bot Defence</p>
       <div id="test-mode-banner" class="test-mode-banner hidden">TEST MODE ACTIVE - Logging only, no blocking</div>
-      <span id="last-updated"></span>
+      <span id="last-updated" class="text-muted"></span>
     </header>
 
     <div class="config panel-soft panel-border pad-md">
@@ -33,19 +33,19 @@
     <!-- Stats Summary Cards -->
     <div class="stats-cards">
       <div class="card panel panel-border pad-lg">
-        <h3>Total Bans</h3>
+        <h3 class="caps-label">Total Bans</h3>
         <div class="stat-value" id="total-bans">-</div>
       </div>
       <div class="card panel panel-border pad-lg">
-        <h3>Active Bans</h3>
+        <h3 class="caps-label">Active Bans</h3>
         <div class="stat-value" id="active-bans">-</div>
       </div>
       <div class="card panel panel-border pad-lg">
-        <h3>Events (24h)</h3>
+        <h3 class="caps-label">Events (24h)</h3>
         <div class="stat-value" id="total-events">-</div>
       </div>
       <div class="card panel panel-border pad-lg">
-        <h3>Unique IPs</h3>
+        <h3 class="caps-label">Unique IPs</h3>
         <div class="stat-value" id="unique-ips">-</div>
       </div>
     </div>
@@ -84,11 +84,11 @@
       <table id="bans-table" class="panel panel-border">
         <thead>
           <tr>
-            <th>IP Address</th>
-            <th>Reason</th>
-            <th>Banned At</th>
-            <th>Expires</th>
-            <th>Actions</th>
+            <th class="caps-label">IP Address</th>
+            <th class="caps-label">Reason</th>
+            <th class="caps-label">Banned At</th>
+            <th class="caps-label">Expires</th>
+            <th class="caps-label">Actions</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -98,18 +98,18 @@
     <!-- Maze Activity Section -->
     <div class="section maze-section panel panel-border pad-md">
       <h2>Link Maze Honeypot</h2>
-      <p class="section-desc">Crawlers trapped in infinite fake pages</p>
+      <p class="section-desc text-muted">Crawlers trapped in infinite fake pages</p>
       <div class="maze-stats">
         <div class="maze-stat panel panel-border pad-md">
-          <span class="maze-label">Total Hits</span>
+          <span class="maze-label caps-label">Total Hits</span>
           <span class="maze-value" id="maze-total-hits">-</span>
         </div>
         <div class="maze-stat panel panel-border pad-md">
-          <span class="maze-label">Unique Crawlers</span>
+          <span class="maze-label caps-label">Unique Crawlers</span>
           <span class="maze-value" id="maze-unique-crawlers">-</span>
         </div>
         <div class="maze-stat panel panel-border pad-md">
-          <span class="maze-label">Auto-Banned</span>
+          <span class="maze-label caps-label">Auto-Banned</span>
           <span class="maze-value" id="maze-auto-bans">-</span>
         </div>
       </div>
@@ -127,18 +127,18 @@
       <div class="controls-grid">
         <div class="control-group panel-soft pad-md">
           <h3>Fail Mode Policy</h3>
-          <p class="control-desc">
+          <p class="control-desc text-muted">
             What happens when the data store goes down? Set at deploy time
             via the SHUMA_FAIL_MODE environment variable.
           </p>
           <div class="info-panel panel-muted pad-sm">
             <h4>Current Policy</h4>
             <div class="info-row">
-              <span class="info-label">Mode:</span>
+              <span class="info-label text-muted">Mode:</span>
               <span id="fail-mode-value">--</span>
             </div>
           </div>
-          <p class="control-desc control-desc-spaced">
+          <p class="control-desc control-desc-spaced text-muted">
             <strong>Open</strong> (default) — if the KV store is unreachable,
             requests are allowed through and bot checks are skipped. Your site
             stays up but is unprotected until the store recovers.<br><br>
@@ -150,7 +150,7 @@
         </div>
         <div class="control-group panel-soft pad-md">
           <h3>Test Mode</h3>
-          <p class="control-desc">When enabled, logs actions without blocking users</p>
+          <p class="control-desc text-muted">When enabled, logs actions without blocking users</p>
           <label class="toggle-switch" for="test-mode-toggle">
             <input type="checkbox" id="test-mode-toggle" aria-label="Enable Test Mode">
             <span class="toggle-slider"></span>
@@ -159,7 +159,7 @@
         </div>
         <div class="control-group panel-soft pad-md">
           <h3>Ban Durations</h3>
-          <p class="control-desc">Configure ban duration per offense type (seconds)</p>
+          <p class="control-desc text-muted">Configure ban duration per offense type (seconds)</p>
           <div class="duration-grid">
             <label for="dur-honeypot">Honeypot:</label> <input id="dur-honeypot" class="input-field" type="number" value="86400" />
             <label for="dur-rate-limit">Rate Limit:</label> <input id="dur-rate-limit" class="input-field" type="number" value="3600" />
@@ -182,7 +182,7 @@
         </div>
         <div class="control-group panel-soft pad-md">
           <h3>Link Maze</h3>
-          <p class="control-desc">Honeypot trap for crawlers</p>
+          <p class="control-desc text-muted">Honeypot trap for crawlers</p>
           <div class="admin-controls">
             <div class="toggle-row">
               <label class="control-label" for="maze-enabled-toggle">Maze Enabled</label>
@@ -201,14 +201,14 @@
             <div class="input-row">
               <label class="control-label" for="maze-threshold">Ban Threshold</label>
               <input class="input-field" type="number" id="maze-threshold" value="50" min="5" max="500" aria-label="Maze ban threshold in pages">
-              <span class="input-unit">pages</span>
+              <span class="input-unit text-muted">pages</span>
             </div>
           </div>
           <button id="save-maze-config" class="btn">Save Maze Settings</button>
         </div>
         <div class="control-group panel-soft pad-md">
           <h3>AI Training Opt-Out Policy</h3>
-          <p class="control-desc">Declare crawling policies via robots.txt (advisory, not enforcement)</p>
+          <p class="control-desc text-muted">Declare crawling policies via robots.txt (advisory, not enforcement)</p>
           <div class="admin-controls">
             <div class="toggle-row">
               <label class="control-label control-label--wide" for="robots-enabled-toggle">Serve robots.txt</label>
@@ -244,7 +244,7 @@
             <div class="input-row">
               <label class="control-label control-label--wide" for="robots-crawl-delay">Crawl Delay</label>
               <input class="input-field" type="number" id="robots-crawl-delay" value="2" min="0" max="60" aria-label="Robots crawl delay in seconds">
-              <span class="input-unit">seconds</span>
+              <span class="input-unit text-muted">seconds</span>
             </div>
           </div>
           <button id="save-robots-config" class="btn" disabled>Update Policy</button>
@@ -256,7 +256,7 @@
         </div>
         <div class="control-group panel-soft pad-md">
           <h3>CDP (Detect Browser Automation)</h3>
-          <p class="control-desc">Detects bots controlling browsers on behalf of human users (Puppeteer, Playwright,
+          <p class="control-desc text-muted">Detects bots controlling browsers on behalf of human users (Puppeteer, Playwright,
             Selenium, etc.)</p>
           <div class="admin-controls">
             <div class="toggle-row">
@@ -289,37 +289,37 @@
           <div id="cdp-stats" class="info-panel panel-muted pad-sm">
             <h4>Detection Stats</h4>
             <div class="info-row">
-              <span class="info-label">Total Detections:</span>
+              <span class="info-label text-muted">Total Detections:</span>
               <span id="cdp-total-detections">0</span>
             </div>
             <div class="info-row">
-              <span class="info-label">Auto-bans:</span>
+              <span class="info-label text-muted">Auto-bans:</span>
               <span id="cdp-auto-bans">0</span>
             </div>
           </div>
         </div>
         <div class="control-group panel-soft pad-md">
           <h3>Proof-of-Work (PoW)</h3>
-          <p class="control-desc">Lightweight PoW before JS verification (tunable when allowed)</p>
+          <p class="control-desc text-muted">Lightweight PoW before JS verification (tunable when allowed)</p>
           <div class="admin-controls">
             <div class="input-row">
               <label class="control-label" for="pow-difficulty">Difficulty</label>
               <input class="input-field" type="number" id="pow-difficulty" min="12" max="20" value="15" aria-label="PoW difficulty in leading zero bits">
-              <span class="input-unit">bits</span>
+              <span class="input-unit text-muted">bits</span>
             </div>
             <div class="input-row">
               <label class="control-label" for="pow-ttl">Seed TTL</label>
               <input class="input-field" type="number" id="pow-ttl" min="30" max="300" value="90" aria-label="PoW seed TTL in seconds">
-              <span class="input-unit">seconds</span>
+              <span class="input-unit text-muted">seconds</span>
             </div>
             <div class="info-panel panel-muted pad-sm">
               <h4>Status</h4>
               <div class="info-row">
-                <span class="info-label">PoW Status:</span>
+              <span class="info-label text-muted">PoW Status:</span>
                 <span id="pow-status">--</span>
               </div>
               <div class="info-row">
-                <span class="info-label">Config:</span>
+              <span class="info-label text-muted">Config:</span>
                 <span id="pow-config-status">--</span>
               </div>
             </div>
@@ -337,12 +337,12 @@
         <table id="events" class="panel panel-border">
           <thead>
             <tr>
-              <th>Time</th>
-              <th>Type</th>
-              <th>IP</th>
-              <th>Reason</th>
-              <th>Outcome</th>
-              <th>Admin</th>
+              <th class="caps-label">Time</th>
+              <th class="caps-label">Type</th>
+              <th class="caps-label">IP</th>
+              <th class="caps-label">Reason</th>
+              <th class="caps-label">Outcome</th>
+              <th class="caps-label">Admin</th>
             </tr>
           </thead>
           <tbody></tbody>

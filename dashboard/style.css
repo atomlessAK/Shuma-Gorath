@@ -46,16 +46,16 @@
   --btn-contrast-fg: var(--color-white);
 
   /* Typography scale */
-  --text-xs: 0.75rem;
-  --text-sm: 0.85rem;
-  --text-base: 0.875rem;
-  --text-md: 0.9rem;
-  --text-lg: 1rem;
-  --text-xl: 1.1rem;
-  --text-2xl: 1.25rem;
-  --text-3xl: 1.5rem;
-  --text-4xl: 2rem;
-  --text-5xl: 2.5rem;
+  --text-xs: 0.8571rem;
+  --text-sm: 0.9714rem;
+  --text-base: 1rem;
+  --text-md: 1.0286rem;
+  --text-lg: 1.1429rem;
+  --text-xl: 1.2571rem;
+  --text-2xl: 1.4286rem;
+  --text-3xl: 1.7143rem;
+  --text-4xl: 2.2857rem;
+  --text-5xl: 2.8571rem;
 }
 
 /* ===========================================
@@ -79,6 +79,16 @@
   border: var(--border-hairline);
 }
 
+.text-muted {
+  color: var(--muted-fg);
+}
+
+.caps-label {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
 .pad-sm {
   padding: 15px;
 }
@@ -95,7 +105,7 @@
   border: 1px solid var(--color-gray-300);
   background: var(--panel-bg);
   color: var(--panel-fg);
-  font-size: 14px;
+  font-size: var(--text-base);
 }
 
 .input-field--mono {
@@ -157,12 +167,18 @@
   box-sizing: border-box;
 }
 
+html {
+  font-size: 14px;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background: var(--page-bg);
   color: var(--page-fg);
   padding: 20px;
   min-height: 100vh;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 /* ===========================================
@@ -210,7 +226,6 @@ h1 {
 }
 
 .subtitle {
-  color: var(--muted-fg);
   font-size: var(--text-xl);
 }
 
@@ -237,8 +252,6 @@ h1 {
 
 #last-updated {
   margin-left: auto;
-  font-size: 14px;
-  color: var(--color-gray-500);
 }
 
 /* ===========================================
@@ -257,9 +270,6 @@ h1 {
 
 .card h3 {
   font-size: var(--text-base);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   opacity: 0.9;
   margin-bottom: 10px;
 }
@@ -369,11 +379,8 @@ td {
 th {
   padding: 12px 16px;
   text-align: left;
-  font-weight: 600;
   font-size: var(--text-base);
   color: var(--color-gray-700);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
 
 td {
@@ -488,7 +495,6 @@ code {
 
 .control-desc {
   font-size: var(--text-sm);
-  color: var(--color-gray-500);
   margin-bottom: 10px;
 }
 
@@ -667,7 +673,6 @@ input:checked + .toggle-slider:before {
 }
 
 .maze-section .section-desc {
-  color: var(--muted-fg);
   font-size: var(--text-md);
   margin-bottom: 20px;
 }
@@ -686,8 +691,6 @@ input:checked + .toggle-slider:before {
 .maze-label {
   display: block;
   font-size: var(--text-sm);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   opacity: 0.8;
   margin-bottom: 8px;
 }
@@ -801,7 +804,6 @@ input:checked + .toggle-slider:before {
 /* Unit labels (e.g., "pages", "seconds") */
 .input-unit {
   font-size: var(--text-sm);
-  color: var(--color-gray-500);
 }
 
 /* Hint text next to toggles */
@@ -921,7 +923,6 @@ input:checked + .toggle-slider:before {
 }
 
 .info-label {
-  color: var(--color-gray-500);
   font-size: var(--text-sm);
 }
 
@@ -940,7 +941,7 @@ input:checked + .toggle-slider:before {
   }
 
   h1 {
-    font-size: 1.75rem;
+    font-size: 2rem;
   }
 
   .config {
