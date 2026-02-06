@@ -128,8 +128,8 @@
         <div class="control-group panel-soft">
           <h3>Fail Mode Policy</h3>
           <p class="control-desc">
-            Controls behaviour when the KV store is unavailable. Set via the
-            SHUMA_FAIL_MODE environment variable (read-only at runtime).
+            What happens when the data store goes down? Set at deploy time
+            via the SHUMA_FAIL_MODE environment variable.
           </p>
           <div class="info-panel panel-muted">
             <h4>Current Policy</h4>
@@ -139,12 +139,13 @@
             </div>
           </div>
           <p class="control-desc" style="margin-top: 12px;">
-            <strong>Open</strong> (default) — requests pass through when KV
-            is unreachable; bot checks are bypassed. Prioritises availability
-            over protection.<br><br>
-            <strong>Closed</strong> — all requests are blocked with a 500
-            error when KV is unreachable. Prioritises security over
-            availability.
+            <strong>Open</strong> (default) — if the KV store is unreachable,
+            requests are allowed through and bot checks are skipped. Your site
+            stays up but is unprotected until the store recovers.<br><br>
+            <strong>Closed</strong> — if the KV store is unreachable, all
+            requests are blocked. Choose this when the risk of undetected bot
+            traffic (scraping, credential stuffing, bandwidth abuse) outweighs
+            the cost of a temporary outage.
           </p>
         </div>
         <div class="control-group panel-soft">

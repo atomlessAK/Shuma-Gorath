@@ -48,7 +48,7 @@ dev: ## Build and run with file watching (auto-rebuild on save)
 	@cargo build --target wasm32-wasip1 --release
 	@cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm
 	@./scripts/set_crate_type.sh rlib
-	@cargo watch -w src -i '*.wasm' -x './scripts/set_crate_type.sh cdylib && cargo build --target wasm32-wasip1 --release' -s 'pkill -f "spin up" 2>/dev/null; cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm && ./scripts/set_crate_type.sh rlib && spin up --env SHUMA_FAIL_MODE=closed $(SPIN_FORWARD_SECRET) --listen 127.0.0.1:3000'
+	@cargo watch -w src -i '*.wasm' -x './scripts/set_crate_type.sh cdylib && cargo build --target wasm32-wasip1 --release' -s 'pkill -f "spin up" 2>/dev/null; cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm && ./scripts/set_crate_type.sh rlib && spin up $(SPIN_FORWARD_SECRET) --listen 127.0.0.1:3000'
 
 dev-closed: ## Build and run with file watching and SHUMA_FAIL_MODE=closed (fail-closed)
 	@echo "$(CYAN)🚨 Starting development server with SHUMA_FAIL_MODE=closed (fail-closed)...$(NC)"
