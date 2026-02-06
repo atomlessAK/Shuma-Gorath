@@ -113,7 +113,7 @@ fn verify_pow(seed_token: &str, nonce: &str, difficulty: u8) -> bool {
 pub fn issue_pow_challenge(ip: &str, difficulty: u8, ttl_seconds: u64) -> PowChallenge {
     let now = now_ts();
     let ttl = ttl_seconds;
-    let seed_id = format!("{:016x}", rand::thread_rng().gen::<u64>());
+    let seed_id = format!("{:016x}", rand::rng().random::<u64>());
     let payload = PowPayload {
         seed_id,
         ip_bucket: crate::ip::bucket_ip(ip),
