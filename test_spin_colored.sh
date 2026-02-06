@@ -59,6 +59,14 @@ else
   echo -e "${YELLOW}DEBUG /health response:${NC} $health_resp"
 fi
 
+# Preflight: normalize runtime config so tests are deterministic
+info "Resetting test_mode=false before integration scenarios..."
+curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -X POST \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"test_mode": false}' \
+  "$BASE_URL/admin/config" > /dev/null || true
+
 # Test 2: PoW challenge (if enabled)
 info "Testing PoW challenge..."
 pow_resp=$(curl -s -w "HTTPSTATUS:%{http_code}" "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" "$BASE_URL/pow")
@@ -66,20 +74,14 @@ pow_body=$(echo "$pow_resp" | sed -e 's/HTTPSTATUS:.*//')
 pow_status=$(echo "$pow_resp" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
 if [[ "$pow_status" == "404" ]]; then
   info "PoW disabled; skipping PoW verification"
+elif ! python3 -c 'import json,sys; json.loads(sys.stdin.read())' <<< "$pow_body" >/dev/null 2>&1; then
+  fail "PoW challenge did not return JSON (check forwarded secret and test_mode)"
+  echo -e "${YELLOW}DEBUG /pow status:${NC} $pow_status"
+  echo -e "${YELLOW}DEBUG /pow body:${NC} $pow_body"
 else
-  seed=$(python3 - <<PY
-import json,sys
-data=json.loads(sys.stdin.read())
-print(data["seed"])
-PY
-<<< "$pow_body")
-  difficulty=$(python3 - <<PY
-import json,sys
-data=json.loads(sys.stdin.read())
-print(int(data["difficulty"]))
-PY
-<<< "$pow_body")
-  nonce=$(python3 - <<PY
+  seed=$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["seed"])' <<< "$pow_body")
+  difficulty=$(python3 -c 'import json,sys; print(int(json.loads(sys.stdin.read())["difficulty"]))' <<< "$pow_body")
+  nonce=$(python3 - "$seed" "$difficulty" <<'PY'
 import hashlib
 import sys
 
@@ -113,17 +115,17 @@ while True:
         print(-1)
         break
 PY
-"$seed" "$difficulty")
+)
   if [[ "$nonce" == "-1" ]]; then
     fail "PoW solve exceeded iteration cap"
   else
-  payload=$(python3 - <<PY
+  payload=$(python3 - "$seed" "$nonce" <<'PY'
 import json,sys
 seed=sys.argv[1]
 nonce=sys.argv[2]
 print(json.dumps({"seed": seed, "nonce": nonce}))
 PY
-"$seed" "$nonce")
+)
   verify_resp=$(curl -s -w "HTTPSTATUS:%{http_code}" "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" \
     -H "Content-Type: application/json" -X POST -d "$payload" "$BASE_URL/pow/verify")
   verify_status=$(echo "$verify_resp" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')

@@ -79,6 +79,17 @@
   border: var(--border-hairline);
 }
 
+.input-field {
+  border: 1px solid var(--color-gray-300);
+  background: var(--panel-bg);
+  color: var(--panel-fg);
+  font-size: 14px;
+}
+
+.input-field--mono {
+  font-family: 'Courier New', monospace;
+}
+
 /* ===========================================
    Shared Button Base
    =========================================== */
@@ -173,6 +184,15 @@ body {
   padding: 30px;
 }
 
+.config,
+.chart-container,
+.control-group,
+.maze-section,
+.maze-crawlers,
+.maze-stat {
+  padding: 20px;
+}
+
 header {
   text-align: center;
   margin-bottom: 30px;
@@ -211,9 +231,6 @@ h1 {
 
 .config input {
   padding: 8px 12px;
-  border: 1px solid var(--color-gray-300);
-  font-size: 14px;
-  font-family: 'Courier New', monospace;
 }
 
 #last-updated {
@@ -263,7 +280,6 @@ h1 {
 }
 
 .chart-container {
-  padding: 20px;
 }
 
 .chart-header {
@@ -323,7 +339,7 @@ h1 {
 }
 
 /* Outer admin section should not carry panel chrome; inner control groups keep their panels */
-.section.admin-controls {
+.section.admin-section {
   background: transparent;
   border: none;
   padding: 0;
@@ -450,7 +466,6 @@ code {
 }
 
 .control-group {
-  padding: 20px;
 }
 
 .control-group h3 {
@@ -459,12 +474,10 @@ code {
   margin-bottom: 15px;
 }
 
-.control-group input {
+.control-group .input-field {
   width: 100%;
   padding: 10px;
   margin-bottom: 10px;
-  border: 1px solid var(--color-gray-300);
-  font-size: 14px;
 }
 
 /* Buttons inside control groups inherit .btn base via HTML;
@@ -478,6 +491,10 @@ code {
   font-size: var(--text-sm);
   color: var(--color-gray-500);
   margin-bottom: 10px;
+}
+
+.control-desc-spaced {
+  margin-top: 12px;
 }
 
 /* ===========================================
@@ -627,12 +644,10 @@ input:checked + .toggle-slider:before {
   color: var(--color-gray-700);
 }
 
-.duration-grid input {
+.duration-grid .input-field {
   width: 100%;
   padding: 8px;
   margin-top: 4px;
-  border: 1px solid var(--color-gray-300);
-  font-size: 14px;
 }
 
 #save-durations-btn {
@@ -644,7 +659,6 @@ input:checked + .toggle-slider:before {
    =========================================== */
 
 .maze-section {
-  padding: 20px;
   margin-bottom: 30px;
 }
 
@@ -667,7 +681,6 @@ input:checked + .toggle-slider:before {
 }
 
 .maze-stat {
-  padding: 20px;
   text-align: center;
 }
 
@@ -686,7 +699,6 @@ input:checked + .toggle-slider:before {
 }
 
 .maze-crawlers {
-  padding: 20px;
 }
 
 .maze-crawlers h3 {
@@ -776,11 +788,9 @@ input:checked + .toggle-slider:before {
 }
 
 /* Number/text inputs in control rows */
-.input-row input {
+.input-row .input-field {
   width: 80px;
   padding: 8px 10px;
-  background: var(--panel-bg);
-  color: var(--panel-fg);
   font-size: var(--text-lg);
 }
 
@@ -1004,7 +1014,11 @@ input:checked + .toggle-slider:before {
     color: var(--color-gray-100);
   }
 
-  input, select, textarea {
+  input[type="text"],
+  input[type="password"],
+  input[type="number"],
+  select,
+  textarea {
     background: var(--color-gray-200);
     color: var(--color-gray-800);
     border-color: var(--color-gray-400);
