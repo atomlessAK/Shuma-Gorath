@@ -4,6 +4,8 @@ mod challenge_tests;
 #[cfg(test)]
 mod config_tests;
 #[cfg(test)]
+mod risk_tests;
+#[cfg(test)]
 mod ban_tests;
 #[cfg(test)]
 mod whitelist_tests;
@@ -87,6 +89,32 @@ pub(crate) fn extract_client_ip(req: &Request) -> String {
 /// Return the configured fail mode: "open" (default) or "closed".
 fn shuma_fail_mode() -> String {
     env::var("SHUMA_FAIL_MODE").unwrap_or_else(|_| "open".to_string()).to_lowercase()
+}
+
+fn rate_proximity_score(rate_count: u32, rate_limit: u32) -> u8 {
+    if rate_limit == 0 {
+        return 0;
+    }
+    let ratio = rate_count as f32 / rate_limit as f32;
+    if ratio >= 0.8 {
+        2
+    } else if ratio >= 0.5 {
+        1
+    } else {
+        0
+    }
+}
+
+pub(crate) fn compute_risk_score(js_needed: bool, geo_risk: bool, rate_count: u32, rate_limit: u32) -> u8 {
+    let mut score = 0u8;
+    if js_needed {
+        score += 1;
+    }
+    if geo_risk {
+        score += 2;
+    }
+    score += rate_proximity_score(rate_count, rate_limit);
+    score
 }
 
 /// Main handler logic, testable as a plain Rust function.
@@ -412,20 +440,6 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
     if path == "/pow/verify" {
         return pow::handle_pow_verify(req, &ip);
     }
-    // JS verification (bypass for browser whitelist)
-    if path != "/health" && js::needs_js_verification_with_whitelist(req, store, site_id, &ip, &cfg.browser_whitelist) {
-        metrics::increment(store, metrics::MetricName::ChallengesTotal, None);
-        // Log challenge event
-        crate::admin::log_event(store, &crate::admin::EventLogEntry {
-            ts: crate::admin::now_ts(),
-            event: crate::admin::EventType::Challenge,
-            ip: Some(ip.clone()),
-            reason: Some("js_verification".to_string()),
-            outcome: Some("js challenge".to_string()),
-            admin: None,
-        });
-        return js::inject_js_challenge(&ip, cfg.pow_difficulty, cfg.pow_ttl_seconds);
-    }
     // Outdated browser
     if browser::is_outdated_browser(ua, &cfg.browser_block) {
         ban::ban_ip(store, site_id, &ip, "browser", cfg.get_ban_duration("browser"));
@@ -442,8 +456,40 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
         });
         return Response::new(403, block_page::render_block_page(block_page::BlockReason::OutdatedBrowser));
     }
+    // Compute risk score for potential step-up challenge
+    let needs_js = path != "/health" && js::needs_js_verification_with_whitelist(req, store, site_id, &ip, &cfg.browser_whitelist);
+    let geo_risk = geo::is_high_risk_geo(req, &cfg.geo_risk);
+    let rate_usage = rate::current_rate_usage(store, site_id, &ip);
+    let risk_score = compute_risk_score(needs_js, geo_risk, rate_usage, cfg.rate_limit);
+    if risk_score >= cfg.challenge_risk_threshold {
+        metrics::increment(store, metrics::MetricName::ChallengesTotal, None);
+        crate::admin::log_event(store, &crate::admin::EventLogEntry {
+            ts: crate::admin::now_ts(),
+            event: crate::admin::EventType::Challenge,
+            ip: Some(ip.clone()),
+            reason: Some("risk_gate".to_string()),
+            outcome: Some(format!("score={}", risk_score)),
+            admin: None,
+        });
+        return challenge::render_challenge(req);
+    }
+
+    // JS verification (bypass for browser whitelist)
+    if needs_js {
+        metrics::increment(store, metrics::MetricName::ChallengesTotal, None);
+        // Log challenge event
+        crate::admin::log_event(store, &crate::admin::EventLogEntry {
+            ts: crate::admin::now_ts(),
+            event: crate::admin::EventType::Challenge,
+            ip: Some(ip.clone()),
+            reason: Some("js_verification".to_string()),
+            outcome: Some("js challenge".to_string()),
+            admin: None,
+        });
+        return js::inject_js_challenge(&ip, cfg.pow_difficulty, cfg.pow_ttl_seconds);
+    }
     // Geo-based escalation
-    if geo::is_high_risk_geo(req, &cfg.geo_risk) {
+    if geo_risk {
         metrics::increment(store, metrics::MetricName::ChallengesTotal, None);
         // Log challenge event
         crate::admin::log_event(store, &crate::admin::EventLogEntry {

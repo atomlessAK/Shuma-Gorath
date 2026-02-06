@@ -310,11 +310,7 @@ fn idx(row: usize, col: usize, size: usize) -> usize {
     row * size + col
 }
 
-pub(crate) fn serve_challenge_page(req: &Request, test_mode: bool) -> Response {
-    if !test_mode {
-        return Response::new(404, "Not Found");
-    }
-
+pub(crate) fn render_challenge(req: &Request) -> Response {
     let ip = crate::extract_client_ip(req);
     let ip_bucket = crate::ip::bucket_ip(&ip);
     let now = crate::admin::now_ts();
@@ -428,6 +424,13 @@ pub(crate) fn serve_challenge_page(req: &Request, test_mode: bool) -> Response {
     empty_bitstring = grid_to_bitstring(&empty_output),
     );
     Response::new(200, html)
+}
+
+pub(crate) fn serve_challenge_page(req: &Request, test_mode: bool) -> Response {
+    if !test_mode {
+        return Response::new(404, "Not Found");
+    }
+    render_challenge(req)
 }
 
 pub fn handle_challenge_submit<S: KeyValueStore>(store: &S, req: &Request) -> Response {
