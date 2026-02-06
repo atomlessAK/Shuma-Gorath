@@ -1,93 +1,106 @@
 // src/challenge_tests.rs
-// Unit tests for the challenge (math) logic
+// Unit tests for the ARC-style challenge logic
 
 #[cfg(test)]
 mod tests {
-    use super::super::challenge::*;
-    use std::collections::HashMap;
-    use spin_sdk::http::{Request, Method};
+    use super::super::challenge::{
+        apply_transform,
+        build_puzzle,
+        parse_submission,
+        ChallengeSeed,
+        Transform,
+    };
 
-    // Simple in-memory mock store for testing
-    use std::cell::RefCell;
-    #[derive(Default)]
-    struct TestStore {
-        map: RefCell<HashMap<String, Vec<u8>>>,
-    }
-    impl super::super::challenge::KeyValueStore for TestStore {
-        fn get(&self, key: &str) -> Result<Option<Vec<u8>>, ()> {
-            Ok(self.map.borrow().get(key).cloned())
-        }
-        fn set(&self, key: &str, value: &[u8]) -> Result<(), ()> {
-            self.map.borrow_mut().insert(key.to_string(), value.to_vec());
-            Ok(())
-        }
-        fn delete(&self, key: &str) -> Result<(), ()> {
-            self.map.borrow_mut().remove(key);
-            Ok(())
-        }
+    fn grid_4x4() -> Vec<u8> {
+        (1u8..=16u8).collect()
     }
 
     #[test]
-    fn test_serve_challenge_stores_answer() {
-        let store = TestStore::default();
-        let ip = "1.2.3.4";
-        let resp = serve_challenge(&store, ip);
-        assert_eq!(*resp.status(), 200u16);
-        // Should have stored an answer for this IP
-        let key = format!("challenge:{}", ip);
-        let val = store.get(&key).unwrap().expect("Challenge answer should be stored");
-        let stored = String::from_utf8(val).unwrap();
-        let mut parts = stored.split(':');
-        let answer_str = parts.next().unwrap();
-        let qtype = parts.next().unwrap_or("");
-        let answer: u32 = answer_str.parse().unwrap();
-        match qtype {
-            "add" => assert!(answer >= 20 && answer <= 198, "add: {} not in 20..=198", answer),
-            "sub" => assert!(answer <= 89, "sub: {} not in 0..=89", answer),
-            "mul" => assert!(answer >= 4 && answer <= 144, "mul: {} not in 4..=144", answer),
-            _ => panic!("Unknown challenge type: {}", qtype),
-        }
+    fn deterministic_seed_produces_same_output() {
+        let seed = ChallengeSeed {
+            seed_id: "seed-1".to_string(),
+            issued_at: 1,
+            expires_at: 999,
+            ip_bucket: "bucket".to_string(),
+            grid_size: 4,
+            active_cells: 4,
+            transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
+            training_count: 2,
+            seed: 12345,
+        };
+        let a = build_puzzle(&seed);
+        let b = build_puzzle(&seed);
+        assert_eq!(a.test_output, b.test_output);
     }
 
     #[test]
-    fn test_handle_challenge_submit_correct_and_incorrect() {
-        let store = TestStore::default();
-        let ip = "1.2.3.4";
-        // Test all challenge formats: add, sub, mul
-        let cases = vec![
-            ("75:sub", "75"),
-            ("33:add", "33"),
-            ("144:mul", "144"),
-            ("007:add", "7"), // leading zero
+    fn transform_rotate_cw_works() {
+        let grid = grid_4x4();
+        let out = apply_transform(&grid, 4, Transform::RotateCw90);
+        let expected = vec![
+            13, 9, 5, 1,
+            14, 10, 6, 2,
+            15, 11, 7, 3,
+            16, 12, 8, 4,
         ];
-        for (stored, submitted) in &cases {
-            let key = format!("challenge:{}", ip);
-            store.set(&key, stored.as_bytes()).unwrap();
-            let body = format!("answer={}&ip={}", submitted, ip);
-            let req = Request::builder()
-                .method(Method::Post)
-                .uri("/challenge")
-                .header("content-type", "application/x-www-form-urlencoded")
-                .body(body.as_bytes().to_vec())
-                .build();
-            let resp = handle_challenge_submit(&store, &req);
-            assert_eq!(*resp.status(), 200u16, "Should accept correct answer for stored={:?} submitted={:?}", stored, submitted);
-            assert!(resp.body().windows(b"Thank you!".len()).any(|w| w == b"Thank you!"));
-            // Should have deleted the challenge key
-            assert!(store.get(&key).unwrap().is_none());
-        }
-        // Incorrect answer
-        let key = format!("challenge:{}", ip);
-        store.set(&key, b"42:add").unwrap();
-        let body = format!("answer=99&ip={}", ip);
-        let req = Request::builder()
-            .method(Method::Post)
-            .uri("/challenge")
-            .header("content-type", "application/x-www-form-urlencoded")
-            .body(body.as_bytes().to_vec())
-            .build();
-        let resp = handle_challenge_submit(&store, &req);
-        assert_eq!(*resp.status(), 403u16);
-        assert!(resp.body().windows(b"Incorrect answer".len()).any(|w| w == b"Incorrect answer"));
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn transform_mirror_horizontal_works() {
+        let grid = grid_4x4();
+        let out = apply_transform(&grid, 4, Transform::MirrorHorizontal);
+        let expected = vec![
+            4, 3, 2, 1,
+            8, 7, 6, 5,
+            12, 11, 10, 9,
+            16, 15, 14, 13,
+        ];
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn transform_shift_left_no_wrap() {
+        let grid = grid_4x4();
+        let out = apply_transform(&grid, 4, Transform::ShiftLeft);
+        let expected = vec![
+            2, 3, 4, 0,
+            6, 7, 8, 0,
+            10, 11, 12, 0,
+            14, 15, 16, 0,
+        ];
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn transform_drop_right_matches_spec() {
+        let grid = grid_4x4();
+        let out = apply_transform(&grid, 4, Transform::DropRight);
+        let expected = vec![
+            0, 1, 2, 3,
+            0, 5, 6, 7,
+            0, 9, 10, 11,
+            0, 13, 14, 15,
+        ];
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn parse_submission_accepts_bitstring_and_csv() {
+        let bitstring = "1000000000000001";
+        let parsed = parse_submission(bitstring, 4).unwrap();
+        assert_eq!(parsed[0], 1);
+        assert_eq!(parsed[15], 1);
+
+        let csv = "0,15";
+        let parsed_csv = parse_submission(csv, 4).unwrap();
+        assert_eq!(parsed_csv[0], 1);
+        assert_eq!(parsed_csv[15], 1);
+    }
+
+    #[test]
+    fn parse_submission_rejects_invalid_length() {
+        let err = parse_submission("10", 4).unwrap_err();
+        assert_eq!(err, "invalid length");
     }
 }

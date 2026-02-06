@@ -22,11 +22,254 @@ impl KeyValueStore for Store {
     }
 }
 
-use rand::Rng;
+use base64::{engine::general_purpose, Engine as _};
+use hmac::{Hmac, Mac};
 use percent_encoding;
 use rand::prelude::*;
+use rand::seq::SliceRandom;
+use rand::{Rng, SeedableRng};
+use rand::rngs::StdRng;
+use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 
 const CHALLENGE_PREFIX: &str = "challenge:";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct ChallengeSeed {
+    pub seed_id: String,
+    pub issued_at: u64,
+    pub expires_at: u64,
+    pub ip_bucket: String,
+    pub grid_size: u8,
+    pub active_cells: u8,
+    pub transforms: Vec<Transform>,
+    pub training_count: u8,
+    pub seed: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Transform {
+    RotateCw90,
+    RotateCcw90,
+    MirrorHorizontal,
+    MirrorVertical,
+    ShiftUp,
+    ShiftDown,
+    ShiftLeft,
+    ShiftRight,
+    DropTop,
+    DropBottom,
+    DropLeft,
+    DropRight,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ChallengePuzzle {
+    pub training_pairs: Vec<(Vec<u8>, Vec<u8>)>,
+    pub test_input: Vec<u8>,
+    pub test_output: Vec<u8>,
+    pub grid_size: usize,
+}
+
+fn get_challenge_secret() -> String {
+    std::env::var("CHALLENGE_SECRET")
+        .or_else(|_| std::env::var("API_KEY"))
+        .unwrap_or_else(|_| "changeme-challenge-secret".to_string())
+}
+
+fn sign_payload(payload: &str) -> Vec<u8> {
+    let secret = get_challenge_secret();
+    let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
+    mac.update(payload.as_bytes());
+    mac.finalize().into_bytes().to_vec()
+}
+
+fn verify_signature(payload: &str, sig: &[u8]) -> bool {
+    let secret = get_challenge_secret();
+    let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
+    mac.update(payload.as_bytes());
+    mac.verify_slice(sig).is_ok()
+}
+
+#[allow(dead_code)]
+fn make_seed_token(payload: &ChallengeSeed) -> String {
+    let payload_json = serde_json::to_string(payload).unwrap();
+    let sig = sign_payload(&payload_json);
+    let payload_b64 = general_purpose::STANDARD.encode(payload_json.as_bytes());
+    let sig_b64 = general_purpose::STANDARD.encode(sig);
+    format!("{}.{}", payload_b64, sig_b64)
+}
+
+#[allow(dead_code)]
+fn parse_seed_token(token: &str) -> Result<ChallengeSeed, &'static str> {
+    let mut parts = token.splitn(2, '.');
+    let payload_b64 = parts.next().ok_or("missing payload")?;
+    let sig_b64 = parts.next().ok_or("missing signature")?;
+    let payload_bytes = general_purpose::STANDARD
+        .decode(payload_b64.as_bytes())
+        .map_err(|_| "invalid payload")?;
+    let sig = general_purpose::STANDARD
+        .decode(sig_b64.as_bytes())
+        .map_err(|_| "invalid signature")?;
+    let payload_json = String::from_utf8(payload_bytes).map_err(|_| "invalid payload")?;
+
+    if !verify_signature(&payload_json, &sig) {
+        return Err("signature mismatch");
+    }
+
+    serde_json::from_str::<ChallengeSeed>(&payload_json).map_err(|_| "invalid payload")
+}
+
+pub(crate) fn build_puzzle(seed: &ChallengeSeed) -> ChallengePuzzle {
+    let size = seed.grid_size as usize;
+    let active = seed.active_cells as usize;
+    let mut rng = StdRng::seed_from_u64(seed.seed);
+    let mut training_pairs = Vec::new();
+    for _ in 0..seed.training_count {
+        let input = generate_grid(&mut rng, size, active);
+        let output = apply_transforms(&input, size, &seed.transforms);
+        training_pairs.push((input, output));
+    }
+    let test_input = generate_grid(&mut rng, size, active);
+    let test_output = apply_transforms(&test_input, size, &seed.transforms);
+    ChallengePuzzle {
+        training_pairs,
+        test_input,
+        test_output,
+        grid_size: size,
+    }
+}
+
+fn generate_grid(rng: &mut StdRng, size: usize, active: usize) -> Vec<u8> {
+    let mut grid = vec![0u8; size * size];
+    let mut indices: Vec<usize> = (0..grid.len()).collect();
+    indices.shuffle(rng);
+    for idx in indices.into_iter().take(active) {
+        grid[idx] = 1;
+    }
+    grid
+}
+
+fn apply_transforms(grid: &[u8], size: usize, transforms: &[Transform]) -> Vec<u8> {
+    let mut current = grid.to_vec();
+    for t in transforms {
+        current = apply_transform(&current, size, *t);
+    }
+    current
+}
+
+pub(crate) fn apply_transform(grid: &[u8], size: usize, transform: Transform) -> Vec<u8> {
+    let mut out = vec![0u8; size * size];
+    match transform {
+        Transform::RotateCw90 => {
+            for r in 0..size {
+                for c in 0..size {
+                    let src = idx(r, c, size);
+                    let dst = idx(c, size - 1 - r, size);
+                    out[dst] = grid[src];
+                }
+            }
+        }
+        Transform::RotateCcw90 => {
+            for r in 0..size {
+                for c in 0..size {
+                    let src = idx(r, c, size);
+                    let dst = idx(size - 1 - c, r, size);
+                    out[dst] = grid[src];
+                }
+            }
+        }
+        Transform::MirrorHorizontal => {
+            for r in 0..size {
+                for c in 0..size {
+                    let src = idx(r, c, size);
+                    let dst = idx(r, size - 1 - c, size);
+                    out[dst] = grid[src];
+                }
+            }
+        }
+        Transform::MirrorVertical => {
+            for r in 0..size {
+                for c in 0..size {
+                    let src = idx(r, c, size);
+                    let dst = idx(size - 1 - r, c, size);
+                    out[dst] = grid[src];
+                }
+            }
+        }
+        Transform::ShiftUp | Transform::DropTop => {
+            for r in 1..size {
+                for c in 0..size {
+                    let src = idx(r, c, size);
+                    let dst = idx(r - 1, c, size);
+                    out[dst] = grid[src];
+                }
+            }
+        }
+        Transform::ShiftDown | Transform::DropBottom => {
+            for r in 0..size - 1 {
+                for c in 0..size {
+                    let src = idx(r, c, size);
+                    let dst = idx(r + 1, c, size);
+                    out[dst] = grid[src];
+                }
+            }
+        }
+        Transform::ShiftLeft | Transform::DropLeft => {
+            for r in 0..size {
+                for c in 1..size {
+                    let src = idx(r, c, size);
+                    let dst = idx(r, c - 1, size);
+                    out[dst] = grid[src];
+                }
+            }
+        }
+        Transform::ShiftRight | Transform::DropRight => {
+            for r in 0..size {
+                for c in 0..size - 1 {
+                    let src = idx(r, c, size);
+                    let dst = idx(r, c + 1, size);
+                    out[dst] = grid[src];
+                }
+            }
+        }
+    }
+    out
+}
+
+pub(crate) fn parse_submission(input: &str, size: usize) -> Result<Vec<u8>, &'static str> {
+    let trimmed = input.trim();
+    let expected = size * size;
+    if trimmed.is_empty() {
+        return Err("invalid length");
+    }
+    let is_bitstring = trimmed.chars().all(|c| c == '0' || c == '1');
+    if is_bitstring {
+        if trimmed.len() != expected {
+            return Err("invalid length");
+        }
+        let out = trimmed.chars().map(|c| if c == '1' { 1 } else { 0 }).collect();
+        return Ok(out);
+    }
+    let mut out = vec![0u8; expected];
+    for part in trimmed.split(',') {
+        let p = part.trim();
+        if p.is_empty() {
+            continue;
+        }
+        let idx = p.parse::<usize>().map_err(|_| "invalid index")?;
+        if idx >= expected {
+            return Err("invalid index");
+        }
+        out[idx] = 1;
+    }
+    Ok(out)
+}
+
+fn idx(row: usize, col: usize, size: usize) -> usize {
+    row * size + col
+}
 
 /// Generates a random math challenge (add, sub, mul) and stores the answer and question type in KV for the IP.
 /// NOTE: This function is currently unused - banned users now see block page directly.
