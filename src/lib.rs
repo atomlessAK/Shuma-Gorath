@@ -13,6 +13,8 @@ mod whitelist_tests;
 mod whitelist_path_tests;
 #[cfg(test)]
 mod cdp_tests;
+#[cfg(test)]
+mod log_tests;
 mod auth;
 // src/lib.rs
 // Entry point for the WASM Stealth Bot Trap Spin app
@@ -21,6 +23,7 @@ use spin_sdk::http::{Request, Response};
 use spin_sdk::http_component;
 use spin_sdk::key_value::Store;
 use std::env;
+use std::io::Write;
 
 mod ban;         // Ban logic (IP, expiry, reason)
 mod config;      // Config loading and defaults
@@ -117,6 +120,15 @@ pub(crate) fn compute_risk_score(js_needed: bool, geo_risk: bool, rate_count: u3
     score
 }
 
+pub(crate) fn write_log_line(out: &mut impl Write, msg: &str) {
+    let _ = writeln!(out, "{}", msg);
+}
+
+fn log_line(msg: &str) {
+    let mut out = std::io::stdout();
+    write_log_line(&mut out, msg);
+}
+
 /// Main handler logic, testable as a plain Rust function.
 pub fn handle_bot_trap_impl(req: &Request) -> Response {
     let store = match Store::open_default() {
@@ -147,7 +159,10 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
                     .build();
             }
         }
-        println!("[KV OUTAGE] Key-value store unavailable; SHUMA_FAIL_MODE={}", mode);
+        log_line(&format!(
+            "[KV OUTAGE] Key-value store unavailable; SHUMA_FAIL_MODE={}",
+            mode
+        ));
         return Response::builder()
             .status(500)
             .header("X-KV-Status", "unavailable")
@@ -218,7 +233,10 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
     }
     if store.is_none() {
         let mode = shuma_fail_mode();
-        println!("[KV OUTAGE] Store unavailable during request handling; SHUMA_FAIL_MODE={}", mode);
+        log_line(&format!(
+            "[KV OUTAGE] Store unavailable during request handling; SHUMA_FAIL_MODE={}",
+            mode
+        ));
         if mode == "closed" {
             return Response::builder()
                 .status(500)
@@ -305,7 +323,7 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
             return Response::new(200, "TEST MODE: PoW bypassed");
         }
         if honeypot::is_honeypot(path, &cfg.honeypots) {
-            println!("[TEST MODE] Would ban IP {ip} for honeypot");
+            log_line(&format!("[TEST MODE] Would ban IP {ip} for honeypot"));
             metrics::increment(store, metrics::MetricName::TestModeActions, None);
             crate::admin::log_event(store, &crate::admin::EventLogEntry {
                 ts: crate::admin::now_ts(),
@@ -318,7 +336,7 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
             return Response::new(200, "TEST MODE: Would block (honeypot)");
         }
         if !rate::check_rate_limit(store, site_id, &ip, cfg.rate_limit) {
-            println!("[TEST MODE] Would ban IP {ip} for rate limit");
+            log_line(&format!("[TEST MODE] Would ban IP {ip} for rate limit"));
             metrics::increment(store, metrics::MetricName::TestModeActions, None);
             crate::admin::log_event(store, &crate::admin::EventLogEntry {
                 ts: crate::admin::now_ts(),
@@ -331,7 +349,7 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
             return Response::new(200, "TEST MODE: Would block (rate limit)");
         }
         if ban::is_banned(store, site_id, &ip) {
-            println!("[TEST MODE] Would serve challenge to banned IP {ip}");
+            log_line(&format!("[TEST MODE] Would serve challenge to banned IP {ip}"));
             metrics::increment(store, metrics::MetricName::TestModeActions, None);
             crate::admin::log_event(store, &crate::admin::EventLogEntry {
                 ts: crate::admin::now_ts(),
@@ -344,7 +362,7 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
             return Response::new(200, "TEST MODE: Would serve challenge");
         }
         if path != "/health" && js::needs_js_verification(req, store, site_id, &ip) {
-            println!("[TEST MODE] Would inject JS challenge for IP {ip}");
+            log_line(&format!("[TEST MODE] Would inject JS challenge for IP {ip}"));
             metrics::increment(store, metrics::MetricName::TestModeActions, None);
             crate::admin::log_event(store, &crate::admin::EventLogEntry {
                 ts: crate::admin::now_ts(),
@@ -357,7 +375,7 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
             return Response::new(200, "TEST MODE: Would inject JS challenge");
         }
         if browser::is_outdated_browser(ua, &cfg.browser_block) {
-            println!("[TEST MODE] Would ban IP {ip} for outdated browser");
+            log_line(&format!("[TEST MODE] Would ban IP {ip} for outdated browser"));
             metrics::increment(store, metrics::MetricName::TestModeActions, None);
             crate::admin::log_event(store, &crate::admin::EventLogEntry {
                 ts: crate::admin::now_ts(),
@@ -370,7 +388,7 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
             return Response::new(200, "TEST MODE: Would block (outdated browser)");
         }
         if geo::is_high_risk_geo(req, &cfg.geo_risk) {
-            println!("[TEST MODE] Would inject JS challenge for geo-risk IP {ip}");
+            log_line(&format!("[TEST MODE] Would inject JS challenge for geo-risk IP {ip}"));
             metrics::increment(store, metrics::MetricName::TestModeActions, None);
             crate::admin::log_event(store, &crate::admin::EventLogEntry {
                 ts: crate::admin::now_ts(),
