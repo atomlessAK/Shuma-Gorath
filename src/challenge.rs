@@ -504,8 +504,8 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
                     <span>Transform 1</span>
                     <select id="transform-1">
                       <option value="">None</option>
-                      <option value="rotate_cw90">90° clockwise</option>
-                      <option value="rotate_ccw90">90° anticlockwise</option>
+                      <option value="rotate_cw90">90&#176; clockwise</option>
+                      <option value="rotate_ccw90">90&#176; anticlockwise</option>
                       <option value="mirror_horizontal">Mirror horizontally</option>
                       <option value="mirror_vertical">Mirror vertically</option>
                       <option value="shift_up">Shift up</option>
@@ -518,8 +518,8 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
                     <span>Transform 2</span>
                     <select id="transform-2">
                       <option value="">None</option>
-                      <option value="rotate_cw90">90° clockwise</option>
-                      <option value="rotate_ccw90">90° anticlockwise</option>
+                      <option value="rotate_cw90">90&#176; clockwise</option>
+                      <option value="rotate_ccw90">90&#176; anticlockwise</option>
                       <option value="mirror_horizontal">Mirror horizontally</option>
                       <option value="mirror_vertical">Mirror vertically</option>
                       <option value="shift_up">Shift up</option>
