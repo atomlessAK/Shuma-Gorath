@@ -463,16 +463,13 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             .legend-fieldset {{ border: 0; margin: 0; padding: 0; min-width: 0; }}
             .legend-title {{ font-size: var(--font-subheading); font-weight: 600; color: #111; margin: 0 auto 2px; width: var(--duo-grid-size); }}
             .legend-subtitle {{ font-size: var(--font-small); color: #6b7280; margin: 0 auto 10px; width: var(--duo-grid-size); }}
-            .legend-table {{ width: var(--duo-grid-size); margin: 0 auto; border-collapse: separate; border-spacing: 0 8px; table-layout: fixed; }}
-            .legend-table th, .legend-table td {{ padding: 0; vertical-align: top; }}
-            .legend-table thead th {{ font-size: var(--font-small); color: #475569; font-weight: 600; text-align: center; }}
-            .legend-table thead .legend-head-transform {{ text-align: left; }}
-            .legend-col-transform {{ width: calc(var(--duo-grid-size) - 64px); }}
-            .legend-row-main {{ display: flex; align-items: flex-start; gap: 8px; border: 1px solid transparent; padding: 4px; }}
-            .legend-row-main.is-selected {{ border-color: #111; background: #eef7f1; }}
+            .legend-options {{ width: var(--duo-grid-size); margin: 0 auto; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }}
+            .legend-row {{ display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; border: 1px solid transparent; padding: 6px 4px; }}
+            .legend-row.is-selected {{ border-color: #111; background: #eef7f1; }}
             .legend-item {{ display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; width: 100%; }}
-            .legend-pick {{ width: 32px; text-align: center; }}
-            .legend-pick input {{ width: 16px; height: 16px; margin-top: 2px; accent-color: #111; cursor: pointer; }}
+            .legend-picks {{ display: flex; align-items: center; gap: 10px; }}
+            .legend-pick-label {{ display: inline-flex; align-items: center; gap: 4px; font-size: var(--font-small); color: #475569; cursor: pointer; }}
+            .legend-pick-label input {{ width: 16px; height: 16px; margin: 0; accent-color: #111; cursor: pointer; }}
             .legend-icon {{ position: relative; width: var(--legend-grid-size); height: var(--legend-grid-size); flex: 0 0 auto; }}
             .legend-grid {{ position: absolute; inset: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--legend-gap); }}
             .legend-cell {{ border: 1px solid #e2e8f0; background: #fff; }}
@@ -497,6 +494,9 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             .legend-arrow.arrow-left {{ left: 0; top: 50%; transform: translateY(-50%); }}
             .legend-arrow.arrow-right {{ right: 0; top: 50%; transform: translateY(-50%); }}
             .legend-label {{ font-size: var(--font-small); color: #111; text-transform: lowercase; }}
+            @media (max-width: 640px) {{
+              .legend-options {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+            }}
             @media (max-width: 480px) {{
               body {{ margin: 12px; }}
               .challenge {{ padding: 16px; }}
@@ -508,8 +508,8 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             }}
             @media (max-width: 400px) {{
               .challenge h2 {{ width: var(--puzzle-grid-size); }}
-              .legend-title, .legend-subtitle, .legend-table {{ width: var(--puzzle-grid-size); }}
-              .legend-col-transform {{ width: calc(var(--puzzle-grid-size) - 64px); }}
+              .legend-title, .legend-subtitle, .legend-options {{ width: var(--puzzle-grid-size); }}
+              .legend-options {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
               .pair-grids, .test-grids {{ grid-template-columns: 1fr; width: var(--puzzle-grid-size); gap: 12px; }}
               .submit-row {{ grid-column: 1; }}
             }}
@@ -570,12 +570,8 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
               const second = selectedValue(transform2Radios);
               for (const row of legendRows) {{
                 const value = row.dataset.transform;
-                const main = row.querySelector('.legend-row-main');
-                if (!main) {{
-                  continue;
-                }}
                 const selected = value === first || value === second;
-                main.classList.toggle('is-selected', selected);
+                row.classList.toggle('is-selected', selected);
               }}
             }}
             function applyTransform(grid, transform) {{
@@ -723,13 +719,13 @@ fn render_transform_legend(transforms: &[Transform]) -> String {
             let value = transform_value(*transform);
             let aria_label = transform_option_label(*transform);
             format!(
-                "<tr class=\"legend-row\" data-transform=\"{}\"><th scope=\"row\" class=\"legend-col-transform\"><div class=\"legend-row-main\"><div class=\"legend-item\"><div class=\"legend-label\">{}</div>{}</div></div></th><td class=\"legend-pick\"><input type=\"radio\" class=\"legend-radio legend-radio-1\" name=\"transform_1\" value=\"{}\" aria-label=\"First transform: {}\" /></td><td class=\"legend-pick\"><input type=\"radio\" class=\"legend-radio legend-radio-2\" name=\"transform_2\" value=\"{}\" aria-label=\"Second transform: {}\" /></td></tr>",
+                "<div class=\"legend-row\" data-transform=\"{}\"><div class=\"legend-item\"><div class=\"legend-label\">{}</div>{}</div><div class=\"legend-picks\"><label class=\"legend-pick-label\"><input type=\"radio\" class=\"legend-radio legend-radio-1\" name=\"transform_1\" value=\"{}\" aria-label=\"First transform: {}\" /><span>1</span></label><label class=\"legend-pick-label\"><input type=\"radio\" class=\"legend-radio legend-radio-2\" name=\"transform_2\" value=\"{}\" aria-label=\"Second transform: {}\" /><span>2</span></label></div></div>",
                 value, label, icon, value, aria_label, value, aria_label
             )
         })
         .collect();
     format!(
-        "<div class=\"legend\"><fieldset class=\"legend-fieldset\"><legend class=\"legend-title\">Which transforms were applied?</legend><div class=\"legend-subtitle\">Choose 2</div><table class=\"legend-table\"><thead><tr><th class=\"legend-head-transform\" scope=\"col\">Transform</th><th scope=\"col\">1</th><th scope=\"col\">2</th></tr></thead><tbody>{}</tbody></table></fieldset></div>",
+        "<div class=\"legend\"><fieldset class=\"legend-fieldset\"><legend class=\"legend-title\">Which transforms were applied?</legend><div class=\"legend-subtitle\">Choose 2</div><div class=\"legend-options\">{}</div></fieldset></div>",
         rows
     )
 }

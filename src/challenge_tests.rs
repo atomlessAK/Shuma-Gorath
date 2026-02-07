@@ -304,7 +304,9 @@ mod tests {
         assert!(body.contains("name=\"transform_1\""));
         assert!(body.contains("name=\"transform_2\""));
         assert!(body.contains("type=\"radio\""));
-        assert!(body.contains("class=\"legend-table\""));
+        assert!(body.contains("class=\"legend-options\""));
+        assert!(body.contains("class=\"legend-pick-label\""));
+        assert!(!body.contains("class=\"legend-table\""));
         assert!(!body.contains("class=\"legend-check\""));
         assert!(body.contains("Which transforms were applied?"));
         assert!(body.contains("<div class=\"legend-subtitle\">Choose 2</div>"));
