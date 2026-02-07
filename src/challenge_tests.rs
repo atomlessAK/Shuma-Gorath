@@ -311,7 +311,8 @@ mod tests {
         assert!(body.contains("--legend-columns:3;"));
         assert!(!body.contains("Mirror horizontally"));
         assert!(!body.contains("Mirror vertically"));
-        assert!(body.contains("selectedCount > 2"));
+        assert!(body.contains("class=\"legend-order-badge\""));
+        assert!(body.contains("selectedOrder"));
         let after_pos = body.find("After").unwrap();
         let legend_pos = body.find("Which transforms were applied?").unwrap();
         assert!(after_pos < legend_pos);

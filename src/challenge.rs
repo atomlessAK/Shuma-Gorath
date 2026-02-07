@@ -473,6 +473,8 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             .legend-items {{ display: flex; flex-wrap: wrap; gap: 8px 10px; width: var(--duo-grid-size); margin: 0 auto; align-items: flex-start; }}
             .legend-choice {{ display: flex; align-items: flex-start; gap: 8px; min-width: 0; flex: 1 1 calc((100% - (var(--legend-columns) - 1) * 10px) / var(--legend-columns)); max-width: calc((100% - (var(--legend-columns) - 1) * 10px) / var(--legend-columns)); cursor: pointer; border: 1px solid transparent; padding: 4px; }}
             .legend-choice input {{ width: 16px; height: 16px; margin-top: 2px; flex: 0 0 auto; accent-color: #111; cursor: pointer; }}
+            .legend-order-badge {{ width: 1.1rem; height: 1.1rem; margin-top: 1px; border: 1px solid #94a3b8; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 600; line-height: 1; color: #334155; background: #fff; flex: 0 0 auto; }}
+            .legend-order-badge.active {{ border-color: #111; background: #111; color: #f8fafc; }}
             .legend-item {{ display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; width: 100%; }}
             .legend-choice.selected {{ border-color: #111; background: #eef7f1; }}
             .legend-choice.locked:not(.selected) {{ opacity: 0.65; cursor: not-allowed; }}
@@ -549,6 +551,7 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             const outputField = document.getElementById('challenge-output');
             const outputCells = Array.from(document.querySelectorAll('#challenge-output-grid .cell'));
             const transformChecks = Array.from(document.querySelectorAll('.legend-check'));
+            const selectedOrder = [];
             function updateOutput() {{
               outputField.value = output.join('');
             }}
@@ -561,17 +564,45 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
               }}
             }}
             function selectedTransforms() {{
-              return transformChecks.filter((check) => check.checked).map((check) => check.value);
+              return selectedOrder.slice();
+            }}
+            function reconcileSelectedOrder() {{
+              for (let i = selectedOrder.length - 1; i >= 0; i--) {{
+                const value = selectedOrder[i];
+                const check = transformChecks.find((item) => item.value === value);
+                if (!check || !check.checked) {{
+                  selectedOrder.splice(i, 1);
+                }}
+              }}
+              for (const check of transformChecks) {{
+                if (check.checked && !selectedOrder.includes(check.value)) {{
+                  selectedOrder.push(check.value);
+                }}
+              }}
+              while (selectedOrder.length > 2) {{
+                const dropped = selectedOrder.pop();
+                const droppedCheck = transformChecks.find((item) => item.value === dropped);
+                if (droppedCheck) {{
+                  droppedCheck.checked = false;
+                }}
+              }}
             }}
             function syncLegendState() {{
-              const selectedCount = transformChecks.filter((check) => check.checked).length;
+              reconcileSelectedOrder();
+              const selectedCount = selectedOrder.length;
               for (const check of transformChecks) {{
                 const locked = selectedCount >= 2 && !check.checked;
                 check.disabled = locked;
                 const choice = check.closest('.legend-choice');
+                const order = selectedOrder.indexOf(check.value);
+                const badge = choice ? choice.querySelector('.legend-order-badge') : null;
                 if (choice) {{
-                  choice.classList.toggle('selected', check.checked);
+                  choice.classList.toggle('selected', order >= 0);
                   choice.classList.toggle('locked', locked);
+                }}
+                if (badge) {{
+                  badge.textContent = order >= 0 ? String(order + 1) : "";
+                  badge.classList.toggle('active', order >= 0);
                 }}
               }}
             }}
@@ -642,8 +673,7 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
               updateOutput();
             }}
             function onLegendChange(event) {{
-              const selectedCount = transformChecks.filter((check) => check.checked).length;
-              if (selectedCount > 2) {{
+              if (event.target.checked && selectedOrder.length >= 2 && !selectedOrder.includes(event.target.value)) {{
                 event.target.checked = false;
               }}
               syncLegendState();
@@ -713,7 +743,7 @@ fn render_transform_legend(transforms: &[Transform]) -> String {
             let value = transform_value(*transform);
             let aria_label = transform_option_label(*transform);
             format!(
-                "<label class=\"legend-choice\"><input type=\"checkbox\" class=\"legend-check\" value=\"{}\" aria-label=\"{}\" /><span class=\"legend-item\"><span class=\"legend-label\">{}</span>{}</span></label>",
+                "<label class=\"legend-choice\"><input type=\"checkbox\" class=\"legend-check\" value=\"{}\" aria-label=\"{}\" /><span class=\"legend-order-badge\" aria-hidden=\"true\"></span><span class=\"legend-item\"><span class=\"legend-label\">{}</span>{}</span></label>",
                 value, aria_label, label, icon
             )
         })
