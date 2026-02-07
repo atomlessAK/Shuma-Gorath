@@ -327,7 +327,7 @@ fn grid_to_tritstring(grid: &[u8]) -> String {
 fn render_grid(grid: &[u8], size: usize, class_name: &str, clickable: bool) -> String {
     let mut html = String::new();
     html.push_str(&format!(
-        "<div class=\"grid {}\" style=\"grid-template-columns: repeat({}, 28px);\">",
+        "<div class=\"grid {}\" style=\"grid-template-columns: repeat({}, var(--puzzle-cell));\">",
         class_name,
         size
     ));
@@ -402,19 +402,30 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
           <style>
             body {{ font-family: sans-serif; background: #f7f7f7; margin: 24px; color: #111; }}
             .challenge {{ max-width: 900px; margin: 0 auto; background: #fff; padding: 24px; border: 1px solid #e5e7eb; }}
-            :root {{ --cell-on: #111; --cell-alt: rgb(255,205,235); }}
-            .grid {{ display: grid; grid-template-columns: repeat(4, 28px); gap: 4px; }}
-            .cell {{ width: 28px; height: 28px; border: 1px solid #ddd; background: #fff; }}
+            :root {{
+              --cell-on: #111;
+              --cell-alt: rgb(255,205,235);
+              --puzzle-cell: 32px;
+              --puzzle-gap: 4px;
+              --puzzle-grid-size: calc((var(--puzzle-cell) * 4) + (var(--puzzle-gap) * 3));
+              --duo-grid-gap: 24px;
+              --duo-grid-size: calc((var(--puzzle-grid-size) * 2) + var(--duo-grid-gap));
+              --legend-cell: 11px;
+              --legend-gap: 2px;
+              --legend-grid-size: calc((var(--legend-cell) * 4) + (var(--legend-gap) * 3));
+            }}
+            .grid {{ display: grid; gap: var(--puzzle-gap); }}
+            .cell {{ width: var(--puzzle-cell); height: var(--puzzle-cell); border: 1px solid #ddd; background: #fff; }}
             .cell.active {{ background: var(--cell-on); }}
             .cell.active-alt {{ background: var(--cell-alt); }}
             .cell.clickable {{ cursor: pointer; }}
             .pair {{ margin-bottom: 16px; }}
-            .pair-title {{ font-weight: 600; margin-bottom: 8px; }}
-            .turn-subtitle {{ font-size: 13px; color: #475569; margin-bottom: 10px; }}
-            .pair-grids {{ display: flex; gap: 24px; align-items: flex-start; }}
+            .pair-title {{ font-weight: 600; margin: 0 auto 8px; width: var(--duo-grid-size); }}
+            .turn-subtitle {{ font-size: 13px; color: #475569; width: var(--duo-grid-size); margin: 0 auto 10px; }}
+            .pair-grids {{ display: grid; grid-template-columns: repeat(2, var(--puzzle-grid-size)); gap: var(--duo-grid-gap); align-items: flex-start; width: var(--duo-grid-size); margin: 0 auto; }}
             .grid-label {{ font-size: 12px; color: #6b7280; margin-bottom: 6px; }}
             .test-block {{ margin-top: 20px; padding-top: 16px; border-top: 1px solid #eee; }}
-            .test-grids {{ display: inline-grid; grid-template-columns: auto auto; gap: 24px; align-items: start; }}
+            .test-grids {{ display: grid; grid-template-columns: repeat(2, var(--puzzle-grid-size)); gap: var(--duo-grid-gap); align-items: start; width: var(--duo-grid-size); margin: 0 auto; }}
             .submit-row {{ grid-column: 1 / -1; margin-top: 12px; }}
             .submit-row button {{ width: 100%; }}
             .grid-output .cell {{ cursor: pointer; }}
@@ -422,12 +433,12 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             button {{ padding: 8px 14px; font-size: 14px; }}
             .debug-panel {{ margin-top: 12px; padding: 10px 12px; border: 1px dashed #cbd5f5; background: #f8fafc; font-size: 12px; color: #334155; }}
             .legend {{ margin: 12px 0 16px; padding: 12px; border: 1px solid #e5e7eb; background: #f8fafc; }}
-            .legend-title {{ font-weight: 600; margin-bottom: 6px; }}
-            .legend-subtitle {{ font-size: 12px; color: #6b7280; margin-bottom: 10px; }}
-            .legend-items {{ display: flex; flex-wrap: wrap; gap: 12px; }}
-            .legend-item {{ display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 64px; }}
-            .legend-icon {{ position: relative; width: 64px; height: 64px; flex: 0 0 auto; }}
-            .legend-grid {{ position: absolute; inset: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; }}
+            .legend-title {{ font-weight: 600; margin: 0 auto 6px; width: var(--duo-grid-size); }}
+            .legend-subtitle {{ font-size: 12px; color: #6b7280; margin: 0 auto 10px; width: var(--duo-grid-size); }}
+            .legend-items {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 12px; width: var(--duo-grid-size); margin: 0 auto; }}
+            .legend-item {{ display: flex; flex-direction: column; align-items: center; gap: 6px; }}
+            .legend-icon {{ position: relative; width: var(--legend-grid-size); height: var(--legend-grid-size); flex: 0 0 auto; }}
+            .legend-grid {{ position: absolute; inset: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--legend-gap); }}
             .legend-cell {{ border: 1px solid #e2e8f0; background: #fff; }}
             .legend-cell.on {{ background: var(--cell-on); }}
             .legend-cell.alt {{ background: var(--cell-alt); }}
@@ -450,6 +461,26 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             .legend-arrow.arrow-left {{ left: 0; top: 50%; transform: translateY(-50%); }}
             .legend-arrow.arrow-right {{ right: 0; top: 50%; transform: translateY(-50%); }}
             .legend-label {{ font-size: 11px; color: #111; text-transform: lowercase; }}
+            @media (max-width: 760px) {{
+              body {{ margin: 12px; }}
+              .challenge {{ padding: 16px; }}
+              :root {{
+                --puzzle-cell: 28px;
+                --duo-grid-gap: 16px;
+                --legend-cell: 10px;
+              }}
+              .legend-arrow {{ font-size: 30px; }}
+            }}
+            @media (max-width: 520px) {{
+              :root {{
+                --puzzle-cell: 25px;
+                --duo-grid-gap: 12px;
+                --legend-cell: 9px;
+              }}
+              .legend-title, .legend-subtitle, .legend-items, .pair-title, .turn-subtitle {{ width: var(--puzzle-grid-size); }}
+              .pair-grids, .test-grids {{ grid-template-columns: 1fr; width: var(--puzzle-grid-size); gap: 12px; }}
+              .submit-row {{ grid-column: 1; }}
+            }}
           </style>
         </head>
         <body>
