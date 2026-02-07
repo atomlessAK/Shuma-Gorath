@@ -515,7 +515,7 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
         </head>
         <body>
           <div class="challenge">
-            <h2>Please Solve This</h2>
+            <h2>Puzzle</h2>
             {training_html}
             <div class="legend">
               {legend_html}
@@ -725,7 +725,7 @@ fn render_transform_legend(transforms: &[Transform]) -> String {
         })
         .collect();
     format!(
-        "<fieldset class=\"legend-fieldset\"><div class=\"legend-subtitle\">Choose which 2 transforms were applied</div><div class=\"legend-options\">{}</div></fieldset>",
+        "<fieldset class=\"legend-fieldset\"><div class=\"legend-subtitle\">Which 2 transforms were applied?</div><div class=\"legend-options\">{}</div></fieldset>",
         rows
     )
 }
