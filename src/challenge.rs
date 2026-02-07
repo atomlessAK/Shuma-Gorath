@@ -401,7 +401,7 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
         <head>
           <style>
             body {{ font-family: sans-serif; font-size: 15px; line-height: 1.6; background: #f7f7f7; margin: 24px; color: #111; }}
-            .challenge {{ max-width: 900px; margin: 0 auto; background: #fff; padding: 24px; border: 1px solid #e5e7eb; }}
+            .challenge {{ max-width: 980px; margin: 0 auto; background: #fff; padding: 24px; border: 1px solid #e5e7eb; }}
             :root {{
               --cell-on: #111;
               --cell-alt: rgb(255,205,235);
@@ -418,8 +418,8 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
               --legend-gap: 2px;
               --legend-grid-size: calc((var(--legend-cell) * 4) + (var(--legend-gap) * 3));
             }}
-            .challenge h2 {{ margin: 0 0 0.6rem; font-size: var(--font-heading); line-height: 1.2; }}
-            .challenge > p {{ margin: 0 0 0.9rem; font-size: var(--font-body); }}
+            .challenge h2 {{ width: var(--duo-grid-size); margin: 0 auto 0.6rem; font-size: var(--font-heading); line-height: 1.2; }}
+            .challenge > p {{ width: var(--duo-grid-size); margin: 0 auto 0.9rem; font-size: var(--font-body); }}
             .grid {{ display: grid; gap: var(--puzzle-gap); }}
             .cell {{ width: var(--puzzle-cell); height: var(--puzzle-cell); border: 1px solid #ddd; background: #fff; }}
             .cell.active {{ background: var(--cell-on); }}
@@ -477,6 +477,7 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
               }}
             }}
             @media (max-width: 400px) {{
+              .challenge h2, .challenge > p {{ width: var(--puzzle-grid-size); }}
               .legend-title, .legend-subtitle, .legend-items, .pair-title, .turn-subtitle {{ width: var(--puzzle-grid-size); }}
               .legend-items {{ grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }}
               .pair-grids, .test-grids {{ grid-template-columns: 1fr; width: var(--puzzle-grid-size); gap: 12px; }}
