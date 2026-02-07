@@ -54,7 +54,7 @@ Key environment variables:
 - `POW_CONFIG_MUTABLE` - Allow admin API to tune PoW difficulty/TTL
 - `CHALLENGE_RISK_THRESHOLD` - Risk score to trigger step-up challenge (default: 3)
 - `CHALLENGE_CONFIG_MUTABLE` - Allow admin API to tune challenge threshold
-- `CHALLENGE_TRANSFORM_COUNT` - Number of transforms offered in challenge UI (4-8, default: 8)
+- `CHALLENGE_TRANSFORM_COUNT` - Number of transforms offered in challenge UI (4-8, default: 6)
 
 Deployment policy note: `SHUMA_FAIL_MODE` is a critical choice (fail-open vs fail-closed) when the KV store is unavailable. See `docs/security-hardening.md` and `docs/deployment.md`.
 

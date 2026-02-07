@@ -126,8 +126,8 @@ mod tests {
 
     #[test]
     fn parse_transform_count_clamps_to_valid_range() {
-        assert_eq!(parse_transform_count(None), 8);
-        assert_eq!(parse_transform_count(Some("bogus")), 8);
+        assert_eq!(parse_transform_count(None), 6);
+        assert_eq!(parse_transform_count(Some("bogus")), 6);
         assert_eq!(parse_transform_count(Some("2")), 4);
         assert_eq!(parse_transform_count(Some("4")), 4);
         assert_eq!(parse_transform_count(Some("6")), 6);
@@ -143,6 +143,17 @@ mod tests {
                 Transform::ShiftDown,
                 Transform::ShiftLeft,
                 Transform::ShiftRight,
+            ]
+        );
+        assert_eq!(
+            transforms_for_count(6),
+            vec![
+                Transform::ShiftUp,
+                Transform::ShiftDown,
+                Transform::ShiftLeft,
+                Transform::ShiftRight,
+                Transform::RotateCw90,
+                Transform::RotateCcw90,
             ]
         );
         assert_eq!(
@@ -293,6 +304,9 @@ mod tests {
         assert!(body.contains("Choose 2 transforms:"));
         assert!(!body.contains("Your turn"));
         assert!(!body.contains("Example 2"));
+        assert!(body.contains("--legend-columns:3;"));
+        assert!(!body.contains("Mirror horizontally"));
+        assert!(!body.contains("Mirror vertically"));
     }
 
     #[test]

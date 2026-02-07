@@ -170,7 +170,7 @@ fn is_inverse_rotation_pair(a: Transform, b: Transform) -> bool {
 
 const MIN_TRANSFORM_COUNT: usize = 4;
 const MAX_TRANSFORM_COUNT: usize = 8;
-const DEFAULT_TRANSFORM_COUNT: usize = 8;
+const DEFAULT_TRANSFORM_COUNT: usize = 6;
 
 fn all_transforms() -> Vec<Transform> {
     vec![
@@ -203,6 +203,14 @@ pub(crate) fn transforms_for_count(count: usize) -> Vec<Transform> {
 
 fn enabled_transforms() -> Vec<Transform> {
     transforms_for_count(configured_transform_count())
+}
+
+fn legend_columns_for_count(count: usize) -> usize {
+    match count {
+        0..=4 => count.max(1),
+        5 | 6 => 3,
+        _ => 4,
+    }
 }
 
 pub(crate) fn select_transform_pair(rng: &mut impl Rng) -> Vec<Transform> {
@@ -466,8 +474,8 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             button {{ padding: 8px 14px; font-size: var(--font-body); background: #111; color: #f8fafc; border: 1px solid #111; }}
             .legend {{ margin: 12px 0 16px; padding: 12px; border: 1px solid #e5e7eb; background: #f8fafc; }}
             .legend-subtitle {{ font-size: var(--font-small); color: #6b7280; margin: 0 auto 10px; width: var(--duo-grid-size); }}
-            .legend-items {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 10px; width: var(--duo-grid-size); margin: 0 auto; }}
-            .legend-item {{ display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }}
+            .legend-items {{ display: flex; flex-wrap: wrap; gap: 8px 10px; width: var(--duo-grid-size); margin: 0 auto; align-items: flex-start; }}
+            .legend-item {{ display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; flex: 1 1 calc((100% - (var(--legend-columns) - 1) * 10px) / var(--legend-columns)); max-width: calc((100% - (var(--legend-columns) - 1) * 10px) / var(--legend-columns)); }}
             .legend-icon {{ position: relative; width: var(--legend-grid-size); height: var(--legend-grid-size); flex: 0 0 auto; }}
             .legend-grid {{ position: absolute; inset: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--legend-gap); }}
             .legend-cell {{ border: 1px solid #e2e8f0; background: #fff; }}
@@ -504,7 +512,7 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             @media (max-width: 400px) {{
               .challenge h2 {{ width: var(--puzzle-grid-size); }}
               .legend-subtitle, .legend-items, .turn-subtitle {{ width: var(--puzzle-grid-size); }}
-              .legend-items {{ grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }}
+              .legend-items {{ --legend-columns: 2; gap: 8px; }}
               .pair-grids, .test-grids {{ grid-template-columns: 1fr; width: var(--puzzle-grid-size); gap: 12px; }}
               .transform-controls {{ grid-template-columns: 1fr; gap: 8px; }}
               .submit-row {{ grid-column: 1; }}
@@ -700,6 +708,7 @@ fn render_transform_options(transforms: &[Transform]) -> String {
 }
 
 fn render_transform_legend(transforms: &[Transform]) -> String {
+    let columns = legend_columns_for_count(transforms.len());
     let items: String = transforms
         .iter()
         .map(|transform| {
@@ -712,8 +721,9 @@ fn render_transform_legend(transforms: &[Transform]) -> String {
         })
         .collect();
     format!(
-        "<div class=\"legend\"><div class=\"legend-subtitle\">Which 2 of these transforms are being applied?</div><div class=\"legend-items\">{}</div></div>",
-        items
+        "<div class=\"legend\"><div class=\"legend-subtitle\">Which 2 of these transforms are being applied?</div><div class=\"legend-items\" style=\"--legend-columns:{};\">{}</div></div>",
+        columns,
+        items,
     )
 }
 

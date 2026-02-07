@@ -44,7 +44,7 @@ curl -X POST -H "Authorization: Bearer $API_KEY" \
 - `pow_ttl_seconds` (config) - Runtime PoW TTL (30–300, requires `POW_CONFIG_MUTABLE=1`)
 - `CHALLENGE_RISK_THRESHOLD` (env) - Default challenge threshold (1–10, default: 3)
 - `CHALLENGE_CONFIG_MUTABLE` (env) - Allow admin API to update challenge threshold (default: false)
-- `CHALLENGE_TRANSFORM_COUNT` (env) - Number of transforms shown in challenge UI (4–8, default: 8). Uses ordered prefix: shift up/down/left/right, 90° clockwise/anticlockwise, mirror horizontal/vertical.
+- `CHALLENGE_TRANSFORM_COUNT` (env) - Number of transforms shown in challenge UI (4–8, default: 6). Uses ordered prefix: shift up/down/left/right, 90° clockwise/anticlockwise, mirror horizontal/vertical.
 - `challenge_risk_threshold` (config) - Runtime challenge threshold (1–10, requires `CHALLENGE_CONFIG_MUTABLE=true`)
 
 ## 🐙 Example Config (Partial)
