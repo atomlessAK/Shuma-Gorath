@@ -384,13 +384,12 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
         .training_pairs
         .iter()
         .enumerate()
-        .map(|(idx, (input, output))| {
+        .map(|(_idx, (input, output))| {
             format!(
-                "<div class=\"pair\"><div class=\"pair-title\">Example {}</div>{}{}{}</div>",
-                idx + 1,
+                "<div class=\"pair\"><div class=\"pair-title\">Example</div>{}{}{}</div>",
                 "<div class=\"pair-grids\">",
                 format!(
-                    "<div><div class=\"grid-label\">Input</div>{}</div><div><div class=\"grid-label\">Output</div>{}</div>",
+                    "<div><div class=\"grid-label\">Before</div>{}</div><div><div class=\"grid-label\">After</div>{}</div>",
                     render_grid(input, puzzle.grid_size, "grid-static", false),
                     render_grid(output, puzzle.grid_size, "grid-static", false),
                 ),
@@ -424,7 +423,6 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
               --legend-grid-size: calc((var(--legend-cell) * 4) + (var(--legend-gap) * 3));
             }}
             .challenge h2 {{ width: var(--duo-grid-size); margin: 0 auto 0.6rem; font-size: var(--font-heading); line-height: 1.2; }}
-            .challenge > p {{ width: var(--duo-grid-size); margin: 0 auto 0.9rem; font-size: var(--font-body); }}
             .grid {{ display: grid; gap: var(--puzzle-gap); }}
             .cell {{ width: var(--puzzle-cell); height: var(--puzzle-cell); border: 1px solid #ddd; background: #fff; }}
             .cell.active {{ background: var(--cell-on); }}
@@ -446,7 +444,6 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             button {{ padding: 8px 14px; font-size: var(--font-body); background: #111; color: #f8fafc; border: 1px solid #111; }}
             .debug-panel {{ margin-top: 12px; padding: 10px 12px; border: 1px dashed #cbd5f5; background: #f8fafc; font-size: var(--font-small); color: #334155; }}
             .legend {{ margin: 12px 0 16px; padding: 12px; border: 1px solid #e5e7eb; background: #f8fafc; }}
-            .legend-title {{ font-size: var(--font-subheading); font-weight: 600; margin: 0 auto 6px; width: var(--duo-grid-size); }}
             .legend-subtitle {{ font-size: var(--font-small); color: #6b7280; margin: 0 auto 10px; width: var(--duo-grid-size); }}
             .legend-items {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 10px; width: var(--duo-grid-size); margin: 0 auto; }}
             .legend-item {{ display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }}
@@ -484,8 +481,8 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
               }}
             }}
             @media (max-width: 400px) {{
-              .challenge h2, .challenge > p {{ width: var(--puzzle-grid-size); }}
-              .legend-title, .legend-subtitle, .legend-items, .pair-title, .turn-subtitle {{ width: var(--puzzle-grid-size); }}
+              .challenge h2 {{ width: var(--puzzle-grid-size); }}
+              .legend-subtitle, .legend-items, .pair-title, .turn-subtitle {{ width: var(--puzzle-grid-size); }}
               .legend-items {{ grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }}
               .pair-grids, .test-grids {{ grid-template-columns: 1fr; width: var(--puzzle-grid-size); gap: 12px; }}
               .transform-controls {{ grid-template-columns: 1fr; gap: 8px; }}
@@ -496,12 +493,11 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
         <body>
           <div class="challenge">
             <h2>Bot Defense Challenge</h2>
-            <p>Infer the rule from the examples, then complete the output grid.</p>
             {legend_html}
             {training_html}
             <div class="test-block">
               <div class="pair-title">Your turn</div>
-              <div class="turn-subtitle">Choose transform 1 and transform 2 to generate the output, then submit.</div>
+              <div class="turn-subtitle">Choose a transformation from each menu below.</div>
               <div class="test-grids">
                 <div class="transform-controls">
                   <label class="transform-control">
@@ -688,7 +684,7 @@ fn render_transform_legend(transforms: &[Transform]) -> String {
         })
         .collect();
     format!(
-        "<div class=\"legend\"><div class=\"legend-title\">Available transforms</div><div class=\"legend-subtitle\">Two of these are being applied to the input grids.</div><div class=\"legend-items\">{}</div></div>",
+        "<div class=\"legend\"><div class=\"legend-subtitle\">Two of these are being applied to the input grids.</div><div class=\"legend-items\">{}</div></div>",
         items
     )
 }

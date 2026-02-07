@@ -251,7 +251,7 @@ mod tests {
         let body = String::from_utf8(resp.into_body()).unwrap();
         assert!(body.contains("id=\"transform-1\""));
         assert!(body.contains("id=\"transform-2\""));
-        assert!(body.contains("Example 1"));
+        assert!(body.contains("Example"));
         assert!(!body.contains("Example 2"));
     }
 
