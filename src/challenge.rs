@@ -164,8 +164,8 @@ fn is_inverse_rotation_pair(a: Transform, b: Transform) -> bool {
     )
 }
 
-pub(crate) fn select_transform_pair(rng: &mut impl Rng) -> Vec<Transform> {
-    let mut options = vec![
+fn all_transforms() -> Vec<Transform> {
+    vec![
         Transform::RotateCw90,
         Transform::RotateCcw90,
         Transform::MirrorHorizontal,
@@ -178,7 +178,11 @@ pub(crate) fn select_transform_pair(rng: &mut impl Rng) -> Vec<Transform> {
         Transform::DropBottom,
         Transform::DropLeft,
         Transform::DropRight,
-    ];
+    ]
+}
+
+pub(crate) fn select_transform_pair(rng: &mut impl Rng) -> Vec<Transform> {
+    let mut options = all_transforms();
     loop {
         options.shuffle(rng);
         let a = options[0];
@@ -394,7 +398,8 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
         })
         .collect();
 
-    let legend_html = render_transform_legend(&seed.transforms);
+    let legend_transforms = all_transforms();
+    let legend_html = render_transform_legend(&legend_transforms);
     let html = format!(r#"
         <html>
         <head>
