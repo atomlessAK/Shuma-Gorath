@@ -357,7 +357,7 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
     let now = crate::admin::now_ts();
     let mut rng = rand::rng();
     let grid_size = 4u8;
-    let active_cells = rng.random_range(5..=7);
+    let active_cells = rng.random_range(7..=9);
     let transforms = select_transform_pair(&mut rng);
     let seed = ChallengeSeed {
         seed_id: format!("{:016x}", rng.random::<u64>()),
