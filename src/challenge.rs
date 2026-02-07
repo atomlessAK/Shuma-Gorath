@@ -437,13 +437,13 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             .grid-label {{ font-size: var(--font-small); color: #6b7280; margin-bottom: 6px; }}
             .test-block {{ margin-top: 20px; padding-top: 16px; border-top: 1px solid #eee; }}
             .test-grids {{ display: grid; grid-template-columns: repeat(2, var(--puzzle-grid-size)); gap: var(--duo-grid-gap); align-items: start; justify-content: center; width: var(--duo-grid-size); margin: 0 auto; }}
-            .transform-controls {{ margin-bottom: 8px; display: grid; gap: 8px; }}
-            .transform-control {{ display: grid; gap: 4px; }}
+            .transform-controls {{ grid-column: 1 / -1; margin-bottom: 8px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--duo-grid-gap); width: 100%; }}
+            .transform-control {{ display: grid; gap: 4px; min-width: 0; }}
             .transform-control span {{ font-size: var(--font-small); color: #475569; }}
             .transform-control select {{ font-size: var(--font-small); padding: 0.35rem 0.5rem; border: 1px solid #cbd5e1; background: #fff; color: #111; }}
             .submit-row {{ grid-column: 1 / -1; margin-top: 12px; }}
             .submit-row button {{ width: 100%; }}
-            button {{ padding: 8px 14px; font-size: var(--font-body); }}
+            button {{ padding: 8px 14px; font-size: var(--font-body); background: #111; color: #f8fafc; border: 1px solid #111; }}
             .debug-panel {{ margin-top: 12px; padding: 10px 12px; border: 1px dashed #cbd5f5; background: #f8fafc; font-size: var(--font-small); color: #334155; }}
             .legend {{ margin: 12px 0 16px; padding: 12px; border: 1px solid #e5e7eb; background: #f8fafc; }}
             .legend-title {{ font-size: var(--font-subheading); font-weight: 600; margin: 0 auto 6px; width: var(--duo-grid-size); }}
@@ -488,6 +488,7 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
               .legend-title, .legend-subtitle, .legend-items, .pair-title, .turn-subtitle {{ width: var(--puzzle-grid-size); }}
               .legend-items {{ grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }}
               .pair-grids, .test-grids {{ grid-template-columns: 1fr; width: var(--puzzle-grid-size); gap: 12px; }}
+              .transform-controls {{ grid-template-columns: 1fr; gap: 8px; }}
               .submit-row {{ grid-column: 1; }}
             }}
           </style>
@@ -502,42 +503,40 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
               <div class="pair-title">Your turn</div>
               <div class="turn-subtitle">Choose transform 1 and transform 2 to generate the output, then submit.</div>
               <div class="test-grids">
+                <div class="transform-controls">
+                  <label class="transform-control">
+                    <span>Transform 1</span>
+                    <select id="transform-1">
+                      <option value="">None</option>
+                      <option value="rotate_cw90">90° clockwise</option>
+                      <option value="rotate_ccw90">90° anticlockwise</option>
+                      <option value="mirror_horizontal">Mirror horizontally</option>
+                      <option value="mirror_vertical">Mirror vertically</option>
+                      <option value="shift_up">Shift up</option>
+                      <option value="shift_down">Shift down</option>
+                      <option value="shift_left">Shift left</option>
+                      <option value="shift_right">Shift right</option>
+                    </select>
+                  </label>
+                  <label class="transform-control">
+                    <span>Transform 2</span>
+                    <select id="transform-2">
+                      <option value="">None</option>
+                      <option value="rotate_cw90">90° clockwise</option>
+                      <option value="rotate_ccw90">90° anticlockwise</option>
+                      <option value="mirror_horizontal">Mirror horizontally</option>
+                      <option value="mirror_vertical">Mirror vertically</option>
+                      <option value="shift_up">Shift up</option>
+                      <option value="shift_down">Shift down</option>
+                      <option value="shift_left">Shift left</option>
+                      <option value="shift_right">Shift right</option>
+                    </select>
+                  </label>
+                </div>
                 <div>
-                  <div class="grid-label">Input</div>
                   {test_input}
                 </div>
                 <div>
-                  <div class="transform-controls">
-                    <label class="transform-control">
-                      <span>Transform 1</span>
-                      <select id="transform-1">
-                        <option value="">None</option>
-                        <option value="rotate_cw90">90° clockwise</option>
-                        <option value="rotate_ccw90">90° anticlockwise</option>
-                        <option value="mirror_horizontal">Mirror horizontally</option>
-                        <option value="mirror_vertical">Mirror vertically</option>
-                        <option value="shift_up">Shift up</option>
-                        <option value="shift_down">Shift down</option>
-                        <option value="shift_left">Shift left</option>
-                        <option value="shift_right">Shift right</option>
-                      </select>
-                    </label>
-                    <label class="transform-control">
-                      <span>Transform 2</span>
-                      <select id="transform-2">
-                        <option value="">None</option>
-                        <option value="rotate_cw90">90° clockwise</option>
-                        <option value="rotate_ccw90">90° anticlockwise</option>
-                        <option value="mirror_horizontal">Mirror horizontally</option>
-                        <option value="mirror_vertical">Mirror vertically</option>
-                        <option value="shift_up">Shift up</option>
-                        <option value="shift_down">Shift down</option>
-                        <option value="shift_left">Shift left</option>
-                        <option value="shift_right">Shift right</option>
-                      </select>
-                    </label>
-                  </div>
-                  <div class="grid-label">Output</div>
                   <div id="challenge-output-grid">
                     {test_output}
                   </div>
