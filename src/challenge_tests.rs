@@ -298,7 +298,7 @@ mod tests {
             .build();
         let resp = render_challenge(&req);
         let body = String::from_utf8(resp.into_body()).unwrap();
-        assert!(body.contains("Both Challenge"));
+        assert!(body.contains("Please Solve This"));
         assert!(!body.contains("id=\"transform-1\""));
         assert!(!body.contains("id=\"transform-2\""));
         assert!(body.contains("name=\"transform_1\""));
@@ -308,8 +308,8 @@ mod tests {
         assert!(body.contains("class=\"legend-pick-label\""));
         assert!(!body.contains("class=\"legend-table\""));
         assert!(!body.contains("class=\"legend-check\""));
-        assert!(body.contains("Which transforms were applied?"));
-        assert!(body.contains("<div class=\"legend-subtitle\">Choose 2</div>"));
+        assert!(!body.contains("Which transforms were applied?"));
+        assert!(body.contains("<div class=\"legend-subtitle\">Choose which 2 transforms were applied</div>"));
         assert!(!body.contains("Choose 2 transforms:"));
         assert!(!body.contains("Your turn"));
         assert!(!body.contains("Example 2"));
@@ -318,7 +318,7 @@ mod tests {
         assert!(body.contains("event.target.name === 'transform_1'"));
         assert!(body.contains("event.target.name === 'transform_2'"));
         let after_pos = body.find("After").unwrap();
-        let legend_pos = body.find("Which transforms were applied?").unwrap();
+        let legend_pos = body.find("Choose which 2 transforms were applied").unwrap();
         assert!(after_pos < legend_pos);
     }
 

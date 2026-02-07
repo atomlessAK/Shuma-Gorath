@@ -443,7 +443,6 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
               --duo-grid-size: calc((var(--puzzle-grid-size) * 2) + var(--duo-grid-gap));
               --legend-cell: clamp(8px, 1.2vw, 11px);
               --legend-gap: 2px;
-              --legend-grid-size: calc((var(--legend-cell) * 4) + (var(--legend-gap) * 3));
             }}
             .challenge h2 {{ width: var(--duo-grid-size); margin: 0 auto 0.6rem; font-size: var(--font-heading); line-height: 1.2; }}
             .grid {{ display: grid; gap: var(--puzzle-gap); }}
@@ -454,23 +453,22 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             .pair {{ margin-bottom: 16px; }}
             .pair-grids {{ display: grid; grid-template-columns: repeat(2, var(--puzzle-grid-size)); gap: var(--duo-grid-gap); align-items: flex-start; justify-content: center; width: var(--duo-grid-size); margin: 0 auto; }}
             .grid-label {{ font-size: var(--font-small); color: #6b7280; margin-bottom: 6px; }}
-            .test-block {{ margin-top: 20px; padding-top: 16px; border-top: 1px solid #eee; }}
+            .test-block {{ margin-top: 14px; padding-top: 0; border-top: 0; }}
             .test-grids {{ display: grid; grid-template-columns: repeat(2, var(--puzzle-grid-size)); gap: var(--duo-grid-gap); align-items: start; justify-content: center; width: var(--duo-grid-size); margin: 0 auto; }}
             .submit-row {{ grid-column: 1 / -1; margin-top: 12px; }}
             .submit-row button {{ width: 100%; }}
             button {{ padding: 8px 14px; font-size: var(--font-body); background: #111; color: #f8fafc; border: 1px solid #111; }}
             .legend {{ margin: 12px 0 16px; padding: 12px; border: 1px solid #e5e7eb; background: #f8fafc; }}
             .legend-fieldset {{ border: 0; margin: 0; padding: 0; min-width: 0; }}
-            .legend-title {{ font-size: var(--font-subheading); font-weight: 600; color: #111; margin: 0 auto 2px; width: var(--duo-grid-size); }}
             .legend-subtitle {{ font-size: var(--font-small); color: #6b7280; margin: 0 auto 10px; width: var(--duo-grid-size); }}
-            .legend-options {{ width: var(--duo-grid-size); margin: 0 auto; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }}
-            .legend-row {{ display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; border: 1px solid transparent; padding: 6px 4px; }}
+            .legend-options {{ width: var(--duo-grid-size); margin: 0 auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }}
+            .legend-row {{ display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; border: 1px solid transparent; padding: 0; }}
             .legend-row.is-selected {{ border-color: #111; background: #eef7f1; }}
             .legend-item {{ display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; width: 100%; }}
             .legend-picks {{ display: flex; align-items: center; gap: 10px; }}
             .legend-pick-label {{ display: inline-flex; align-items: center; gap: 4px; font-size: var(--font-small); color: #475569; cursor: pointer; }}
             .legend-pick-label input {{ width: 16px; height: 16px; margin: 0; accent-color: #111; cursor: pointer; }}
-            .legend-icon {{ position: relative; width: var(--legend-grid-size); height: var(--legend-grid-size); flex: 0 0 auto; }}
+            .legend-icon {{ position: relative; width: 100%; max-width: 100%; aspect-ratio: 1 / 1; flex: 0 0 auto; }}
             .legend-grid {{ position: absolute; inset: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--legend-gap); }}
             .legend-cell {{ border: 1px solid #e2e8f0; background: #fff; }}
             .legend-cell.on {{ background: var(--cell-on); }}
@@ -508,7 +506,7 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             }}
             @media (max-width: 400px) {{
               .challenge h2 {{ width: var(--puzzle-grid-size); }}
-              .legend-title, .legend-subtitle, .legend-options {{ width: var(--puzzle-grid-size); }}
+              .legend-subtitle, .legend-options {{ width: var(--puzzle-grid-size); }}
               .legend-options {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
               .pair-grids, .test-grids {{ grid-template-columns: 1fr; width: var(--puzzle-grid-size); gap: 12px; }}
               .submit-row {{ grid-column: 1; }}
@@ -517,24 +515,26 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
         </head>
         <body>
           <div class="challenge">
-            <h2>Both Challenge</h2>
+            <h2>Please Solve This</h2>
             {training_html}
-            {legend_html}
-            <div class="test-block">
-              <div class="test-grids">
-                <div>
-                  {test_input}
-                </div>
-                <div>
-                  <div id="challenge-output-grid">
-                    {test_output}
+            <div class="legend">
+              {legend_html}
+              <div class="test-block">
+                <div class="test-grids">
+                  <div>
+                    {test_input}
                   </div>
+                  <div>
+                    <div id="challenge-output-grid">
+                      {test_output}
+                    </div>
+                  </div>
+                  <form method="POST" action="/challenge" class="submit-row">
+                    <input type="hidden" name="seed" value="{seed_token}" />
+                    <input type="hidden" name="output" id="challenge-output" value="{empty_tritstring}" />
+                    <button type="submit">Submit</button>
+                  </form>
                 </div>
-                <form method="POST" action="/challenge" class="submit-row">
-                  <input type="hidden" name="seed" value="{seed_token}" />
-                  <input type="hidden" name="output" id="challenge-output" value="{empty_tritstring}" />
-                  <button type="submit">Submit</button>
-                </form>
               </div>
             </div>
           </div>
@@ -725,7 +725,7 @@ fn render_transform_legend(transforms: &[Transform]) -> String {
         })
         .collect();
     format!(
-        "<div class=\"legend\"><fieldset class=\"legend-fieldset\"><legend class=\"legend-title\">Which transforms were applied?</legend><div class=\"legend-subtitle\">Choose 2</div><div class=\"legend-options\">{}</div></fieldset></div>",
+        "<fieldset class=\"legend-fieldset\"><div class=\"legend-subtitle\">Choose which 2 transforms were applied</div><div class=\"legend-options\">{}</div></fieldset>",
         rows
     )
 }
