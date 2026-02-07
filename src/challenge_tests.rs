@@ -68,6 +68,25 @@ mod tests {
     }
 
     #[test]
+    fn generated_inputs_include_both_colors() {
+        let seed = ChallengeSeed {
+            seed_id: "seed-colors".to_string(),
+            issued_at: 1,
+            expires_at: 999,
+            ip_bucket: "bucket".to_string(),
+            grid_size: 4,
+            active_cells: 5,
+            transforms: vec![Transform::ShiftLeft, Transform::ShiftDown],
+            training_count: 2,
+            seed: 6789,
+        };
+        let puzzle = build_puzzle(&seed);
+        let has_one = puzzle.test_input.iter().any(|v| *v == 1);
+        let has_two = puzzle.test_input.iter().any(|v| *v == 2);
+        assert!(has_one && has_two);
+    }
+
+    #[test]
     fn transform_pair_avoids_inverse_rotation() {
         let mut rng = StdRng::seed_from_u64(123);
         for _ in 0..50 {

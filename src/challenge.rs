@@ -138,8 +138,21 @@ fn generate_grid(rng: &mut impl Rng, size: usize, active: usize) -> Vec<u8> {
     let mut grid = vec![0u8; size * size];
     let mut indices: Vec<usize> = (0..grid.len()).collect();
     indices.shuffle(rng);
-    for idx in indices.into_iter().take(active) {
-        grid[idx] = if rng.random::<bool>() { 1 } else { 2 };
+    let active_indices: Vec<usize> = indices.into_iter().take(active).collect();
+    let mut has_one = false;
+    let mut has_two = false;
+    for idx in &active_indices {
+        let val = if rng.random::<bool>() { 1 } else { 2 };
+        if val == 1 {
+            has_one = true;
+        } else {
+            has_two = true;
+        }
+        grid[*idx] = val;
+    }
+    if active >= 2 && (!has_one || !has_two) {
+        let idx = active_indices[0];
+        grid[idx] = if has_one { 2 } else { 1 };
     }
     grid
 }
@@ -410,21 +423,25 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             .legend-title {{ font-weight: 600; margin-bottom: 6px; }}
             .legend-subtitle {{ font-size: 12px; color: #6b7280; margin-bottom: 10px; }}
             .legend-items {{ display: flex; flex-wrap: wrap; gap: 12px; }}
-            .legend-item {{ display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid #e5e7eb; padding: 8px; }}
-            .legend-icon {{ position: relative; width: 64px; height: 64px; }}
+            .legend-item {{ display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid #e5e7eb; padding: 8px 10px; }}
+            .legend-icon {{ position: relative; width: 64px; height: 64px; flex: 0 0 auto; }}
             .legend-grid {{ position: absolute; inset: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; }}
             .legend-cell {{ border: 1px solid #e2e8f0; background: #fff; }}
             .legend-cell.on {{ background: var(--cell-on); }}
             .legend-cell.alt {{ background: var(--cell-alt); }}
-            .legend-arrow {{ position: absolute; right: 4px; top: 4px; font-size: 16px; color: #111; }}
-            .legend-line {{ position: absolute; background: transparent; border: 1px dashed rgb(255,205,235); }}
-            .legend-line.vert {{ top: 6px; bottom: 6px; width: 0; left: 50%; }}
-            .legend-line.horiz {{ left: 6px; right: 6px; height: 0; top: 50%; }}
-            .legend-shift-line {{ position: absolute; border: 1px dashed rgb(255,205,235); left: 6px; right: 6px; }}
-            .legend-shift-line.top {{ top: 18px; }}
-            .legend-shift-line.bottom {{ top: 30px; }}
-            .legend-shift-line.left {{ top: 6px; bottom: 6px; left: 18px; right: auto; width: 0; }}
-            .legend-shift-line.right {{ top: 6px; bottom: 6px; left: 30px; right: auto; width: 0; }}
+            .legend-symbol {{ width: 18px; text-align: center; font-size: 16px; color: #111; }}
+            .legend-line {{ position: absolute; border-top: 1px dashed rgb(255,205,235); left: 0; right: 0; }}
+            .legend-line.vert {{ border-top: 0; border-left: 1px dashed rgb(255,205,235); top: 0; bottom: 0; left: 50%; }}
+            .legend-line.line-h-0 {{ top: 0%; }}
+            .legend-line.line-h-25 {{ top: 25%; }}
+            .legend-line.line-h-50 {{ top: 50%; }}
+            .legend-line.line-h-75 {{ top: 75%; }}
+            .legend-line.line-h-100 {{ top: 100%; }}
+            .legend-line.line-v-0 {{ left: 0%; }}
+            .legend-line.line-v-25 {{ left: 25%; }}
+            .legend-line.line-v-50 {{ left: 50%; }}
+            .legend-line.line-v-75 {{ left: 75%; }}
+            .legend-line.line-v-100 {{ left: 100%; }}
             .legend-label {{ font-size: 12px; color: #111; }}
           </style>
         </head>
@@ -523,10 +540,10 @@ fn render_transform_legend(transforms: &[Transform]) -> String {
         .iter()
         .map(|transform| {
             let label = transform_label(transform);
-            let icon = render_transform_icon(transform);
+            let (icon, symbol) = render_transform_icon(transform);
             format!(
-                "<div class=\"legend-item\">{}<div class=\"legend-label\">{}</div></div>",
-                icon, label
+                "<div class=\"legend-item\">{}<div class=\"legend-symbol\">{}</div><div class=\"legend-label\">{}</div></div>",
+                icon, symbol, label
             )
         })
         .collect();
@@ -536,24 +553,37 @@ fn render_transform_legend(transforms: &[Transform]) -> String {
     )
 }
 
-fn render_transform_icon(transform: &Transform) -> String {
+fn render_transform_icon(transform: &Transform) -> (String, String) {
     let mut overlays = String::new();
     match transform {
-        Transform::RotateCw90 => overlays.push_str("<div class=\"legend-arrow\">↻</div>"),
-        Transform::RotateCcw90 => overlays.push_str("<div class=\"legend-arrow\">↺</div>"),
-        Transform::MirrorHorizontal => overlays.push_str("<div class=\"legend-line horiz\"></div>"),
-        Transform::MirrorVertical => overlays.push_str("<div class=\"legend-line vert\"></div>"),
-        Transform::ShiftUp => overlays.push_str("<div class=\"legend-shift-line top\"></div><div class=\"legend-shift-line bottom\"></div><div class=\"legend-arrow\">↑</div>"),
-        Transform::ShiftDown => overlays.push_str("<div class=\"legend-shift-line top\"></div><div class=\"legend-shift-line bottom\"></div><div class=\"legend-arrow\">↓</div>"),
-        Transform::ShiftLeft => overlays.push_str("<div class=\"legend-shift-line left\"></div><div class=\"legend-shift-line right\"></div><div class=\"legend-arrow\">←</div>"),
-        Transform::ShiftRight => overlays.push_str("<div class=\"legend-shift-line left\"></div><div class=\"legend-shift-line right\"></div><div class=\"legend-arrow\">→</div>"),
-        Transform::DropTop => overlays.push_str("<div class=\"legend-shift-line top\"></div><div class=\"legend-arrow\">↑</div>"),
-        Transform::DropBottom => overlays.push_str("<div class=\"legend-shift-line bottom\"></div><div class=\"legend-arrow\">↓</div>"),
-        Transform::DropLeft => overlays.push_str("<div class=\"legend-shift-line left\"></div><div class=\"legend-arrow\">←</div>"),
-        Transform::DropRight => overlays.push_str("<div class=\"legend-shift-line right\"></div><div class=\"legend-arrow\">→</div>"),
+        Transform::RotateCw90 => {
+            return (format!("<div class=\"legend-icon\">{}</div>", render_legend_grid()), "&#x21bb;".to_string());
+        }
+        Transform::RotateCcw90 => {
+            return (format!("<div class=\"legend-icon\">{}</div>", render_legend_grid()), "&#x21ba;".to_string());
+        }
+        Transform::MirrorHorizontal => overlays.push_str("<div class=\"legend-line line-h-50\"></div>"),
+        Transform::MirrorVertical => overlays.push_str("<div class=\"legend-line vert line-v-50\"></div>"),
+        Transform::ShiftUp => overlays.push_str("<div class=\"legend-line line-h-25\"></div>"),
+        Transform::ShiftDown => overlays.push_str("<div class=\"legend-line line-h-75\"></div>"),
+        Transform::ShiftLeft => overlays.push_str("<div class=\"legend-line vert line-v-25\"></div>"),
+        Transform::ShiftRight => overlays.push_str("<div class=\"legend-line vert line-v-75\"></div>"),
+        Transform::DropTop => overlays.push_str("<div class=\"legend-line line-h-0\"></div>"),
+        Transform::DropBottom => overlays.push_str("<div class=\"legend-line line-h-100\"></div>"),
+        Transform::DropLeft => overlays.push_str("<div class=\"legend-line vert line-v-0\"></div>"),
+        Transform::DropRight => overlays.push_str("<div class=\"legend-line vert line-v-100\"></div>"),
     }
     let grid = render_legend_grid();
-    format!("<div class=\"legend-icon\">{}{}</div>", grid, overlays)
+    (
+        format!("<div class=\"legend-icon\">{}{}</div>", grid, overlays),
+        match transform {
+            Transform::ShiftUp | Transform::DropTop => "&#x2191;".to_string(),
+            Transform::ShiftDown | Transform::DropBottom => "&#x2193;".to_string(),
+            Transform::ShiftLeft | Transform::DropLeft => "&#x2190;".to_string(),
+            Transform::ShiftRight | Transform::DropRight => "&#x2192;".to_string(),
+            _ => "".to_string(),
+        },
+    )
 }
 
 fn render_legend_grid() -> String {

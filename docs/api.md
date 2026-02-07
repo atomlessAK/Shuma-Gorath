@@ -23,6 +23,17 @@ If `FORWARDED_IP_SECRET` is set, any request that relies on `X-Forwarded-For` mu
 - `GET /challenge` - Dev-only challenge page (TEST_MODE only)
 - `POST /challenge` - Challenge answer submission
 
+### 🐙 Challenge Submission Format
+
+`POST /challenge` expects:
+- `seed` (signed challenge seed)
+- `output` (base-3 string, length 16 for 4x4 grids)
+
+Output encoding:
+- `0` = empty
+- `1` = black cell
+- `2` = pink cell
+
 ### 🐙 Health Check Example
 
 ```bash
