@@ -298,8 +298,9 @@ mod tests {
             .build();
         let resp = render_challenge(&req);
         let body = String::from_utf8(resp.into_body()).unwrap();
-        assert!(body.contains("id=\"transform-1\""));
-        assert!(body.contains("id=\"transform-2\""));
+        assert!(!body.contains("id=\"transform-1\""));
+        assert!(!body.contains("id=\"transform-2\""));
+        assert!(body.contains("class=\"legend-check\""));
         assert!(body.contains("Which 2 of these transforms are being applied?"));
         assert!(body.contains("Choose 2 transforms:"));
         assert!(!body.contains("Your turn"));
@@ -307,6 +308,12 @@ mod tests {
         assert!(body.contains("--legend-columns:3;"));
         assert!(!body.contains("Mirror horizontally"));
         assert!(!body.contains("Mirror vertically"));
+        assert!(body.contains("selectedCount > 2"));
+        let after_pos = body.find("After").unwrap();
+        let legend_pos = body
+            .find("Which 2 of these transforms are being applied?")
+            .unwrap();
+        assert!(after_pos < legend_pos);
     }
 
     #[test]

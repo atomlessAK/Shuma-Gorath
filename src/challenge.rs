@@ -431,7 +431,6 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
 
     let legend_transforms = enabled_transforms();
     let legend_html = render_transform_legend(&legend_transforms);
-    let transform_options = render_transform_options(&legend_transforms);
     let html = format!(r#"
         <html>
         <head>
@@ -466,16 +465,17 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             .grid-label {{ font-size: var(--font-small); color: #6b7280; margin-bottom: 6px; }}
             .test-block {{ margin-top: 20px; padding-top: 16px; border-top: 1px solid #eee; }}
             .test-grids {{ display: grid; grid-template-columns: repeat(2, var(--puzzle-grid-size)); gap: var(--duo-grid-gap); align-items: start; justify-content: center; width: var(--duo-grid-size); margin: 0 auto; }}
-            .transform-controls {{ grid-column: 1 / -1; margin-bottom: 8px; display: grid; grid-template-columns: 1fr; gap: 8px; width: 100%; }}
-            .transform-control {{ display: grid; gap: 4px; min-width: 0; }}
-            .transform-control select {{ font-size: var(--font-small); padding: 0.35rem 0.5rem; border: 1px solid #cbd5e1; background: #fff; color: #111; }}
             .submit-row {{ grid-column: 1 / -1; margin-top: 12px; }}
             .submit-row button {{ width: 100%; }}
             button {{ padding: 8px 14px; font-size: var(--font-body); background: #111; color: #f8fafc; border: 1px solid #111; }}
             .legend {{ margin: 12px 0 16px; padding: 12px; border: 1px solid #e5e7eb; background: #f8fafc; }}
             .legend-subtitle {{ font-size: var(--font-small); color: #6b7280; margin: 0 auto 10px; width: var(--duo-grid-size); }}
             .legend-items {{ display: flex; flex-wrap: wrap; gap: 8px 10px; width: var(--duo-grid-size); margin: 0 auto; align-items: flex-start; }}
-            .legend-item {{ display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; flex: 1 1 calc((100% - (var(--legend-columns) - 1) * 10px) / var(--legend-columns)); max-width: calc((100% - (var(--legend-columns) - 1) * 10px) / var(--legend-columns)); }}
+            .legend-choice {{ display: flex; justify-content: center; min-width: 0; flex: 1 1 calc((100% - (var(--legend-columns) - 1) * 10px) / var(--legend-columns)); max-width: calc((100% - (var(--legend-columns) - 1) * 10px) / var(--legend-columns)); cursor: pointer; }}
+            .legend-choice input {{ position: absolute; opacity: 0; pointer-events: none; }}
+            .legend-item {{ display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; width: 100%; padding: 4px; border: 1px solid transparent; }}
+            .legend-choice.selected .legend-item {{ border-color: #111; background: #eef7f1; }}
+            .legend-choice.locked:not(.selected) {{ opacity: 0.65; cursor: not-allowed; }}
             .legend-icon {{ position: relative; width: var(--legend-grid-size); height: var(--legend-grid-size); flex: 0 0 auto; }}
             .legend-grid {{ position: absolute; inset: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--legend-gap); }}
             .legend-cell {{ border: 1px solid #e2e8f0; background: #fff; }}
@@ -514,7 +514,6 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
               .legend-subtitle, .legend-items, .turn-subtitle {{ width: var(--puzzle-grid-size); }}
               .legend-items {{ --legend-columns: 2; gap: 8px; }}
               .pair-grids, .test-grids {{ grid-template-columns: 1fr; width: var(--puzzle-grid-size); gap: 12px; }}
-              .transform-controls {{ grid-template-columns: 1fr; gap: 8px; }}
               .submit-row {{ grid-column: 1; }}
             }}
           </style>
@@ -522,23 +521,11 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
         <body>
           <div class="challenge">
             <h2>Bot Defense Challenge</h2>
-            {legend_html}
             {training_html}
+            {legend_html}
             <div class="test-block">
               <div class="turn-subtitle">Choose 2 transforms:</div>
               <div class="test-grids">
-                <div class="transform-controls">
-                  <label class="transform-control">
-                    <select id="transform-1" aria-label="Transform 1">
-                      {transform_options}
-                    </select>
-                  </label>
-                  <label class="transform-control">
-                    <select id="transform-2" aria-label="Transform 2">
-                      {transform_options}
-                    </select>
-                  </label>
-                </div>
                 <div>
                   {test_input}
                 </div>
@@ -561,8 +548,7 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             const output = Array(size * size).fill(0);
             const outputField = document.getElementById('challenge-output');
             const outputCells = Array.from(document.querySelectorAll('#challenge-output-grid .cell'));
-            const transform1 = document.getElementById('transform-1');
-            const transform2 = document.getElementById('transform-2');
+            const transformChecks = Array.from(document.querySelectorAll('.legend-check'));
             function updateOutput() {{
               outputField.value = output.join('');
             }}
@@ -572,6 +558,21 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
                 cell.classList.add('active');
               }} else if (value === 2) {{
                 cell.classList.add('active-alt');
+              }}
+            }}
+            function selectedTransforms() {{
+              return transformChecks.filter((check) => check.checked).map((check) => check.value);
+            }}
+            function syncLegendState() {{
+              const selectedCount = transformChecks.filter((check) => check.checked).length;
+              for (const check of transformChecks) {{
+                const locked = selectedCount >= 2 && !check.checked;
+                check.disabled = locked;
+                const choice = check.closest('.legend-choice');
+                if (choice) {{
+                  choice.classList.toggle('selected', check.checked);
+                  choice.classList.toggle('locked', locked);
+                }}
               }}
             }}
             function applyTransform(grid, transform) {{
@@ -629,7 +630,7 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
               return out;
             }}
             function renderOutput() {{
-              const selected = [transform1.value, transform2.value].filter(Boolean);
+              const selected = selectedTransforms();
               let current = selected.length ? baseInput.slice() : Array(size * size).fill(0);
               for (const t of selected) {{
                 current = applyTransform(current, t);
@@ -640,9 +641,17 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
               }}
               updateOutput();
             }}
+            function onLegendChange(event) {{
+              const selectedCount = transformChecks.filter((check) => check.checked).length;
+              if (selectedCount > 2) {{
+                event.target.checked = false;
+              }}
+              syncLegendState();
+              renderOutput();
+            }}
             updateOutput();
-            transform1.addEventListener('change', renderOutput);
-            transform2.addEventListener('change', renderOutput);
+            transformChecks.forEach((check) => check.addEventListener('change', onLegendChange));
+            syncLegendState();
             renderOutput();
           </script>
         </body>
@@ -653,7 +662,6 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
     test_input = render_grid(&puzzle.test_input, puzzle.grid_size, "grid-static", false),
     test_output = render_grid(&empty_output, puzzle.grid_size, "grid-output", false),
     test_input_json = test_input_json,
-    transform_options = transform_options,
     seed_token = seed_token,
     grid_size = grid_size,
     empty_tritstring = grid_to_tritstring(&empty_output),
@@ -695,18 +703,6 @@ fn transform_option_label(transform: Transform) -> &'static str {
     }
 }
 
-fn render_transform_options(transforms: &[Transform]) -> String {
-    let mut options = String::from("<option value=\"\">None</option>");
-    for transform in transforms {
-        options.push_str(&format!(
-            "<option value=\"{}\">{}</option>",
-            transform_value(*transform),
-            transform_option_label(*transform)
-        ));
-    }
-    options
-}
-
 fn render_transform_legend(transforms: &[Transform]) -> String {
     let columns = legend_columns_for_count(transforms.len());
     let items: String = transforms
@@ -714,9 +710,11 @@ fn render_transform_legend(transforms: &[Transform]) -> String {
         .map(|transform| {
             let label = transform_legend_label(transform);
             let icon = render_transform_icon(transform);
+            let value = transform_value(*transform);
+            let aria_label = transform_option_label(*transform);
             format!(
-                "<div class=\"legend-item\"><div class=\"legend-label\">{}</div>{}</div>",
-                label, icon
+                "<label class=\"legend-choice\"><input type=\"checkbox\" class=\"legend-check\" value=\"{}\" aria-label=\"{}\" /><span class=\"legend-item\"><span class=\"legend-label\">{}</span>{}</span></label>",
+                value, aria_label, label, icon
             )
         })
         .collect();
