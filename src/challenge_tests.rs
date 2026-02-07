@@ -102,6 +102,27 @@ mod tests {
     }
 
     #[test]
+    fn transform_pair_uses_only_eight_transforms() {
+        let mut rng = StdRng::seed_from_u64(321);
+        for _ in 0..100 {
+            let pair = select_transform_pair(&mut rng);
+            for t in pair {
+                assert!(matches!(
+                    t,
+                    Transform::RotateCw90
+                        | Transform::RotateCcw90
+                        | Transform::MirrorHorizontal
+                        | Transform::MirrorVertical
+                        | Transform::ShiftUp
+                        | Transform::ShiftDown
+                        | Transform::ShiftLeft
+                        | Transform::ShiftRight
+                ));
+            }
+        }
+    }
+
+    #[test]
     fn generate_pair_avoids_identity_output() {
         let mut rng = StdRng::seed_from_u64(999);
         let transforms = vec![Transform::MirrorHorizontal, Transform::ShiftLeft];

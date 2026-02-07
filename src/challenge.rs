@@ -174,10 +174,6 @@ fn all_transforms() -> Vec<Transform> {
         Transform::ShiftDown,
         Transform::ShiftLeft,
         Transform::ShiftRight,
-        Transform::DropTop,
-        Transform::DropBottom,
-        Transform::DropLeft,
-        Transform::DropRight,
     ]
 }
 
@@ -428,7 +424,7 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             .legend-title {{ font-weight: 600; margin-bottom: 6px; }}
             .legend-subtitle {{ font-size: 12px; color: #6b7280; margin-bottom: 10px; }}
             .legend-items {{ display: flex; flex-wrap: wrap; gap: 12px; }}
-            .legend-item {{ display: flex; flex-direction: column; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; padding: 8px; min-width: 84px; }}
+            .legend-item {{ display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 64px; }}
             .legend-icon {{ position: relative; width: 64px; height: 64px; flex: 0 0 auto; }}
             .legend-grid {{ position: absolute; inset: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; }}
             .legend-cell {{ border: 1px solid #e2e8f0; background: #fff; }}
@@ -446,7 +442,7 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             .legend-line.line-v-50 {{ left: 50%; }}
             .legend-line.line-v-75 {{ left: 75%; }}
             .legend-line.line-v-100 {{ left: 100%; }}
-            .legend-arrow {{ position: absolute; color: #111; font-size: 16px; line-height: 1; }}
+            .legend-arrow {{ position: absolute; color: #00e64d; font-size: 16px; line-height: 1; }}
             .legend-arrow.arrow-center {{ top: 50%; left: 50%; transform: translate(-50%, -50%); }}
             .legend-arrow.arrow-up {{ top: 6px; left: 50%; transform: translateX(-50%); }}
             .legend-arrow.arrow-down {{ bottom: 6px; left: 50%; transform: translateX(-50%); }}
@@ -565,10 +561,10 @@ fn render_transform_legend(transforms: &[Transform]) -> String {
 
 fn transform_legend_label(transform: &Transform) -> &'static str {
     match transform {
-        Transform::RotateCw90 | Transform::RotateCcw90 => "90°",
+        Transform::RotateCw90 | Transform::RotateCcw90 => "90&#176;",
         Transform::MirrorHorizontal | Transform::MirrorVertical => "mirror",
         Transform::ShiftUp | Transform::ShiftDown | Transform::ShiftLeft | Transform::ShiftRight => "shift",
-        Transform::DropTop | Transform::DropBottom | Transform::DropLeft | Transform::DropRight => "drop",
+        Transform::DropTop | Transform::DropBottom | Transform::DropLeft | Transform::DropRight => "shift",
     }
 }
 
