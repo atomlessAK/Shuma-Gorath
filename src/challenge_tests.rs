@@ -26,8 +26,8 @@ mod tests {
         (1u8..=16u8).collect()
     }
 
-    fn grid_to_bitstring(grid: &[u8]) -> String {
-        grid.iter().map(|v| if *v > 0 { '1' } else { '0' }).collect()
+    fn grid_to_tritstring(grid: &[u8]) -> String {
+        grid.iter().map(|v| char::from(b'0' + *v)).collect()
     }
 
     #[derive(Default)]
@@ -143,22 +143,23 @@ mod tests {
     }
 
     #[test]
-    fn parse_submission_accepts_bitstring_and_csv() {
-        let bitstring = "1000000000000001";
-        let parsed = parse_submission(bitstring, 4).unwrap();
+    fn parse_submission_accepts_tritstring() {
+        let tritstring = "1200000000000002";
+        let parsed = parse_submission(tritstring, 4).unwrap();
         assert_eq!(parsed[0], 1);
-        assert_eq!(parsed[15], 1);
-
-        let csv = "0,15";
-        let parsed_csv = parse_submission(csv, 4).unwrap();
-        assert_eq!(parsed_csv[0], 1);
-        assert_eq!(parsed_csv[15], 1);
+        assert_eq!(parsed[15], 2);
     }
 
     #[test]
     fn parse_submission_rejects_invalid_length() {
         let err = parse_submission("10", 4).unwrap_err();
         assert_eq!(err, "invalid length");
+    }
+
+    #[test]
+    fn parse_submission_rejects_csv_format() {
+        let err = parse_submission("0,15", 4).unwrap_err();
+        assert_eq!(err, "invalid format");
     }
 
     #[test]
@@ -215,7 +216,7 @@ mod tests {
             seed: 9999,
         };
         let puzzle = build_puzzle(&seed);
-        let output = grid_to_bitstring(&puzzle.test_output);
+        let output = grid_to_tritstring(&puzzle.test_output);
         let seed_token = make_seed_token(&seed);
         let body = format!("seed={}&output={}", seed_token, output);
         let req = Request::builder()
@@ -244,7 +245,7 @@ mod tests {
             seed: 4242,
         };
         let puzzle = build_puzzle(&seed);
-        let mut output = grid_to_bitstring(&puzzle.test_output);
+        let mut output = grid_to_tritstring(&puzzle.test_output);
         output.replace_range(0..1, if &output[0..1] == "1" { "0" } else { "1" });
         let seed_token = make_seed_token(&seed);
         let body = format!("seed={}&output={}", seed_token, output);
@@ -256,5 +257,13 @@ mod tests {
             .build();
         let resp = handle_challenge_submit(&store, &req);
         assert_eq!(*resp.status(), 403u16);
+    }
+
+    #[test]
+    fn transform_shift_left_preserves_alt_cell() {
+        let mut grid = vec![0u8; 16];
+        grid[1] = 2;
+        let out = apply_transform(&grid, 4, Transform::ShiftLeft);
+        assert_eq!(out[0], 2);
     }
 }

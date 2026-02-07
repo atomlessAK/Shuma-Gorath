@@ -139,7 +139,7 @@ fn generate_grid(rng: &mut impl Rng, size: usize, active: usize) -> Vec<u8> {
     let mut indices: Vec<usize> = (0..grid.len()).collect();
     indices.shuffle(rng);
     for idx in indices.into_iter().take(active) {
-        grid[idx] = 1;
+        grid[idx] = if rng.random::<bool>() { 1 } else { 2 };
     }
     grid
 }
@@ -290,31 +290,25 @@ pub(crate) fn parse_submission(input: &str, size: usize) -> Result<Vec<u8>, &'st
     if trimmed.is_empty() {
         return Err("invalid length");
     }
-    let is_bitstring = trimmed.chars().all(|c| c == '0' || c == '1');
-    if is_bitstring {
-        if trimmed.len() != expected {
-            return Err("invalid length");
-        }
-        let out = trimmed.chars().map(|c| if c == '1' { 1 } else { 0 }).collect();
-        return Ok(out);
+    if !trimmed.chars().all(|c| c == '0' || c == '1' || c == '2') {
+        return Err("invalid format");
     }
-    let mut out = vec![0u8; expected];
-    for part in trimmed.split(',') {
-        let p = part.trim();
-        if p.is_empty() {
-            continue;
-        }
-        let idx = p.parse::<usize>().map_err(|_| "invalid index")?;
-        if idx >= expected {
-            return Err("invalid index");
-        }
-        out[idx] = 1;
+    if trimmed.len() != expected {
+        return Err("invalid length");
     }
+    let out = trimmed
+        .chars()
+        .map(|c| match c {
+            '0' => 0,
+            '1' => 1,
+            _ => 2,
+        })
+        .collect();
     Ok(out)
 }
 
-fn grid_to_bitstring(grid: &[u8]) -> String {
-    grid.iter().map(|v| if *v > 0 { '1' } else { '0' }).collect()
+fn grid_to_tritstring(grid: &[u8]) -> String {
+    grid.iter().map(|v| char::from(b'0' + *v)).collect()
 }
 
 fn render_grid(grid: &[u8], size: usize, class_name: &str, clickable: bool) -> String {
@@ -326,8 +320,10 @@ fn render_grid(grid: &[u8], size: usize, class_name: &str, clickable: bool) -> S
     ));
     for (idx, val) in grid.iter().enumerate() {
         let mut classes = String::from("cell");
-        if *val > 0 {
+        if *val == 1 {
             classes.push_str(" active");
+        } else if *val == 2 {
+            classes.push_str(" active-alt");
         }
         if clickable {
             classes.push_str(" clickable");
@@ -348,7 +344,7 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
     let now = crate::admin::now_ts();
     let mut rng = rand::rng();
     let grid_size = 4u8;
-    let active_cells = rng.random_range(3..=6);
+    let active_cells = rng.random_range(5..=7);
     let transforms = select_transform_pair(&mut rng);
     let seed = ChallengeSeed {
         seed_id: format!("{:016x}", rng.random::<u64>()),
@@ -385,15 +381,18 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
         })
         .collect();
 
+    let legend_html = render_transform_legend(&seed.transforms);
     let html = format!(r#"
         <html>
         <head>
           <style>
             body {{ font-family: sans-serif; background: #f7f7f7; margin: 24px; color: #111; }}
             .challenge {{ max-width: 900px; margin: 0 auto; background: #fff; padding: 24px; border: 1px solid #e5e7eb; }}
+            :root {{ --cell-on: #111; --cell-alt: rgb(255,205,235); }}
             .grid {{ display: grid; grid-template-columns: repeat(4, 28px); gap: 4px; }}
             .cell {{ width: 28px; height: 28px; border: 1px solid #ddd; background: #fff; }}
-            .cell.active {{ background: #111; }}
+            .cell.active {{ background: var(--cell-on); }}
+            .cell.active-alt {{ background: var(--cell-alt); }}
             .cell.clickable {{ cursor: pointer; }}
             .pair {{ margin-bottom: 16px; }}
             .pair-title {{ font-weight: 600; margin-bottom: 8px; }}
@@ -406,12 +405,34 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             .grid-output .cell {{ cursor: pointer; }}
             .grid-output .cell.clickable {{ cursor: pointer; }}
             button {{ padding: 8px 14px; font-size: 14px; }}
+            .debug-panel {{ margin-top: 12px; padding: 10px 12px; border: 1px dashed #cbd5f5; background: #f8fafc; font-size: 12px; color: #334155; }}
+            .legend {{ margin: 12px 0 16px; padding: 12px; border: 1px solid #e5e7eb; background: #f8fafc; }}
+            .legend-title {{ font-weight: 600; margin-bottom: 6px; }}
+            .legend-subtitle {{ font-size: 12px; color: #6b7280; margin-bottom: 10px; }}
+            .legend-items {{ display: flex; flex-wrap: wrap; gap: 12px; }}
+            .legend-item {{ display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid #e5e7eb; padding: 8px; }}
+            .legend-icon {{ position: relative; width: 64px; height: 64px; }}
+            .legend-grid {{ position: absolute; inset: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; }}
+            .legend-cell {{ border: 1px solid #e2e8f0; background: #fff; }}
+            .legend-cell.on {{ background: var(--cell-on); }}
+            .legend-cell.alt {{ background: var(--cell-alt); }}
+            .legend-arrow {{ position: absolute; right: 4px; top: 4px; font-size: 16px; color: #111; }}
+            .legend-line {{ position: absolute; background: transparent; border: 1px dashed rgb(255,205,235); }}
+            .legend-line.vert {{ top: 6px; bottom: 6px; width: 0; left: 50%; }}
+            .legend-line.horiz {{ left: 6px; right: 6px; height: 0; top: 50%; }}
+            .legend-shift-line {{ position: absolute; border: 1px dashed rgb(255,205,235); left: 6px; right: 6px; }}
+            .legend-shift-line.top {{ top: 18px; }}
+            .legend-shift-line.bottom {{ top: 30px; }}
+            .legend-shift-line.left {{ top: 6px; bottom: 6px; left: 18px; right: auto; width: 0; }}
+            .legend-shift-line.right {{ top: 6px; bottom: 6px; left: 30px; right: auto; width: 0; }}
+            .legend-label {{ font-size: 12px; color: #111; }}
           </style>
         </head>
         <body>
           <div class="challenge">
             <h2>Human Verification Challenge</h2>
             <p>Infer the rule from the examples, then complete the output grid.</p>
+            {legend_html}
             {training_html}
             <div class="test-block">
               <div class="pair-title">Your turn</div>
@@ -428,9 +449,12 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
                 </div>
                 <form method="POST" action="/challenge" class="submit-row">
                   <input type="hidden" name="seed" value="{seed_token}" />
-                  <input type="hidden" name="output" id="challenge-output" value="{empty_bitstring}" />
+                  <input type="hidden" name="output" id="challenge-output" value="{empty_tritstring}" />
                   <button type="submit">Submit</button>
                 </form>
+              </div>
+              <div class="debug-panel">
+                Debug transforms: {debug_transforms}
               </div>
             </div>
           </div>
@@ -441,6 +465,14 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             function updateOutput() {{
               outputField.value = output.join('');
             }}
+            function applyCellState(cell, value) {{
+              cell.classList.remove('active', 'active-alt');
+              if (value === 1) {{
+                cell.classList.add('active');
+              }} else if (value === 2) {{
+                cell.classList.add('active-alt');
+              }}
+            }}
             updateOutput();
             const outputGrid = document.getElementById('challenge-output-grid');
             outputGrid.addEventListener('click', (event) => {{
@@ -449,22 +481,100 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
                 return;
               }}
               const idx = parseInt(cell.dataset.idx, 10);
-              output[idx] = output[idx] ? 0 : 1;
-              cell.classList.toggle('active');
+              output[idx] = (output[idx] + 1) % 3;
+              applyCellState(cell, output[idx]);
               updateOutput();
             }});
           </script>
         </body>
         </html>
     "#,
+    legend_html = legend_html,
     training_html = training_html,
     test_input = render_grid(&puzzle.test_input, puzzle.grid_size, "grid-static", false),
     test_output = render_grid(&empty_output, puzzle.grid_size, "grid-output", true),
     seed_token = seed_token,
     grid_size = grid_size,
-    empty_bitstring = grid_to_bitstring(&empty_output),
+    empty_tritstring = grid_to_tritstring(&empty_output),
+    debug_transforms = seed.transforms.iter().map(transform_label).collect::<Vec<_>>().join(" then "),
     );
     Response::new(200, html)
+}
+
+fn transform_label(transform: &Transform) -> &'static str {
+    match transform {
+        Transform::RotateCw90 => "rotate 90 deg clockwise",
+        Transform::RotateCcw90 => "rotate 90 deg counter-clockwise",
+        Transform::MirrorHorizontal => "mirror horizontally",
+        Transform::MirrorVertical => "mirror vertically",
+        Transform::ShiftUp => "shift up 1 row",
+        Transform::ShiftDown => "shift down 1 row",
+        Transform::ShiftLeft => "shift left 1 column",
+        Transform::ShiftRight => "shift right 1 column",
+        Transform::DropTop => "drop top row",
+        Transform::DropBottom => "drop bottom row",
+        Transform::DropLeft => "drop left column",
+        Transform::DropRight => "drop right column",
+    }
+}
+
+fn render_transform_legend(transforms: &[Transform]) -> String {
+    let items: String = transforms
+        .iter()
+        .map(|transform| {
+            let label = transform_label(transform);
+            let icon = render_transform_icon(transform);
+            format!(
+                "<div class=\"legend-item\">{}<div class=\"legend-label\">{}</div></div>",
+                icon, label
+            )
+        })
+        .collect();
+    format!(
+        "<div class=\"legend\"><div class=\"legend-title\">Available transforms</div><div class=\"legend-subtitle\">Two of these are being applied to the input grids.</div><div class=\"legend-items\">{}</div></div>",
+        items
+    )
+}
+
+fn render_transform_icon(transform: &Transform) -> String {
+    let mut overlays = String::new();
+    match transform {
+        Transform::RotateCw90 => overlays.push_str("<div class=\"legend-arrow\">↻</div>"),
+        Transform::RotateCcw90 => overlays.push_str("<div class=\"legend-arrow\">↺</div>"),
+        Transform::MirrorHorizontal => overlays.push_str("<div class=\"legend-line horiz\"></div>"),
+        Transform::MirrorVertical => overlays.push_str("<div class=\"legend-line vert\"></div>"),
+        Transform::ShiftUp => overlays.push_str("<div class=\"legend-shift-line top\"></div><div class=\"legend-shift-line bottom\"></div><div class=\"legend-arrow\">↑</div>"),
+        Transform::ShiftDown => overlays.push_str("<div class=\"legend-shift-line top\"></div><div class=\"legend-shift-line bottom\"></div><div class=\"legend-arrow\">↓</div>"),
+        Transform::ShiftLeft => overlays.push_str("<div class=\"legend-shift-line left\"></div><div class=\"legend-shift-line right\"></div><div class=\"legend-arrow\">←</div>"),
+        Transform::ShiftRight => overlays.push_str("<div class=\"legend-shift-line left\"></div><div class=\"legend-shift-line right\"></div><div class=\"legend-arrow\">→</div>"),
+        Transform::DropTop => overlays.push_str("<div class=\"legend-shift-line top\"></div><div class=\"legend-arrow\">↑</div>"),
+        Transform::DropBottom => overlays.push_str("<div class=\"legend-shift-line bottom\"></div><div class=\"legend-arrow\">↓</div>"),
+        Transform::DropLeft => overlays.push_str("<div class=\"legend-shift-line left\"></div><div class=\"legend-arrow\">←</div>"),
+        Transform::DropRight => overlays.push_str("<div class=\"legend-shift-line right\"></div><div class=\"legend-arrow\">→</div>"),
+    }
+    let grid = render_legend_grid();
+    format!("<div class=\"legend-icon\">{}{}</div>", grid, overlays)
+}
+
+fn render_legend_grid() -> String {
+    let mut html = String::from("<div class=\"legend-grid\">");
+    let pattern = [
+        1u8, 2u8, 0u8, 0u8,
+        1u8, 0u8, 0u8, 0u8,
+        0u8, 0u8, 0u8, 0u8,
+        0u8, 0u8, 0u8, 0u8,
+    ];
+    for val in pattern.iter() {
+        let mut classes = "legend-cell".to_string();
+        if *val == 1 {
+            classes.push_str(" on");
+        } else if *val == 2 {
+            classes.push_str(" alt");
+        }
+        html.push_str(&format!("<div class=\"{}\"></div>", classes));
+    }
+    html.push_str("</div>");
+    html
 }
 
 pub(crate) fn serve_challenge_page(req: &Request, test_mode: bool) -> Response {
