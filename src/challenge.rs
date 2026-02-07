@@ -491,7 +491,7 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             .legend-arrow.arrow-down {{ bottom: 0; left: 50%; transform: translateX(-50%); }}
             .legend-arrow.arrow-left {{ left: 0; top: 50%; transform: translateY(-50%); }}
             .legend-arrow.arrow-right {{ right: 0; top: 50%; transform: translateY(-50%); }}
-            .legend-label {{ position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100%; text-align: center; font-size: var(--font-small); color: #111; text-transform: uppercase; line-height: 1; z-index: 2; pointer-events: none; }}
+            .legend-label {{ position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100%; text-align: center; font-size: var(--font-small); color: #111; text-transform: capitalize; line-height: 1; z-index: 2; pointer-events: none; }}
             @media (max-width: 640px) {{
               .legend-options {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
             }}
