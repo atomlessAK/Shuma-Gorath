@@ -7,6 +7,30 @@ use std::env;
 use serde::{Serialize, Deserialize};
 use crate::challenge::KeyValueStore;
 
+/// Weighted signal contributions for the unified botness score.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BotnessWeights {
+    #[serde(default = "default_botness_weight_js_required")]
+    pub js_required: u8,
+    #[serde(default = "default_botness_weight_geo_risk")]
+    pub geo_risk: u8,
+    #[serde(default = "default_botness_weight_rate_medium")]
+    pub rate_medium: u8,
+    #[serde(default = "default_botness_weight_rate_high")]
+    pub rate_high: u8,
+}
+
+impl Default for BotnessWeights {
+    fn default() -> Self {
+        BotnessWeights {
+            js_required: default_botness_weight_js_required(),
+            geo_risk: default_botness_weight_geo_risk(),
+            rate_medium: default_botness_weight_rate_medium(),
+            rate_high: default_botness_weight_rate_high(),
+        }
+    }
+}
+
 /// Ban duration settings per ban type (in seconds)
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BanDurations {
@@ -93,6 +117,10 @@ pub struct Config {
     pub pow_ttl_seconds: u64,           // PoW seed expiry in seconds
     #[serde(default = "default_challenge_threshold")]
     pub challenge_risk_threshold: u8,   // Risk score threshold for serving challenges
+    #[serde(default = "default_maze_threshold")]
+    pub botness_maze_threshold: u8,     // Risk score threshold for sending likely bots to maze
+    #[serde(default)]
+    pub botness_weights: BotnessWeights, // Signal weights for unified botness scoring
 }
 
 fn default_true() -> bool {
@@ -110,6 +138,17 @@ pub const POW_TTL_MAX: u64 = 300;
 const CHALLENGE_THRESHOLD_MIN: u8 = 1;
 const CHALLENGE_THRESHOLD_MAX: u8 = 10;
 const CHALLENGE_THRESHOLD_DEFAULT: u8 = 3;
+const MAZE_THRESHOLD_MIN: u8 = 1;
+const MAZE_THRESHOLD_MAX: u8 = 10;
+const MAZE_THRESHOLD_DEFAULT: u8 = 6;
+const BOTNESS_WEIGHT_MIN: u8 = 0;
+const BOTNESS_WEIGHT_MAX: u8 = 10;
+
+fn parse_bool_env(value: Option<&str>) -> bool {
+    value
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
 
 pub fn pow_config_mutable() -> bool {
     env::var("POW_CONFIG_MUTABLE")
@@ -118,13 +157,18 @@ pub fn pow_config_mutable() -> bool {
 }
 
 pub(crate) fn challenge_config_mutable_from_env(value: Option<&str>) -> bool {
-    value
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
+    parse_bool_env(value)
 }
 
 pub fn challenge_config_mutable() -> bool {
     challenge_config_mutable_from_env(env::var("CHALLENGE_CONFIG_MUTABLE").ok().as_deref())
+}
+
+pub fn botness_config_mutable() -> bool {
+    match env::var("BOTNESS_CONFIG_MUTABLE") {
+        Ok(v) => parse_bool_env(Some(v.as_str())),
+        Err(_) => challenge_config_mutable(),
+    }
 }
 
 fn clamp_pow_difficulty(value: u8) -> u8 {
@@ -139,9 +183,27 @@ fn clamp_challenge_threshold(value: u8) -> u8 {
     value.clamp(CHALLENGE_THRESHOLD_MIN, CHALLENGE_THRESHOLD_MAX)
 }
 
+fn clamp_maze_threshold(value: u8) -> u8 {
+    value.clamp(MAZE_THRESHOLD_MIN, MAZE_THRESHOLD_MAX)
+}
+
+fn clamp_botness_weight(value: u8) -> u8 {
+    value.clamp(BOTNESS_WEIGHT_MIN, BOTNESS_WEIGHT_MAX)
+}
+
 pub(crate) fn parse_challenge_threshold(value: Option<&str>) -> u8 {
     let parsed = value.and_then(|v| v.parse::<u8>().ok()).unwrap_or(CHALLENGE_THRESHOLD_DEFAULT);
     clamp_challenge_threshold(parsed)
+}
+
+pub(crate) fn parse_maze_threshold(value: Option<&str>) -> u8 {
+    let parsed = value.and_then(|v| v.parse::<u8>().ok()).unwrap_or(MAZE_THRESHOLD_DEFAULT);
+    clamp_maze_threshold(parsed)
+}
+
+pub(crate) fn parse_botness_weight(value: Option<&str>, default_value: u8) -> u8 {
+    let parsed = value.and_then(|v| v.parse::<u8>().ok()).unwrap_or(default_value);
+    clamp_botness_weight(parsed)
 }
 
 fn default_pow_difficulty() -> u8 {
@@ -162,6 +224,26 @@ fn default_pow_ttl_seconds() -> u64 {
 
 fn default_challenge_threshold() -> u8 {
     parse_challenge_threshold(env::var("CHALLENGE_RISK_THRESHOLD").ok().as_deref())
+}
+
+fn default_maze_threshold() -> u8 {
+    parse_maze_threshold(env::var("BOTNESS_MAZE_THRESHOLD").ok().as_deref())
+}
+
+fn default_botness_weight_js_required() -> u8 {
+    parse_botness_weight(env::var("BOTNESS_WEIGHT_JS_REQUIRED").ok().as_deref(), 1)
+}
+
+fn default_botness_weight_geo_risk() -> u8 {
+    parse_botness_weight(env::var("BOTNESS_WEIGHT_GEO_RISK").ok().as_deref(), 2)
+}
+
+fn default_botness_weight_rate_medium() -> u8 {
+    parse_botness_weight(env::var("BOTNESS_WEIGHT_RATE_MEDIUM").ok().as_deref(), 1)
+}
+
+fn default_botness_weight_rate_high() -> u8 {
+    parse_botness_weight(env::var("BOTNESS_WEIGHT_RATE_HIGH").ok().as_deref(), 2)
 }
 
 fn default_maze_auto_ban() -> bool {
@@ -192,10 +274,17 @@ impl Config {
                 }
                 cfg.pow_difficulty = clamp_pow_difficulty(cfg.pow_difficulty);
                 cfg.pow_ttl_seconds = clamp_pow_ttl(cfg.pow_ttl_seconds);
-                if !challenge_config_mutable() {
+                if !botness_config_mutable() {
                     cfg.challenge_risk_threshold = default_challenge_threshold();
+                    cfg.botness_maze_threshold = default_maze_threshold();
+                    cfg.botness_weights = BotnessWeights::default();
                 } else {
                     cfg.challenge_risk_threshold = clamp_challenge_threshold(cfg.challenge_risk_threshold);
+                    cfg.botness_maze_threshold = clamp_maze_threshold(cfg.botness_maze_threshold);
+                    cfg.botness_weights.js_required = clamp_botness_weight(cfg.botness_weights.js_required);
+                    cfg.botness_weights.geo_risk = clamp_botness_weight(cfg.botness_weights.geo_risk);
+                    cfg.botness_weights.rate_medium = clamp_botness_weight(cfg.botness_weights.rate_medium);
+                    cfg.botness_weights.rate_high = clamp_botness_weight(cfg.botness_weights.rate_high);
                 }
                 return cfg;
             }
@@ -229,6 +318,8 @@ impl Config {
             pow_difficulty: default_pow_difficulty(),
             pow_ttl_seconds: default_pow_ttl_seconds(),
             challenge_risk_threshold: default_challenge_threshold(),
+            botness_maze_threshold: default_maze_threshold(),
+            botness_weights: BotnessWeights::default(),
         }
     }
     

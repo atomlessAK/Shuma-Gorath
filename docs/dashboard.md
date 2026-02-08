@@ -20,7 +20,7 @@ Charts:
 - Events over time (line, 60m/24h/7d/30d)
 
 Tables:
-- Current bans (IP, reason, expiry, quick unban)
+- Current bans (IP, reason, timestamps, signal badges, expandable fingerprint details, quick unban)
 - Recent events (type, IP, timestamp, reason)
 
 Controls:
@@ -29,6 +29,12 @@ Controls:
 - robots.txt configuration
 - CDP detection controls
 - PoW status panel and difficulty/TTL tuning (when `POW_CONFIG_MUTABLE=1`)
+- Botness scoring controls:
+- challenge threshold
+- maze threshold
+- per-signal weights (`js_required`, `geo_risk`, `rate_medium`, `rate_high`)
+- read-only terminal signal catalog
+- editable only when `BOTNESS_CONFIG_MUTABLE=1` (or `CHALLENGE_CONFIG_MUTABLE=1` fallback)
 - Link maze stats
 - Enter key submits inputs (endpoint, API key, ban, unban)
 - Auto-refresh every 30 seconds
@@ -80,3 +86,4 @@ dashboard/
 Note: `SHUMA_FAIL_MODE` is an environment-level policy and is shown read-only in the dashboard.
 Note: PoW enable/disable is environment-level; difficulty/TTL are editable only if `POW_CONFIG_MUTABLE=1`.
 Note: PoW config changes are logged to the event log as admin actions.
+Note: Botness scoring changes are logged as `botness_config_update` admin actions.

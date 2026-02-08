@@ -67,7 +67,8 @@ Integration coverage includes:
 5. Challenge single-use behavior (`Incorrect` then replay `Expired`)
 6. Metrics endpoint
 7. CDP report ingestion and auto-ban flow
-8. Unban behavior
+8. CDP stats counters in `/admin/cdp`
+9. Unban behavior
 
 ## 🐙 Build Mode Notes
 

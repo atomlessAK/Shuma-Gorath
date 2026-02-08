@@ -69,7 +69,23 @@ pub fn handle_cdp_report(store: &Store, req: &Request) -> Response {
     
     // Auto-ban if score exceeds threshold and auto-ban is enabled
     if cfg.cdp_auto_ban && report.score >= cfg.cdp_detection_threshold {
-        crate::ban::ban_ip(store, "default", &ip, "cdp_automation", cfg.get_ban_duration("cdp"));
+        crate::ban::ban_ip_with_fingerprint(
+            store,
+            "default",
+            &ip,
+            "cdp_automation",
+            cfg.get_ban_duration("cdp"),
+            Some(crate::ban::BanFingerprint {
+                score: Some((report.score * 10.0).round().clamp(0.0, 10.0) as u8),
+                signals: vec!["cdp_automation".to_string()],
+                summary: Some(format!(
+                    "cdp_score={:.2} threshold={:.2} checks={}",
+                    report.score,
+                    cfg.cdp_detection_threshold,
+                    report.checks.join(",")
+                )),
+            }),
+        );
         crate::metrics::increment(store, crate::metrics::MetricName::BansTotal, Some("cdp_automation"));
         increment_kv_counter(store, "cdp:auto_bans");
         

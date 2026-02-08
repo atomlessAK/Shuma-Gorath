@@ -288,7 +288,7 @@ function updateBansTable(bans) {
   tbody.innerHTML = '';
   
   if (bans.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #6b7280;">No active bans</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #6b7280;">No active bans</td></tr>';
     return;
   }
   
@@ -296,18 +296,51 @@ function updateBansTable(bans) {
     const tr = document.createElement('tr');
     const now = Math.floor(Date.now() / 1000);
     const isExpired = ban.expires < now;
-    const bannedAt = new Date((ban.expires - 3600) * 1000).toLocaleString(); // Assuming 1h default
+    const bannedAt = ban.banned_at ? new Date(ban.banned_at * 1000).toLocaleString() : '-';
     const expiresAt = new Date(ban.expires * 1000).toLocaleString();
+    const signals = (ban.fingerprint && Array.isArray(ban.fingerprint.signals)) ? ban.fingerprint.signals : [];
+    const signalBadges = signals.length
+      ? signals.map(signal => `<span class="ban-signal-badge">${signal}</span>`).join('')
+      : '<span class="text-muted">none</span>';
+    const detailsId = `ban-detail-${ban.ip.replace(/[^a-zA-Z0-9]/g, '-')}`;
     
     tr.innerHTML = `
       <td><code>${ban.ip}</code></td>
       <td>${ban.reason || 'unknown'}</td>
       <td>${bannedAt}</td>
       <td class="${isExpired ? 'expired' : ''}">${isExpired ? 'Expired' : expiresAt}</td>
-      <td><button class="unban-quick" data-ip="${ban.ip}">Unban</button></td>
+      <td>${signalBadges}</td>
+      <td class="ban-action-cell">
+        <button class="ban-details-toggle" data-target="${detailsId}">Details</button>
+        <button class="unban-quick" data-ip="${ban.ip}">Unban</button>
+      </td>
     `;
     tbody.appendChild(tr);
+
+    const detailRow = document.createElement('tr');
+    detailRow.id = detailsId;
+    detailRow.className = 'ban-detail-row hidden';
+    const score = ban.fingerprint && typeof ban.fingerprint.score === 'number' ? ban.fingerprint.score : null;
+    const summary = ban.fingerprint && ban.fingerprint.summary ? ban.fingerprint.summary : 'No additional fingerprint details.';
+    detailRow.innerHTML = `
+      <td colspan="6">
+        <div class="ban-detail-content">
+          <div><strong>Score:</strong> ${score === null ? 'n/a' : score}</div>
+          <div><strong>Summary:</strong> ${summary}</div>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(detailRow);
   }
+
+  document.querySelectorAll('.ban-details-toggle').forEach(btn => {
+    btn.onclick = function() {
+      const target = document.getElementById(this.dataset.target);
+      if (!target) return;
+      target.classList.toggle('hidden');
+      this.textContent = target.classList.contains('hidden') ? 'Details' : 'Hide';
+    };
+  });
   
   // Add click handlers for quick unban buttons
   document.querySelectorAll('.unban-quick').forEach(btn => {
@@ -424,9 +457,14 @@ let powSavedState = {
   mutable: false
 };
 
-// Track challenge threshold saved state for change detection
-let challengeSavedState = {
-  threshold: 3,
+// Track botness scoring saved state for change detection
+let botnessSavedState = {
+  challengeThreshold: 3,
+  mazeThreshold: 6,
+  weightJsRequired: 1,
+  weightGeoRisk: 2,
+  weightRateMedium: 1,
+  weightRateHigh: 2,
   mutable: false
 };
 
@@ -694,27 +732,86 @@ function updatePowConfig(config) {
   btn.textContent = 'Save PoW Settings';
 }
 
+function updateBotnessSignalDefinitions(signalDefinitions) {
+  const scoredSignals = (signalDefinitions && Array.isArray(signalDefinitions.scored_signals))
+    ? signalDefinitions.scored_signals
+    : [];
+  const terminalSignals = (signalDefinitions && Array.isArray(signalDefinitions.terminal_signals))
+    ? signalDefinitions.terminal_signals
+    : [];
+
+  const scoredTarget = document.getElementById('botness-signal-list');
+  const terminalTarget = document.getElementById('botness-terminal-list');
+
+  scoredTarget.innerHTML = scoredSignals.length
+    ? scoredSignals.map(signal => `
+      <div class="info-row">
+        <span class="info-label">${signal.label}</span>
+        <span>${signal.weight}</span>
+      </div>
+    `).join('')
+    : '<p class="text-muted">No scored signals</p>';
+
+  terminalTarget.innerHTML = terminalSignals.length
+    ? terminalSignals.map(signal => `
+      <div class="info-row">
+        <span class="info-label">${signal.label}</span>
+        <span>${signal.action}</span>
+      </div>
+    `).join('')
+    : '<p class="text-muted">No terminal signals</p>';
+}
+
 function updateChallengeConfig(config) {
-  const mutable = config.challenge_config_mutable === true;
-  const threshold = parseInt(config.challenge_risk_threshold, 10);
-  const defaultThreshold = parseInt(config.challenge_risk_threshold_default, 10);
+  const mutable = config.botness_config_mutable === true;
+  const challengeThreshold = parseInt(config.challenge_risk_threshold, 10);
+  const challengeDefault = parseInt(config.challenge_risk_threshold_default, 10);
+  const mazeThreshold = parseInt(config.botness_maze_threshold, 10);
+  const mazeDefault = parseInt(config.botness_maze_threshold_default, 10);
+  const weights = config.botness_weights || {};
 
-  if (!Number.isNaN(threshold)) {
-    document.getElementById('challenge-threshold').value = threshold;
+  if (!Number.isNaN(challengeThreshold)) {
+    document.getElementById('challenge-threshold').value = challengeThreshold;
   }
+  if (!Number.isNaN(mazeThreshold)) {
+    document.getElementById('maze-threshold-score').value = mazeThreshold;
+  }
+  document.getElementById('weight-js-required').value = parseInt(weights.js_required, 10) || 1;
+  document.getElementById('weight-geo-risk').value = parseInt(weights.geo_risk, 10) || 2;
+  document.getElementById('weight-rate-medium').value = parseInt(weights.rate_medium, 10) || 1;
+  document.getElementById('weight-rate-high').value = parseInt(weights.rate_high, 10) || 2;
 
-  document.getElementById('challenge-config-status').textContent = mutable ? 'Editable' : 'Read-only (env)';
-  document.getElementById('challenge-default').textContent = Number.isNaN(defaultThreshold) ? '--' : defaultThreshold;
-  document.getElementById('challenge-threshold').disabled = !mutable;
+  document.getElementById('botness-config-status').textContent = mutable ? 'Editable' : 'Read-only (env)';
+  document.getElementById('challenge-default').textContent = Number.isNaN(challengeDefault) ? '--' : challengeDefault;
+  document.getElementById('maze-threshold-default').textContent = Number.isNaN(mazeDefault) ? '--' : mazeDefault;
 
-  challengeSavedState = {
-    threshold: parseInt(document.getElementById('challenge-threshold').value, 10) || (Number.isNaN(threshold) ? 3 : threshold),
+  const editableFields = [
+    'challenge-threshold',
+    'maze-threshold-score',
+    'weight-js-required',
+    'weight-geo-risk',
+    'weight-rate-medium',
+    'weight-rate-high'
+  ];
+  editableFields.forEach(id => {
+    document.getElementById(id).disabled = !mutable;
+  });
+
+  botnessSavedState = {
+    challengeThreshold: parseInt(document.getElementById('challenge-threshold').value, 10) || 3,
+    mazeThreshold: parseInt(document.getElementById('maze-threshold-score').value, 10) || 6,
+    weightJsRequired: parseInt(document.getElementById('weight-js-required').value, 10) || 1,
+    weightGeoRisk: parseInt(document.getElementById('weight-geo-risk').value, 10) || 2,
+    weightRateMedium: parseInt(document.getElementById('weight-rate-medium').value, 10) || 1,
+    weightRateHigh: parseInt(document.getElementById('weight-rate-high').value, 10) || 2,
     mutable: mutable
   };
 
-  const btn = document.getElementById('save-challenge-config');
+  updateBotnessSignalDefinitions(config.botness_signal_definitions);
+
+  const btn = document.getElementById('save-botness-config');
   btn.disabled = !mutable;
-  btn.textContent = 'Save Challenge Settings';
+  btn.textContent = 'Save Botness Settings';
 }
 
 function checkPowConfigChanged() {
@@ -734,19 +831,40 @@ function checkPowConfigChanged() {
 document.getElementById('pow-difficulty').addEventListener('input', checkPowConfigChanged);
 document.getElementById('pow-ttl').addEventListener('input', checkPowConfigChanged);
 
-function checkChallengeConfigChanged() {
-  const btn = document.getElementById('save-challenge-config');
-  if (!challengeSavedState.mutable) {
+function checkBotnessConfigChanged() {
+  const btn = document.getElementById('save-botness-config');
+  if (!botnessSavedState.mutable) {
     btn.disabled = true;
     return;
   }
-  const current = parseInt(document.getElementById('challenge-threshold').value, 10);
-  const threshold = Number.isNaN(current) ? challengeSavedState.threshold : current;
-  const changed = threshold !== challengeSavedState.threshold;
+  const current = {
+    challengeThreshold: parseInt(document.getElementById('challenge-threshold').value, 10) || 3,
+    mazeThreshold: parseInt(document.getElementById('maze-threshold-score').value, 10) || 6,
+    weightJsRequired: parseInt(document.getElementById('weight-js-required').value, 10) || 1,
+    weightGeoRisk: parseInt(document.getElementById('weight-geo-risk').value, 10) || 2,
+    weightRateMedium: parseInt(document.getElementById('weight-rate-medium').value, 10) || 1,
+    weightRateHigh: parseInt(document.getElementById('weight-rate-high').value, 10) || 2
+  };
+  const changed =
+    current.challengeThreshold !== botnessSavedState.challengeThreshold ||
+    current.mazeThreshold !== botnessSavedState.mazeThreshold ||
+    current.weightJsRequired !== botnessSavedState.weightJsRequired ||
+    current.weightGeoRisk !== botnessSavedState.weightGeoRisk ||
+    current.weightRateMedium !== botnessSavedState.weightRateMedium ||
+    current.weightRateHigh !== botnessSavedState.weightRateHigh;
   btn.disabled = !changed;
 }
 
-document.getElementById('challenge-threshold').addEventListener('input', checkChallengeConfigChanged);
+[
+  'challenge-threshold',
+  'maze-threshold-score',
+  'weight-js-required',
+  'weight-geo-risk',
+  'weight-rate-medium',
+  'weight-rate-high'
+].forEach(id => {
+  document.getElementById(id).addEventListener('input', checkBotnessConfigChanged);
+});
 
 // Save PoW configuration
 document.getElementById('save-pow-config').onclick = async function() {
@@ -796,16 +914,29 @@ document.getElementById('save-pow-config').onclick = async function() {
   }
 };
 
-// Save challenge configuration
-document.getElementById('save-challenge-config').onclick = async function() {
+// Save botness scoring configuration
+document.getElementById('save-botness-config').onclick = async function() {
   const endpoint = document.getElementById('endpoint').value.replace(/\/$/, '');
   const apikey = document.getElementById('apikey').value;
   const btn = this;
   const msg = document.getElementById('admin-msg');
 
   const challengeThreshold = parseInt(document.getElementById('challenge-threshold').value, 10);
-  if (Number.isNaN(challengeThreshold)) {
-    msg.textContent = 'Error: Invalid challenge threshold';
+  const mazeThreshold = parseInt(document.getElementById('maze-threshold-score').value, 10);
+  const weightJsRequired = parseInt(document.getElementById('weight-js-required').value, 10);
+  const weightGeoRisk = parseInt(document.getElementById('weight-geo-risk').value, 10);
+  const weightRateMedium = parseInt(document.getElementById('weight-rate-medium').value, 10);
+  const weightRateHigh = parseInt(document.getElementById('weight-rate-high').value, 10);
+
+  if (
+    Number.isNaN(challengeThreshold) ||
+    Number.isNaN(mazeThreshold) ||
+    Number.isNaN(weightJsRequired) ||
+    Number.isNaN(weightGeoRisk) ||
+    Number.isNaN(weightRateMedium) ||
+    Number.isNaN(weightRateHigh)
+  ) {
+    msg.textContent = 'Error: Invalid botness settings';
     msg.className = 'message error';
     return;
   }
@@ -821,27 +952,39 @@ document.getElementById('save-challenge-config').onclick = async function() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        challenge_risk_threshold: challengeThreshold
+        challenge_risk_threshold: challengeThreshold,
+        botness_maze_threshold: mazeThreshold,
+        botness_weights: {
+          js_required: weightJsRequired,
+          geo_risk: weightGeoRisk,
+          rate_medium: weightRateMedium,
+          rate_high: weightRateHigh
+        }
       })
     });
 
     if (!resp.ok) {
       const text = await resp.text();
-      throw new Error(text || 'Failed to save challenge config');
+      throw new Error(text || 'Failed to save botness config');
     }
 
-    challengeSavedState = {
-      threshold: challengeThreshold,
+    botnessSavedState = {
+      challengeThreshold: challengeThreshold,
+      mazeThreshold: mazeThreshold,
+      weightJsRequired: weightJsRequired,
+      weightGeoRisk: weightGeoRisk,
+      weightRateMedium: weightRateMedium,
+      weightRateHigh: weightRateHigh,
       mutable: true
     };
-    msg.textContent = 'Challenge threshold saved';
+    msg.textContent = 'Botness scoring saved';
     msg.className = 'message success';
-    btn.textContent = 'Save Challenge Settings';
+    btn.textContent = 'Save Botness Settings';
     btn.disabled = true;
   } catch (e) {
     msg.textContent = 'Error: ' + e.message;
     msg.className = 'message error';
-    btn.textContent = 'Save Challenge Settings';
+    btn.textContent = 'Save Botness Settings';
     btn.disabled = false;
   }
 };

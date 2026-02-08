@@ -79,11 +79,29 @@ mod tests {
         let entry = BanEntry {
             reason: "test".to_string(),
             expires: 1234567890,
+            banned_at: 1234560000,
+            fingerprint: Some(BanFingerprint {
+                score: Some(6),
+                signals: vec!["rate_limit_exceeded".to_string()],
+                summary: Some("rate_limit=80".to_string()),
+            }),
         };
         let json = serde_json::to_string(&entry).unwrap();
         let de: BanEntry = serde_json::from_str(&json).unwrap();
         assert_eq!(de.reason, "test");
         assert_eq!(de.expires, 1234567890);
+        assert_eq!(de.banned_at, 1234560000);
+        assert!(de.fingerprint.is_some());
+    }
+
+    #[test]
+    fn test_legacy_ban_entry_deserializes_with_defaults() {
+        let legacy = r#"{"reason":"legacy","expires":42}"#;
+        let de: BanEntry = serde_json::from_str(legacy).unwrap();
+        assert_eq!(de.reason, "legacy");
+        assert_eq!(de.expires, 42);
+        assert!(de.fingerprint.is_none());
+        assert!(de.banned_at > 0);
     }
     // use super::super::ban::*;
     // Removed MockStore; all tests use TestStore implementing KeyValueStore

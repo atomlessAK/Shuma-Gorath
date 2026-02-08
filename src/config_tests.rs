@@ -17,6 +17,22 @@ mod tests {
     }
 
     #[test]
+    fn parse_maze_threshold_clamps_range() {
+        assert_eq!(crate::config::parse_maze_threshold(Some("0")), 1);
+        assert_eq!(crate::config::parse_maze_threshold(Some("99")), 10);
+        assert_eq!(crate::config::parse_maze_threshold(Some("6")), 6);
+        assert_eq!(crate::config::parse_maze_threshold(Some("junk")), 6);
+    }
+
+    #[test]
+    fn parse_botness_weight_clamps_range() {
+        assert_eq!(crate::config::parse_botness_weight(Some("0"), 3), 0);
+        assert_eq!(crate::config::parse_botness_weight(Some("11"), 3), 10);
+        assert_eq!(crate::config::parse_botness_weight(Some("4"), 3), 4);
+        assert_eq!(crate::config::parse_botness_weight(Some("junk"), 3), 3);
+    }
+
+    #[test]
     fn challenge_config_mutable_from_env_parses_values() {
         assert!(crate::config::challenge_config_mutable_from_env(Some("1")));
         assert!(crate::config::challenge_config_mutable_from_env(Some("true")));

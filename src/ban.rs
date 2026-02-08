@@ -8,11 +8,26 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Serialize, Deserialize};
 
+/// Structured signal snapshot captured when a ban is created.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BanFingerprint {
+    #[serde(default)]
+    pub score: Option<u8>,
+    #[serde(default)]
+    pub signals: Vec<String>,
+    #[serde(default)]
+    pub summary: Option<String>,
+}
+
 /// Represents a ban entry for an IP address, including reason and expiry timestamp.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BanEntry {
     pub reason: String,
     pub expires: u64,
+    #[serde(default = "now_ts")]
+    pub banned_at: u64,
+    #[serde(default)]
+    pub fingerprint: Option<BanFingerprint>,
 }
 
 fn ban_index_key(site_id: &str) -> String {
@@ -157,11 +172,26 @@ pub fn is_banned(store: &impl KeyValueStore, site_id: &str, ip: &str) -> bool {
 
 /// Bans an IP for a given site, reason, and duration (in seconds).
 /// Stores the ban entry in the key-value store.
+#[allow(dead_code)]
 pub fn ban_ip(store: &impl KeyValueStore, site_id: &str, ip: &str, reason: &str, duration_secs: u64) {
+    ban_ip_with_fingerprint(store, site_id, ip, reason, duration_secs, None);
+}
+
+pub fn ban_ip_with_fingerprint(
+    store: &impl KeyValueStore,
+    site_id: &str,
+    ip: &str,
+    reason: &str,
+    duration_secs: u64,
+    fingerprint: Option<BanFingerprint>,
+) {
     let key = format!("ban:{}:{}", site_id, ip);
+    let ts = now_ts();
     let entry = BanEntry {
         reason: reason.to_string(),
-        expires: now_ts() + duration_secs,
+        expires: ts + duration_secs,
+        banned_at: ts,
+        fingerprint,
     };
     if let Ok(val) = serde_json::to_vec(&entry) {
         let _ = store.set(&key, &val);

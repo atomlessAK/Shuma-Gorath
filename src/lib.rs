@@ -24,6 +24,7 @@ mod auth;
 use spin_sdk::http::{Request, Response};
 use spin_sdk::http_component;
 use spin_sdk::key_value::Store;
+use serde::Serialize;
 use std::env;
 use std::io::Write;
 
@@ -130,6 +131,7 @@ fn rate_proximity_score(rate_count: u32, rate_limit: u32) -> u8 {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn compute_risk_score(js_needed: bool, geo_risk: bool, rate_count: u32, rate_limit: u32) -> u8 {
     let mut score = 0u8;
     if js_needed {
@@ -142,6 +144,89 @@ pub(crate) fn compute_risk_score(js_needed: bool, geo_risk: bool, rate_count: u3
     score
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct BotnessContribution {
+    pub key: &'static str,
+    pub label: &'static str,
+    pub active: bool,
+    pub contribution: u8,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct BotnessAssessment {
+    pub score: u8,
+    pub contributions: Vec<BotnessContribution>,
+}
+
+pub(crate) fn compute_botness_assessment(
+    js_needed: bool,
+    geo_risk: bool,
+    rate_count: u32,
+    rate_limit: u32,
+    cfg: &config::Config,
+) -> BotnessAssessment {
+    let rate_proximity = rate_proximity_score(rate_count, rate_limit);
+    let rate_medium_active = rate_proximity >= 1;
+    let rate_high_active = rate_proximity >= 2;
+    let mut score = 0u8;
+    let mut contributions = Vec::with_capacity(4);
+
+    let js_contribution = if js_needed { cfg.botness_weights.js_required } else { 0 };
+    score = score.saturating_add(js_contribution);
+    contributions.push(BotnessContribution {
+        key: "js_verification_required",
+        label: "JS verification required",
+        active: js_needed,
+        contribution: js_contribution,
+    });
+
+    let geo_contribution = if geo_risk { cfg.botness_weights.geo_risk } else { 0 };
+    score = score.saturating_add(geo_contribution);
+    contributions.push(BotnessContribution {
+        key: "geo_risk",
+        label: "High-risk geography",
+        active: geo_risk,
+        contribution: geo_contribution,
+    });
+
+    let rate_medium_contribution = if rate_medium_active { cfg.botness_weights.rate_medium } else { 0 };
+    score = score.saturating_add(rate_medium_contribution);
+    contributions.push(BotnessContribution {
+        key: "rate_pressure_medium",
+        label: "Rate pressure (>=50%)",
+        active: rate_medium_active,
+        contribution: rate_medium_contribution,
+    });
+
+    let rate_high_contribution = if rate_high_active { cfg.botness_weights.rate_high } else { 0 };
+    score = score.saturating_add(rate_high_contribution);
+    contributions.push(BotnessContribution {
+        key: "rate_pressure_high",
+        label: "Rate pressure (>=80%)",
+        active: rate_high_active,
+        contribution: rate_high_contribution,
+    });
+
+    BotnessAssessment {
+        score: score.clamp(0, 10),
+        contributions,
+    }
+}
+
+fn botness_signals_summary(assessment: &BotnessAssessment) -> String {
+    let active = assessment
+        .contributions
+        .iter()
+        .filter(|c| c.active)
+        .map(|c| format!("{}:{}", c.key, c.contribution))
+        .collect::<Vec<_>>();
+    if active.is_empty() {
+        "none".to_string()
+    } else {
+        active.join(",")
+    }
+}
+
 pub(crate) fn write_log_line(out: &mut impl Write, msg: &str) {
     let _ = writeln!(out, "{}", msg);
 }
@@ -149,6 +234,64 @@ pub(crate) fn write_log_line(out: &mut impl Write, msg: &str) {
 fn log_line(msg: &str) {
     let mut out = std::io::stdout();
     write_log_line(&mut out, msg);
+}
+
+fn serve_maze_with_tracking(
+    store: &Store,
+    cfg: &config::Config,
+    ip: &str,
+    path: &str,
+    event_reason: &str,
+    event_outcome: &str,
+) -> Response {
+    metrics::increment(store, metrics::MetricName::MazeHits, None);
+
+    crate::admin::log_event(store, &crate::admin::EventLogEntry {
+        ts: crate::admin::now_ts(),
+        event: crate::admin::EventType::Challenge,
+        ip: Some(ip.to_string()),
+        reason: Some(event_reason.to_string()),
+        outcome: Some(event_outcome.to_string()),
+        admin: None,
+    });
+
+    // Bucket the IP to reduce KV cardinality and avoid per-IP explosion.
+    let maze_bucket = crate::ip::bucket_ip(ip);
+    let maze_key = format!("maze_hits:{}", maze_bucket);
+    let hits: u32 = store.get(&maze_key)
+        .ok()
+        .flatten()
+        .and_then(|v| String::from_utf8(v).ok())
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+
+    let _ = store.set(&maze_key, (hits + 1).to_string().as_bytes());
+
+    if hits >= cfg.maze_auto_ban_threshold && cfg.maze_auto_ban {
+        ban::ban_ip_with_fingerprint(
+            store,
+            "default",
+            ip,
+            "maze_crawler",
+            cfg.get_ban_duration("honeypot"),
+            Some(crate::ban::BanFingerprint {
+                score: None,
+                signals: vec!["maze_crawler_threshold".to_string()],
+                summary: Some(format!("maze_hits={} threshold={}", hits + 1, cfg.maze_auto_ban_threshold)),
+            }),
+        );
+        metrics::increment(store, metrics::MetricName::BansTotal, Some("maze_crawler"));
+        crate::admin::log_event(store, &crate::admin::EventLogEntry {
+            ts: crate::admin::now_ts(),
+            event: crate::admin::EventType::Ban,
+            ip: Some(ip.to_string()),
+            reason: Some("maze_crawler".to_string()),
+            outcome: Some(format!("banned_after_{}_maze_pages", cfg.maze_auto_ban_threshold)),
+            admin: None,
+        });
+    }
+
+    maze::handle_maze_request(path)
 }
 
 /// Main handler logic, testable as a plain Rust function.
@@ -300,47 +443,7 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
         if !cfg.maze_enabled {
             return Response::new(404, "Not Found");
         }
-        metrics::increment(store, metrics::MetricName::MazeHits, None);
-
-        // Log maze access event
-        crate::admin::log_event(store, &crate::admin::EventLogEntry {
-            ts: crate::admin::now_ts(),
-            event: crate::admin::EventType::Challenge,
-            ip: Some(ip.clone()),
-            reason: Some("maze_trap".to_string()),
-            outcome: Some("maze_page_served".to_string()),
-            admin: None,
-        });
-
-        // Check if this IP has hit too many maze pages (potential crawler)
-        // Bucket the IP to reduce KV cardinality and avoid per-IP explosion
-        let maze_bucket = crate::ip::bucket_ip(&ip);
-        let maze_key = format!("maze_hits:{}", maze_bucket);
-        let hits: u32 = store.get(&maze_key)
-            .ok()
-            .flatten()
-            .and_then(|v| String::from_utf8(v).ok())
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
-
-        // Increment maze hit counter for this IP
-        let _ = store.set(&maze_key, (hits + 1).to_string().as_bytes());
-
-        // If they've hit the threshold, they're definitely a bot - ban them
-        if hits >= cfg.maze_auto_ban_threshold && cfg.maze_auto_ban {
-            ban::ban_ip(store, "default", &ip, "maze_crawler", cfg.get_ban_duration("honeypot"));
-            metrics::increment(store, metrics::MetricName::BansTotal, Some("maze_crawler"));
-            crate::admin::log_event(store, &crate::admin::EventLogEntry {
-                ts: crate::admin::now_ts(),
-                event: crate::admin::EventType::Ban,
-                ip: Some(ip.clone()),
-                reason: Some("maze_crawler".to_string()),
-                outcome: Some(format!("banned_after_{}_maze_pages", cfg.maze_auto_ban_threshold)),
-                admin: None,
-            });
-        }
-
-        return maze::handle_maze_request(path);
+        return serve_maze_with_tracking(store, &cfg, &ip, path, "maze_trap", "maze_page_served");
     }
 
     // Increment request counter
@@ -443,7 +546,18 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
     }
     // Honeypot: ban and hard block
     if honeypot::is_honeypot(path, &cfg.honeypots) {
-        ban::ban_ip(store, site_id, &ip, "honeypot", cfg.get_ban_duration("honeypot"));
+        ban::ban_ip_with_fingerprint(
+            store,
+            site_id,
+            &ip,
+            "honeypot",
+            cfg.get_ban_duration("honeypot"),
+            Some(crate::ban::BanFingerprint {
+                score: None,
+                signals: vec!["honeypot".to_string()],
+                summary: Some(format!("path={}", path)),
+            }),
+        );
         metrics::increment(store, metrics::MetricName::BansTotal, Some("honeypot"));
         metrics::increment(store, metrics::MetricName::BlocksTotal, None);
         // Log ban event
@@ -459,7 +573,18 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
     }
     // Rate limit: ban and hard block
     if !rate::check_rate_limit(store, site_id, &ip, cfg.rate_limit) {
-        ban::ban_ip(store, site_id, &ip, "rate", cfg.get_ban_duration("rate"));
+        ban::ban_ip_with_fingerprint(
+            store,
+            site_id,
+            &ip,
+            "rate",
+            cfg.get_ban_duration("rate"),
+            Some(crate::ban::BanFingerprint {
+                score: None,
+                signals: vec!["rate_limit_exceeded".to_string()],
+                summary: Some(format!("rate_limit={}", cfg.rate_limit)),
+            }),
+        );
         metrics::increment(store, metrics::MetricName::BansTotal, Some("rate_limit"));
         metrics::increment(store, metrics::MetricName::BlocksTotal, None);
         // Log ban event
@@ -499,7 +624,18 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
     }
     // Outdated browser
     if browser::is_outdated_browser(ua, &cfg.browser_block) {
-        ban::ban_ip(store, site_id, &ip, "browser", cfg.get_ban_duration("browser"));
+        ban::ban_ip_with_fingerprint(
+            store,
+            site_id,
+            &ip,
+            "browser",
+            cfg.get_ban_duration("browser"),
+            Some(crate::ban::BanFingerprint {
+                score: None,
+                signals: vec!["outdated_browser".to_string()],
+                summary: Some(format!("ua={}", ua)),
+            }),
+        );
         metrics::increment(store, metrics::MetricName::BansTotal, Some("browser"));
         metrics::increment(store, metrics::MetricName::BlocksTotal, None);
         // Log ban event
@@ -513,20 +649,33 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
         });
         return Response::new(403, block_page::render_block_page(block_page::BlockReason::OutdatedBrowser));
     }
-    // Compute risk score for potential step-up challenge
+    // Compute unified botness score for challenge/maze step-up routing.
     let needs_js = path != "/health" && js::needs_js_verification_with_whitelist(req, store, site_id, &ip, &cfg.browser_whitelist);
     let geo_risk = geo::is_high_risk_geo(req, &cfg.geo_risk);
     let rate_usage = rate::current_rate_usage(store, site_id, &ip);
-    let risk_score = compute_risk_score(needs_js, geo_risk, rate_usage, cfg.rate_limit);
-    if risk_score >= cfg.challenge_risk_threshold {
+    let botness = compute_botness_assessment(needs_js, geo_risk, rate_usage, cfg.rate_limit, &cfg);
+    let botness_summary = botness_signals_summary(&botness);
+
+    if cfg.maze_enabled && botness.score >= cfg.botness_maze_threshold {
+        return serve_maze_with_tracking(
+            store,
+            &cfg,
+            &ip,
+            "/maze/botness-gate",
+            "botness_gate_maze",
+            &format!("score={} signals={}", botness.score, botness_summary),
+        );
+    }
+
+    if botness.score >= cfg.challenge_risk_threshold {
         metrics::increment(store, metrics::MetricName::ChallengesTotal, None);
         metrics::increment(store, metrics::MetricName::ChallengeServedTotal, None);
         crate::admin::log_event(store, &crate::admin::EventLogEntry {
             ts: crate::admin::now_ts(),
             event: crate::admin::EventType::Challenge,
             ip: Some(ip.clone()),
-            reason: Some("risk_gate".to_string()),
-            outcome: Some(format!("score={}", risk_score)),
+            reason: Some("botness_gate_challenge".to_string()),
+            outcome: Some(format!("score={} signals={}", botness.score, botness_summary)),
             admin: None,
         });
         return challenge::render_challenge(req);

@@ -207,6 +207,8 @@ mod tests {
             pow_difficulty: crate::config::POW_DIFFICULTY_MIN,
             pow_ttl_seconds: crate::config::POW_TTL_MIN,
             challenge_risk_threshold: 3,
+            botness_maze_threshold: 6,
+            botness_weights: crate::config::BotnessWeights::default(),
         }
     }
 

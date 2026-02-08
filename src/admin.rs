@@ -226,6 +226,7 @@ mod admin_config_tests {
     fn admin_config_includes_challenge_fields() {
         let _lock = ENV_MUTEX.lock().unwrap();
         std::env::remove_var("CHALLENGE_CONFIG_MUTABLE");
+        std::env::remove_var("BOTNESS_CONFIG_MUTABLE");
         let req = make_request(Method::Get, "/admin/config", Vec::new());
         let store = TestStore::default();
         let resp = handle_admin_config(&req, &store, "default");
@@ -234,6 +235,10 @@ mod admin_config_tests {
         assert!(body.get("challenge_risk_threshold").is_some());
         assert!(body.get("challenge_config_mutable").is_some());
         assert!(body.get("challenge_risk_threshold_default").is_some());
+        assert!(body.get("botness_maze_threshold").is_some());
+        assert!(body.get("botness_weights").is_some());
+        assert!(body.get("botness_config_mutable").is_some());
+        assert!(body.get("botness_signal_definitions").is_some());
     }
 
     #[test]
@@ -268,6 +273,45 @@ fn sanitize_path(path: &str) -> bool {
 
 fn challenge_threshold_default() -> u8 {
     crate::config::parse_challenge_threshold(env::var("CHALLENGE_RISK_THRESHOLD").ok().as_deref())
+}
+
+fn maze_threshold_default() -> u8 {
+    crate::config::parse_maze_threshold(env::var("BOTNESS_MAZE_THRESHOLD").ok().as_deref())
+}
+
+fn botness_signal_definitions(cfg: &crate::config::Config) -> serde_json::Value {
+    json!({
+        "scored_signals": [
+            {
+                "key": "js_verification_required",
+                "label": "JS verification required",
+                "weight": cfg.botness_weights.js_required
+            },
+            {
+                "key": "geo_risk",
+                "label": "High-risk geography",
+                "weight": cfg.botness_weights.geo_risk
+            },
+            {
+                "key": "rate_pressure_medium",
+                "label": "Rate pressure (>=50%)",
+                "weight": cfg.botness_weights.rate_medium
+            },
+            {
+                "key": "rate_pressure_high",
+                "label": "Rate pressure (>=80%)",
+                "weight": cfg.botness_weights.rate_high
+            }
+        ],
+        "terminal_signals": [
+            { "key": "honeypot", "label": "Honeypot hit", "action": "Immediate ban" },
+            { "key": "rate_limit_exceeded", "label": "Rate limit exceeded", "action": "Immediate ban" },
+            { "key": "outdated_browser", "label": "Outdated browser", "action": "Immediate ban" },
+            { "key": "cdp_automation", "label": "CDP automation detected", "action": "Immediate ban (if enabled)" },
+            { "key": "maze_crawler_threshold", "label": "Maze crawler threshold reached", "action": "Immediate ban (if enabled)" },
+            { "key": "already_banned", "label": "Existing active ban", "action": "Block page" }
+        ]
+    })
 }
 
 fn handle_admin_config(req: &Request, store: &impl crate::challenge::KeyValueStore, site_id: &str) -> Response {
@@ -423,10 +467,20 @@ fn handle_admin_config(req: &Request, store: &impl crate::challenge::KeyValueSto
                 });
             }
 
-            let mut challenge_changed = false;
+            let botness_mutable = crate::config::botness_config_mutable();
+            let mut botness_changed = false;
             let old_challenge_threshold = cfg.challenge_risk_threshold;
-            if json.get("challenge_risk_threshold").is_some() && !crate::config::challenge_config_mutable() {
-                return Response::new(403, "Challenge config is immutable (set CHALLENGE_CONFIG_MUTABLE=true to allow changes)");
+            let old_maze_threshold = cfg.botness_maze_threshold;
+            let old_weights = cfg.botness_weights.clone();
+            let botness_update_requested =
+                json.get("challenge_risk_threshold").is_some()
+                || json.get("botness_maze_threshold").is_some()
+                || json.get("botness_weights").is_some();
+            if botness_update_requested && !botness_mutable {
+                return Response::new(
+                    403,
+                    "Botness config is immutable (set BOTNESS_CONFIG_MUTABLE=true or CHALLENGE_CONFIG_MUTABLE=true to allow changes)"
+                );
             }
             if let Some(challenge_threshold) = json.get("challenge_risk_threshold").and_then(|v| v.as_u64()) {
                 if challenge_threshold < 1 || challenge_threshold > 10 {
@@ -434,16 +488,72 @@ fn handle_admin_config(req: &Request, store: &impl crate::challenge::KeyValueSto
                 }
                 cfg.challenge_risk_threshold = challenge_threshold as u8;
                 changed = true;
-                challenge_changed = true;
+                botness_changed = true;
+            }
+            if let Some(maze_threshold) = json.get("botness_maze_threshold").and_then(|v| v.as_u64()) {
+                if maze_threshold < 1 || maze_threshold > 10 {
+                    return Response::new(400, "botness_maze_threshold out of range (1-10)");
+                }
+                cfg.botness_maze_threshold = maze_threshold as u8;
+                changed = true;
+                botness_changed = true;
+            }
+            if let Some(weights) = json.get("botness_weights") {
+                if let Some(js_required) = weights.get("js_required").and_then(|v| v.as_u64()) {
+                    if js_required > 10 {
+                        return Response::new(400, "botness_weights.js_required out of range (0-10)");
+                    }
+                    cfg.botness_weights.js_required = js_required as u8;
+                    changed = true;
+                    botness_changed = true;
+                }
+                if let Some(geo_risk) = weights.get("geo_risk").and_then(|v| v.as_u64()) {
+                    if geo_risk > 10 {
+                        return Response::new(400, "botness_weights.geo_risk out of range (0-10)");
+                    }
+                    cfg.botness_weights.geo_risk = geo_risk as u8;
+                    changed = true;
+                    botness_changed = true;
+                }
+                if let Some(rate_medium) = weights.get("rate_medium").and_then(|v| v.as_u64()) {
+                    if rate_medium > 10 {
+                        return Response::new(400, "botness_weights.rate_medium out of range (0-10)");
+                    }
+                    cfg.botness_weights.rate_medium = rate_medium as u8;
+                    changed = true;
+                    botness_changed = true;
+                }
+                if let Some(rate_high) = weights.get("rate_high").and_then(|v| v.as_u64()) {
+                    if rate_high > 10 {
+                        return Response::new(400, "botness_weights.rate_high out of range (0-10)");
+                    }
+                    cfg.botness_weights.rate_high = rate_high as u8;
+                    changed = true;
+                    botness_changed = true;
+                }
             }
 
-            if challenge_changed {
+            if botness_changed {
                 log_event(store, &EventLogEntry {
                     ts: now_ts(),
                     event: EventType::AdminAction,
                     ip: None,
-                    reason: Some("challenge_config_update".to_string()),
-                    outcome: Some(format!("threshold:{}->{}", old_challenge_threshold, cfg.challenge_risk_threshold)),
+                    reason: Some("botness_config_update".to_string()),
+                    outcome: Some(format!(
+                        "challenge:{}->{} maze:{}->{} weights(js:{}->{} geo:{}->{} rate_med:{}->{} rate_high:{}->{})",
+                        old_challenge_threshold,
+                        cfg.challenge_risk_threshold,
+                        old_maze_threshold,
+                        cfg.botness_maze_threshold,
+                        old_weights.js_required,
+                        cfg.botness_weights.js_required,
+                        old_weights.geo_risk,
+                        cfg.botness_weights.geo_risk,
+                        old_weights.rate_medium,
+                        cfg.botness_weights.rate_medium,
+                        old_weights.rate_high,
+                        cfg.botness_weights.rate_high
+                    )),
                     admin: Some(crate::auth::get_admin_id(req)),
                 });
             }
@@ -457,6 +567,7 @@ fn handle_admin_config(req: &Request, store: &impl crate::challenge::KeyValueSto
             }
 
             let challenge_default = challenge_threshold_default();
+            let maze_default = maze_threshold_default();
             
             let body = serde_json::to_string(&json!({
                 "status": "updated",
@@ -489,7 +600,17 @@ fn handle_admin_config(req: &Request, store: &impl crate::challenge::KeyValueSto
                     "pow_ttl_seconds": cfg.pow_ttl_seconds,
                     "challenge_risk_threshold": cfg.challenge_risk_threshold,
                     "challenge_config_mutable": crate::config::challenge_config_mutable(),
-                    "challenge_risk_threshold_default": challenge_default
+                    "challenge_risk_threshold_default": challenge_default,
+                    "botness_maze_threshold": cfg.botness_maze_threshold,
+                    "botness_maze_threshold_default": maze_default,
+                    "botness_weights": {
+                        "js_required": cfg.botness_weights.js_required,
+                        "geo_risk": cfg.botness_weights.geo_risk,
+                        "rate_medium": cfg.botness_weights.rate_medium,
+                        "rate_high": cfg.botness_weights.rate_high
+                    },
+                    "botness_config_mutable": botness_mutable,
+                    "botness_signal_definitions": botness_signal_definitions(&cfg)
                 }
             })).unwrap();
             return Response::new(200, body);
@@ -508,6 +629,7 @@ fn handle_admin_config(req: &Request, store: &impl crate::challenge::KeyValueSto
         admin: Some(crate::auth::get_admin_id(req)),
     });
     let challenge_default = challenge_threshold_default();
+    let maze_default = maze_threshold_default();
     let body = serde_json::to_string(&json!({
         "test_mode": cfg.test_mode,
         "ban_duration": cfg.ban_duration,
@@ -541,7 +663,17 @@ fn handle_admin_config(req: &Request, store: &impl crate::challenge::KeyValueSto
         "pow_ttl_seconds": cfg.pow_ttl_seconds,
         "challenge_risk_threshold": cfg.challenge_risk_threshold,
         "challenge_config_mutable": crate::config::challenge_config_mutable(),
-        "challenge_risk_threshold_default": challenge_default
+        "challenge_risk_threshold_default": challenge_default,
+        "botness_maze_threshold": cfg.botness_maze_threshold,
+        "botness_maze_threshold_default": maze_default,
+        "botness_weights": {
+            "js_required": cfg.botness_weights.js_required,
+            "geo_risk": cfg.botness_weights.geo_risk,
+            "rate_medium": cfg.botness_weights.rate_medium,
+            "rate_high": cfg.botness_weights.rate_high
+        },
+        "botness_config_mutable": crate::config::botness_config_mutable(),
+        "botness_signal_definitions": botness_signal_definitions(&cfg)
     })).unwrap();
     Response::new(200, body)
 }
@@ -648,7 +780,18 @@ pub fn handle_admin(req: &Request) -> Response {
                         json.get("reason").and_then(|v| v.as_str()).unwrap_or("admin_ban"),
                         json.get("duration").and_then(|v| v.as_u64()).unwrap_or(21600),
                     ) {
-                        crate::ban::ban_ip(&store, site_id, ip, reason, duration);
+                        crate::ban::ban_ip_with_fingerprint(
+                            &store,
+                            site_id,
+                            ip,
+                            reason,
+                            duration,
+                            Some(crate::ban::BanFingerprint {
+                                score: None,
+                                signals: vec!["manual_admin".to_string()],
+                                summary: Some("manual_admin_ban".to_string()),
+                            }),
+                        );
                         // Log ban event
                         log_event(&store, &EventLogEntry {
                             ts: now_ts(),
@@ -669,7 +812,13 @@ pub fn handle_admin(req: &Request) -> Response {
             // GET: List all bans for this site (keys starting with ban:site_id:)
             let mut bans = vec![];
             for (ip, ban) in crate::ban::list_active_bans_with_scan(&store, site_id) {
-                bans.push(json!({"ip": ip, "reason": ban.reason, "expires": ban.expires}));
+                bans.push(json!({
+                    "ip": ip,
+                    "reason": ban.reason,
+                    "expires": ban.expires,
+                    "banned_at": ban.banned_at,
+                    "fingerprint": ban.fingerprint
+                }));
             }
             // Log admin action
             log_event(&store, &EventLogEntry {

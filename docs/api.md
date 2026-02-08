@@ -97,6 +97,16 @@ curl -H "Authorization: Bearer $API_KEY" \
   http://127.0.0.1:3000/admin/ban
 ```
 
+Each ban entry includes:
+- `ip`
+- `reason`
+- `banned_at` (unix seconds)
+- `expires` (unix seconds)
+- `fingerprint` (optional):
+- `score` (0-10 or null)
+- `signals` (array of triggering signal keys)
+- `summary` (human-readable context)
+
 ### 🐙 Example: Ban an IP
 
 ```bash
@@ -112,3 +122,26 @@ curl -X POST -H "Authorization: Bearer $API_KEY" \
 curl -H "Authorization: Bearer $API_KEY" \
   http://127.0.0.1:3000/admin/events?hours=24
 ```
+
+## 🐙 Botness Policy Fields (`/admin/config`)
+
+The unified botness model uses weighted scored signals plus terminal hard-ban signals.
+
+Scored thresholds:
+- `challenge_risk_threshold` - score at/above which challenge is served
+- `botness_maze_threshold` - score at/above which requests are routed to maze
+
+Scored weights:
+- `botness_weights.js_required`
+- `botness_weights.geo_risk`
+- `botness_weights.rate_medium`
+- `botness_weights.rate_high`
+
+Mutability:
+- `botness_config_mutable` indicates whether score/weight settings can be changed at runtime.
+- Runtime mutation is disabled by default; enable with `BOTNESS_CONFIG_MUTABLE=true`.
+- For dev compatibility, `CHALLENGE_CONFIG_MUTABLE=true` also enables botness mutation if `BOTNESS_CONFIG_MUTABLE` is unset.
+
+Signal catalog:
+- `botness_signal_definitions.scored_signals` lists weighted contributors.
+- `botness_signal_definitions.terminal_signals` lists immediate actions that bypass scoring.

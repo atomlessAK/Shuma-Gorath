@@ -88,6 +88,7 @@
             <th class="caps-label">Reason</th>
             <th class="caps-label">Banned At</th>
             <th class="caps-label">Expires</th>
+            <th class="caps-label">Signals</th>
             <th class="caps-label">Actions</th>
           </tr>
         </thead>
@@ -327,27 +328,64 @@
           <button id="save-pow-config" class="btn" disabled>Save PoW Settings</button>
         </div>
         <div class="control-group panel-soft pad-md">
-          <h3>Challenge Threshold</h3>
-          <p class="control-desc text-muted">Serve the ARC-style challenge when the combined risk score meets or exceeds this threshold</p>
+          <h3>Botness Scoring</h3>
+          <p class="control-desc text-muted">Weighted signals form a unified score. Moderate scores get the challenge; higher scores route to maze.</p>
           <div class="admin-controls">
             <div class="input-row">
-              <label class="control-label" for="challenge-threshold">Threshold</label>
+              <label class="control-label" for="challenge-threshold">Challenge</label>
               <input class="input-field" type="number" id="challenge-threshold" min="1" max="10" value="3" aria-label="Challenge risk threshold">
               <span class="input-unit text-muted">score</span>
+            </div>
+            <div class="input-row">
+              <label class="control-label" for="maze-threshold-score">Maze</label>
+              <input class="input-field" type="number" id="maze-threshold-score" min="1" max="10" value="6" aria-label="Maze risk threshold">
+              <span class="input-unit text-muted">score</span>
+            </div>
+            <div class="input-row">
+              <label class="control-label" for="weight-js-required">Weight: JS</label>
+              <input class="input-field" type="number" id="weight-js-required" min="0" max="10" value="1" aria-label="Weight for JS verification required">
+              <span class="input-unit text-muted">points</span>
+            </div>
+            <div class="input-row">
+              <label class="control-label" for="weight-geo-risk">Weight: Geo</label>
+              <input class="input-field" type="number" id="weight-geo-risk" min="0" max="10" value="2" aria-label="Weight for high-risk geography">
+              <span class="input-unit text-muted">points</span>
+            </div>
+            <div class="input-row">
+              <label class="control-label" for="weight-rate-medium">Weight: Rate 50%</label>
+              <input class="input-field" type="number" id="weight-rate-medium" min="0" max="10" value="1" aria-label="Weight for medium rate pressure">
+              <span class="input-unit text-muted">points</span>
+            </div>
+            <div class="input-row">
+              <label class="control-label" for="weight-rate-high">Weight: Rate 80%</label>
+              <input class="input-field" type="number" id="weight-rate-high" min="0" max="10" value="2" aria-label="Weight for high rate pressure">
+              <span class="input-unit text-muted">points</span>
             </div>
             <div class="info-panel panel-muted pad-sm">
               <h4>Status</h4>
               <div class="info-row">
                 <span class="info-label text-muted">Config:</span>
-                <span id="challenge-config-status">--</span>
+                <span id="botness-config-status">--</span>
               </div>
               <div class="info-row">
-                <span class="info-label text-muted">Default:</span>
+                <span class="info-label text-muted">Default Challenge:</span>
                 <span id="challenge-default">--</span>
               </div>
+              <div class="info-row">
+                <span class="info-label text-muted">Default Maze:</span>
+                <span id="maze-threshold-default">--</span>
+              </div>
+            </div>
+            <div class="info-panel panel-muted pad-sm">
+              <h4>Scored Signals</h4>
+              <div id="botness-signal-list"></div>
+            </div>
+            <div class="info-panel panel-muted pad-sm">
+              <h4>Terminal Signals</h4>
+              <div id="botness-terminal-list"></div>
             </div>
           </div>
-          <button id="save-challenge-config" class="btn" disabled>Save Challenge Settings</button>
+          <button id="save-botness-config" class="btn" disabled>Save Botness Settings</button>
         </div>
       </div>
       <div id="admin-msg" class="message"></div>

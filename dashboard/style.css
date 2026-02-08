@@ -460,6 +460,47 @@ code {
   background: var(--color-gray-300);
 }
 
+.ban-action-cell {
+  white-space: nowrap;
+}
+
+.ban-details-toggle {
+  padding: 6px 12px;
+  margin-right: 8px;
+  background: var(--color-gray-100);
+  color: var(--color-gray-800);
+  border: 1px solid var(--color-gray-300);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ban-details-toggle:hover {
+  background: var(--color-gray-200);
+}
+
+.ban-signal-badge {
+  display: inline-block;
+  margin-right: 6px;
+  margin-bottom: 4px;
+  padding: 2px 8px;
+  background: var(--color-gray-200);
+  color: var(--color-gray-800);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.ban-detail-row td {
+  background: var(--color-gray-50);
+}
+
+.ban-detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--text-sm);
+}
+
 /* ===========================================
    Admin Controls
    =========================================== */
