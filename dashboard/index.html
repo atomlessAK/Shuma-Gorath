@@ -125,268 +125,285 @@
     <!-- Admin Controls -->
     <div class="section admin-section">
     <h2>Admin Controls</h2>
-      <div class="controls-grid">
-        <div class="control-group panel-soft pad-md">
-          <h3>Fail Mode Policy</h3>
-          <p class="control-desc text-muted">
-            What happens when the data store goes down? Set at deploy time
-            via the SHUMA_FAIL_MODE environment variable.
-          </p>
-          <div class="info-panel panel-muted pad-sm">
-            <h4>Current Policy</h4>
-            <div class="info-row">
-              <span class="info-label text-muted">Mode:</span>
-              <span id="fail-mode-value">--</span>
+      <div class="admin-groups">
+        <section class="admin-group">
+          <h3 class="admin-group-title">Manual Banning</h3>
+          <div class="controls-grid controls-grid--manual">
+            <div class="control-group panel-soft pad-md">
+              <h3>Ban IP</h3>
+              <input id="ban-ip" class="input-field" type="text" placeholder="IP address" aria-label="IP address to ban" />
+              <input id="ban-reason" class="input-field" type="text" placeholder="Reason (optional)" value="manual_ban" aria-label="Ban reason" />
+              <input id="ban-duration" class="input-field" type="number" placeholder="Duration (seconds)" value="3600" aria-label="Ban duration in seconds" />
+              <button id="ban-btn" class="btn btn-dark">Ban</button>
+            </div>
+            <div class="control-group panel-soft pad-md">
+              <h3>Unban IP</h3>
+              <input id="unban-ip" class="input-field" type="text" placeholder="IP address" aria-label="IP address to unban" />
+              <button id="unban-btn" class="btn btn-subtle">Unban</button>
             </div>
           </div>
-          <p class="control-desc control-desc-spaced text-muted">
-            <strong>Open</strong> (default) — if the KV store is unreachable,
-            requests are allowed through and bot checks are skipped. Your site
-            stays up but is unprotected until the store recovers.<br><br>
-            <strong>Closed</strong> — if the KV store is unreachable, all
-            requests are blocked. Choose this when the risk of undetected bot
-            traffic (scraping, credential stuffing, bandwidth abuse) outweighs
-            the cost of a temporary outage.
-          </p>
-        </div>
-        <div class="control-group panel-soft pad-md">
-          <h3>Test Mode</h3>
-          <p class="control-desc text-muted">When enabled, logs actions without blocking users</p>
-          <label class="toggle-switch" for="test-mode-toggle">
-            <input type="checkbox" id="test-mode-toggle" aria-label="Enable Test Mode">
-            <span class="toggle-slider"></span>
-          </label>
-          <span id="test-mode-status">Loading...</span>
-        </div>
-        <div class="control-group panel-soft pad-md">
-          <h3>Ban Durations</h3>
-          <p class="control-desc text-muted">Configure ban duration per offense type (seconds)</p>
-          <div class="duration-grid">
-            <label for="dur-honeypot">Honeypot:</label> <input id="dur-honeypot" class="input-field" type="number" value="86400" />
-            <label for="dur-rate-limit">Rate Limit:</label> <input id="dur-rate-limit" class="input-field" type="number" value="3600" />
-            <label for="dur-browser">Browser:</label> <input id="dur-browser" class="input-field" type="number" value="21600" />
-            <label for="dur-admin">Admin:</label> <input id="dur-admin" class="input-field" type="number" value="21600" />
-          </div>
-          <button id="save-durations-btn" class="btn btn-dark">Save Durations</button>
-        </div>
-        <div class="control-group panel-soft pad-md">
-          <h3>Ban IP</h3>
-          <input id="ban-ip" class="input-field" type="text" placeholder="IP address" aria-label="IP address to ban" />
-          <input id="ban-reason" class="input-field" type="text" placeholder="Reason (optional)" value="manual_ban" aria-label="Ban reason" />
-          <input id="ban-duration" class="input-field" type="number" placeholder="Duration (seconds)" value="3600" aria-label="Ban duration in seconds" />
-          <button id="ban-btn" class="btn btn-dark">Ban</button>
-        </div>
-        <div class="control-group panel-soft pad-md">
-          <h3>Unban IP</h3>
-          <input id="unban-ip" class="input-field" type="text" placeholder="IP address" aria-label="IP address to unban" />
-          <button id="unban-btn" class="btn btn-subtle">Unban</button>
-        </div>
-        <div class="control-group panel-soft pad-md">
-          <h3>Link Maze</h3>
-          <p class="control-desc text-muted">Honeypot trap for crawlers</p>
-          <div class="admin-controls">
-            <div class="toggle-row">
-              <label class="control-label" for="maze-enabled-toggle">Maze Enabled</label>
-              <label class="toggle-switch">
-                <input type="checkbox" id="maze-enabled-toggle" checked aria-label="Enable maze honeypot">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <div class="toggle-row">
-              <label class="control-label" for="maze-auto-ban-toggle">Auto-Ban</label>
-              <label class="toggle-switch">
-                <input type="checkbox" id="maze-auto-ban-toggle" checked aria-label="Enable maze auto-ban">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <div class="input-row">
-              <label class="control-label" for="maze-threshold">Ban Threshold</label>
-              <input class="input-field" type="number" id="maze-threshold" value="50" min="5" max="500" aria-label="Maze ban threshold in pages">
-              <span class="input-unit text-muted">pages</span>
-            </div>
-          </div>
-          <button id="save-maze-config" class="btn">Save Maze Settings</button>
-        </div>
-        <div class="control-group panel-soft pad-md">
-          <h3>AI Training Opt-Out Policy</h3>
-          <p class="control-desc text-muted">Declare crawling policies via robots.txt (advisory, not enforcement)</p>
-          <div class="admin-controls">
-            <div class="toggle-row">
-              <label class="control-label control-label--wide" for="robots-enabled-toggle">Serve robots.txt</label>
-              <label class="toggle-switch">
-                <input type="checkbox" id="robots-enabled-toggle" checked aria-label="Serve robots.txt">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <div class="toggle-row">
-              <label class="control-label control-label--wide" for="robots-block-training-toggle">Opt-out AI Training</label>
-              <label class="toggle-switch">
-                <input type="checkbox" id="robots-block-training-toggle" checked aria-label="Opt-out AI training">
-                <span class="toggle-slider"></span>
-              </label>
-              <span class="toggle-hint">GPTBot, CCBot, ClaudeBot</span>
-            </div>
-            <div class="toggle-row">
-              <label class="control-label control-label--wide" for="robots-block-search-toggle">Opt-out AI Search</label>
-              <label class="toggle-switch">
-                <input type="checkbox" id="robots-block-search-toggle" aria-label="Opt-out AI search">
-                <span class="toggle-slider"></span>
-              </label>
-              <span class="toggle-hint">PerplexityBot, etc.</span>
-            </div>
-            <div class="toggle-row">
-              <label class="control-label control-label--wide" for="robots-allow-search-toggle">Restrict Search Engines</label>
-              <label class="toggle-switch">
-                <input type="checkbox" id="robots-allow-search-toggle" aria-label="Restrict search engines">
-                <span class="toggle-slider"></span>
-              </label>
-              <span class="toggle-hint">Google, Bing, etc.</span>
-            </div>
-            <div class="input-row">
-              <label class="control-label control-label--wide" for="robots-crawl-delay">Crawl Delay</label>
-              <input class="input-field" type="number" id="robots-crawl-delay" value="2" min="0" max="60" aria-label="Robots crawl delay in seconds">
-              <span class="input-unit text-muted">seconds</span>
-            </div>
-          </div>
-          <button id="save-robots-config" class="btn" disabled>Update Policy</button>
-          <button id="preview-robots" class="btn btn-subtle">Show robots.txt</button>
-          <div id="robots-preview" class="robots-preview panel hidden pad-sm">
-            <h4>robots.txt Preview</h4>
-            <pre id="robots-preview-content"></pre>
-          </div>
-        </div>
-        <div class="control-group panel-soft pad-md">
-          <h3>CDP (Detect Browser Automation)</h3>
-          <p class="control-desc text-muted">Detects bots controlling browsers on behalf of human users (Puppeteer, Playwright,
-            Selenium, etc.)</p>
-          <div class="admin-controls">
-            <div class="toggle-row">
-              <label class="control-label control-label--wide" for="cdp-enabled-toggle">Enable Detection</label>
-              <label class="toggle-switch">
-                <input type="checkbox" id="cdp-enabled-toggle" checked aria-label="Enable CDP detection">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <div class="toggle-row">
-              <label class="control-label control-label--wide" for="cdp-auto-ban-toggle">Auto-ban on Detection</label>
-              <label class="toggle-switch">
-                <input type="checkbox" id="cdp-auto-ban-toggle" checked aria-label="Enable CDP auto-ban">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <div class="slider-control">
-              <div class="slider-header">
-                <label class="control-label control-label--wide" for="cdp-threshold-slider">Detection Threshold</label>
-                <span id="cdp-threshold-value" class="slider-badge">0.6</span>
+        </section>
+
+        <section class="admin-group">
+          <h3 class="admin-group-title">Status</h3>
+          <div class="controls-grid controls-grid--status">
+            <div class="control-group panel-soft pad-md">
+              <h3>Fail Mode Policy</h3>
+              <p class="control-desc text-muted">
+                What happens when the data store goes down? Set at deploy time
+                via the SHUMA_FAIL_MODE environment variable.
+              </p>
+              <div class="info-panel panel-muted pad-sm">
+                <h4>Current Policy</h4>
+                <div class="info-row">
+                  <span class="info-label text-muted">Mode:</span>
+                  <span id="fail-mode-value">--</span>
+                </div>
               </div>
-              <input type="range" id="cdp-threshold-slider" min="0.3" max="1.0" step="0.1" value="0.6" aria-label="CDP detection threshold">
-              <div class="slider-labels">
-                <span>Sensitive</span>
-                <span>Strict</span>
+              <p class="control-desc control-desc-spaced text-muted">
+                <strong>Open</strong> (default) — if the KV store is unreachable,
+                requests are allowed through and bot checks are skipped. Your site
+                stays up but is unprotected until the store recovers.<br><br>
+                <strong>Closed</strong> — if the KV store is unreachable, all
+                requests are blocked. Choose this when the risk of undetected bot
+                traffic (scraping, credential stuffing, bandwidth abuse) outweighs
+                the cost of a temporary outage.
+              </p>
+            </div>
+            <div class="control-group panel-soft pad-md">
+              <h3>Test Mode</h3>
+              <p class="control-desc text-muted">When enabled, logs actions without blocking users</p>
+              <label class="toggle-switch" for="test-mode-toggle">
+                <input type="checkbox" id="test-mode-toggle" aria-label="Enable Test Mode">
+                <span class="toggle-slider"></span>
+              </label>
+              <span id="test-mode-status">Loading...</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="admin-group">
+          <h3 class="admin-group-title">Config</h3>
+          <div class="controls-grid controls-grid--config">
+            <div class="control-group panel-soft pad-md">
+              <h3>AI Training Opt-Out Policy</h3>
+              <p class="control-desc text-muted">Declare crawling policies via robots.txt (advisory, not enforcement)</p>
+              <div class="admin-controls">
+                <div class="toggle-row">
+                  <label class="control-label control-label--wide" for="robots-enabled-toggle">Serve robots.txt</label>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="robots-enabled-toggle" checked aria-label="Serve robots.txt">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <div class="toggle-row">
+                  <label class="control-label control-label--wide" for="robots-block-training-toggle">Opt-out AI Training</label>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="robots-block-training-toggle" checked aria-label="Opt-out AI training">
+                    <span class="toggle-slider"></span>
+                  </label>
+                  <span class="toggle-hint">GPTBot, CCBot, ClaudeBot</span>
+                </div>
+                <div class="toggle-row">
+                  <label class="control-label control-label--wide" for="robots-block-search-toggle">Opt-out AI Search</label>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="robots-block-search-toggle" aria-label="Opt-out AI search">
+                    <span class="toggle-slider"></span>
+                  </label>
+                  <span class="toggle-hint">PerplexityBot, etc.</span>
+                </div>
+                <div class="toggle-row">
+                  <label class="control-label control-label--wide" for="robots-allow-search-toggle">Restrict Search Engines</label>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="robots-allow-search-toggle" aria-label="Restrict search engines">
+                    <span class="toggle-slider"></span>
+                  </label>
+                  <span class="toggle-hint">Google, Bing, etc.</span>
+                </div>
+                <div class="input-row">
+                  <label class="control-label control-label--wide" for="robots-crawl-delay">Crawl Delay</label>
+                  <input class="input-field" type="number" id="robots-crawl-delay" value="2" min="0" max="60" aria-label="Robots crawl delay in seconds">
+                  <span class="input-unit text-muted">seconds</span>
+                </div>
+              </div>
+              <button id="save-robots-config" class="btn" disabled>Update Policy</button>
+              <button id="preview-robots" class="btn btn-subtle">Show robots.txt</button>
+              <div id="robots-preview" class="robots-preview panel hidden pad-sm">
+                <h4>robots.txt Preview</h4>
+                <pre id="robots-preview-content"></pre>
               </div>
             </div>
+            <div class="control-group panel-soft pad-md">
+              <h3>CDP (Detect Browser Automation)</h3>
+              <p class="control-desc text-muted">Detects bots controlling browsers on behalf of human users (Puppeteer, Playwright,
+                Selenium, etc.)</p>
+              <div class="admin-controls">
+                <div class="toggle-row">
+                  <label class="control-label control-label--wide" for="cdp-enabled-toggle">Enable Detection</label>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="cdp-enabled-toggle" checked aria-label="Enable CDP detection">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <div class="toggle-row">
+                  <label class="control-label control-label--wide" for="cdp-auto-ban-toggle">Auto-ban on Detection</label>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="cdp-auto-ban-toggle" checked aria-label="Enable CDP auto-ban">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <div class="slider-control">
+                  <div class="slider-header">
+                    <label class="control-label control-label--wide" for="cdp-threshold-slider">Detection Threshold</label>
+                    <span id="cdp-threshold-value" class="slider-badge">0.6</span>
+                  </div>
+                  <input type="range" id="cdp-threshold-slider" min="0.3" max="1.0" step="0.1" value="0.6" aria-label="CDP detection threshold">
+                  <div class="slider-labels">
+                    <span>Sensitive</span>
+                    <span>Strict</span>
+                  </div>
+                </div>
+              </div>
+              <button id="save-cdp-config" class="btn" disabled>Save CDP Settings</button>
+              <div id="cdp-stats" class="info-panel panel-muted pad-sm">
+                <h4>Detection Stats</h4>
+                <div class="info-row">
+                  <span class="info-label text-muted">Total Detections:</span>
+                  <span id="cdp-total-detections">0</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label text-muted">Auto-bans:</span>
+                  <span id="cdp-auto-bans">0</span>
+                </div>
+              </div>
+            </div>
+            <div class="control-group panel-soft pad-md">
+              <h3>Proof-of-Work (PoW)</h3>
+              <p class="control-desc text-muted">Lightweight PoW before JS verification (tunable when allowed)</p>
+              <div class="admin-controls">
+                <div class="input-row">
+                  <label class="control-label" for="pow-difficulty">Difficulty</label>
+                  <input class="input-field" type="number" id="pow-difficulty" min="12" max="20" value="15" aria-label="PoW difficulty in leading zero bits">
+                  <span class="input-unit text-muted">bits</span>
+                </div>
+                <div class="input-row">
+                  <label class="control-label" for="pow-ttl">Seed TTL</label>
+                  <input class="input-field" type="number" id="pow-ttl" min="30" max="300" value="90" aria-label="PoW seed TTL in seconds">
+                  <span class="input-unit text-muted">seconds</span>
+                </div>
+                <div class="info-panel panel-muted pad-sm">
+                  <h4>Status</h4>
+                  <div class="info-row">
+                  <span class="info-label text-muted">PoW Status:</span>
+                    <span id="pow-status">--</span>
+                  </div>
+                  <div class="info-row">
+                  <span class="info-label text-muted">Config:</span>
+                    <span id="pow-config-status">--</span>
+                  </div>
+                </div>
+              </div>
+              <button id="save-pow-config" class="btn" disabled>Save PoW Settings</button>
+            </div>
+            <div class="control-group panel-soft pad-md">
+              <h3>Link Maze</h3>
+              <p class="control-desc text-muted">Honeypot trap for crawlers</p>
+              <div class="admin-controls">
+                <div class="toggle-row">
+                  <label class="control-label" for="maze-enabled-toggle">Maze Enabled</label>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="maze-enabled-toggle" checked aria-label="Enable maze honeypot">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <div class="toggle-row">
+                  <label class="control-label" for="maze-auto-ban-toggle">Auto-Ban</label>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="maze-auto-ban-toggle" checked aria-label="Enable maze auto-ban">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <div class="input-row">
+                  <label class="control-label" for="maze-threshold">Ban Threshold</label>
+                  <input class="input-field" type="number" id="maze-threshold" value="50" min="5" max="500" aria-label="Maze ban threshold in pages">
+                  <span class="input-unit text-muted">pages</span>
+                </div>
+              </div>
+              <button id="save-maze-config" class="btn">Save Maze Settings</button>
+            </div>
+            <div class="control-group panel-soft pad-md">
+              <h3>Ban Durations</h3>
+              <p class="control-desc text-muted">Configure ban duration per offense type (seconds)</p>
+              <div class="duration-grid">
+                <label for="dur-honeypot">Honeypot:</label> <input id="dur-honeypot" class="input-field" type="number" value="86400" />
+                <label for="dur-rate-limit">Rate Limit:</label> <input id="dur-rate-limit" class="input-field" type="number" value="3600" />
+                <label for="dur-browser">Browser:</label> <input id="dur-browser" class="input-field" type="number" value="21600" />
+                <label for="dur-admin">Admin:</label> <input id="dur-admin" class="input-field" type="number" value="21600" />
+              </div>
+              <button id="save-durations-btn" class="btn btn-dark">Save Durations</button>
+            </div>
+            <div class="control-group panel-soft pad-md">
+              <h3>Botness Scoring</h3>
+              <p class="control-desc text-muted">Weighted signals form a unified score. Moderate scores get the challenge; higher scores route to maze.</p>
+              <div class="admin-controls">
+                <div class="input-row">
+                  <label class="control-label" for="challenge-threshold">Challenge</label>
+                  <input class="input-field" type="number" id="challenge-threshold" min="1" max="10" value="3" aria-label="Challenge risk threshold">
+                  <span class="input-unit text-muted">score</span>
+                </div>
+                <div class="input-row">
+                  <label class="control-label" for="maze-threshold-score">Maze</label>
+                  <input class="input-field" type="number" id="maze-threshold-score" min="1" max="10" value="6" aria-label="Maze risk threshold">
+                  <span class="input-unit text-muted">score</span>
+                </div>
+                <div class="input-row">
+                  <label class="control-label" for="weight-js-required">Weight: JS</label>
+                  <input class="input-field" type="number" id="weight-js-required" min="0" max="10" value="1" aria-label="Weight for JS verification required">
+                  <span class="input-unit text-muted">points</span>
+                </div>
+                <div class="input-row">
+                  <label class="control-label" for="weight-geo-risk">Weight: Geo</label>
+                  <input class="input-field" type="number" id="weight-geo-risk" min="0" max="10" value="2" aria-label="Weight for high-risk geography">
+                  <span class="input-unit text-muted">points</span>
+                </div>
+                <div class="input-row">
+                  <label class="control-label" for="weight-rate-medium">Weight: Rate 50%</label>
+                  <input class="input-field" type="number" id="weight-rate-medium" min="0" max="10" value="1" aria-label="Weight for medium rate pressure">
+                  <span class="input-unit text-muted">points</span>
+                </div>
+                <div class="input-row">
+                  <label class="control-label" for="weight-rate-high">Weight: Rate 80%</label>
+                  <input class="input-field" type="number" id="weight-rate-high" min="0" max="10" value="2" aria-label="Weight for high rate pressure">
+                  <span class="input-unit text-muted">points</span>
+                </div>
+                <div class="info-panel panel-muted pad-sm">
+                  <h4>Status</h4>
+                  <div class="info-row">
+                    <span class="info-label text-muted">Config:</span>
+                    <span id="botness-config-status">--</span>
+                  </div>
+                  <div class="info-row">
+                    <span class="info-label text-muted">Default Challenge:</span>
+                    <span id="challenge-default">--</span>
+                  </div>
+                  <div class="info-row">
+                    <span class="info-label text-muted">Default Maze:</span>
+                    <span id="maze-threshold-default">--</span>
+                  </div>
+                </div>
+                <div class="info-panel panel-muted pad-sm">
+                  <h4>Scored Signals</h4>
+                  <div id="botness-signal-list"></div>
+                </div>
+                <div class="info-panel panel-muted pad-sm">
+                  <h4>Terminal Signals</h4>
+                  <div id="botness-terminal-list"></div>
+                </div>
+              </div>
+              <button id="save-botness-config" class="btn" disabled>Save Botness Settings</button>
+            </div>
           </div>
-          <button id="save-cdp-config" class="btn" disabled>Save CDP Settings</button>
-          <div id="cdp-stats" class="info-panel panel-muted pad-sm">
-            <h4>Detection Stats</h4>
-            <div class="info-row">
-              <span class="info-label text-muted">Total Detections:</span>
-              <span id="cdp-total-detections">0</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label text-muted">Auto-bans:</span>
-              <span id="cdp-auto-bans">0</span>
-            </div>
-          </div>
-        </div>
-        <div class="control-group panel-soft pad-md">
-          <h3>Proof-of-Work (PoW)</h3>
-          <p class="control-desc text-muted">Lightweight PoW before JS verification (tunable when allowed)</p>
-          <div class="admin-controls">
-            <div class="input-row">
-              <label class="control-label" for="pow-difficulty">Difficulty</label>
-              <input class="input-field" type="number" id="pow-difficulty" min="12" max="20" value="15" aria-label="PoW difficulty in leading zero bits">
-              <span class="input-unit text-muted">bits</span>
-            </div>
-            <div class="input-row">
-              <label class="control-label" for="pow-ttl">Seed TTL</label>
-              <input class="input-field" type="number" id="pow-ttl" min="30" max="300" value="90" aria-label="PoW seed TTL in seconds">
-              <span class="input-unit text-muted">seconds</span>
-            </div>
-            <div class="info-panel panel-muted pad-sm">
-              <h4>Status</h4>
-              <div class="info-row">
-              <span class="info-label text-muted">PoW Status:</span>
-                <span id="pow-status">--</span>
-              </div>
-              <div class="info-row">
-              <span class="info-label text-muted">Config:</span>
-                <span id="pow-config-status">--</span>
-              </div>
-            </div>
-          </div>
-          <button id="save-pow-config" class="btn" disabled>Save PoW Settings</button>
-        </div>
-        <div class="control-group panel-soft pad-md">
-          <h3>Botness Scoring</h3>
-          <p class="control-desc text-muted">Weighted signals form a unified score. Moderate scores get the challenge; higher scores route to maze.</p>
-          <div class="admin-controls">
-            <div class="input-row">
-              <label class="control-label" for="challenge-threshold">Challenge</label>
-              <input class="input-field" type="number" id="challenge-threshold" min="1" max="10" value="3" aria-label="Challenge risk threshold">
-              <span class="input-unit text-muted">score</span>
-            </div>
-            <div class="input-row">
-              <label class="control-label" for="maze-threshold-score">Maze</label>
-              <input class="input-field" type="number" id="maze-threshold-score" min="1" max="10" value="6" aria-label="Maze risk threshold">
-              <span class="input-unit text-muted">score</span>
-            </div>
-            <div class="input-row">
-              <label class="control-label" for="weight-js-required">Weight: JS</label>
-              <input class="input-field" type="number" id="weight-js-required" min="0" max="10" value="1" aria-label="Weight for JS verification required">
-              <span class="input-unit text-muted">points</span>
-            </div>
-            <div class="input-row">
-              <label class="control-label" for="weight-geo-risk">Weight: Geo</label>
-              <input class="input-field" type="number" id="weight-geo-risk" min="0" max="10" value="2" aria-label="Weight for high-risk geography">
-              <span class="input-unit text-muted">points</span>
-            </div>
-            <div class="input-row">
-              <label class="control-label" for="weight-rate-medium">Weight: Rate 50%</label>
-              <input class="input-field" type="number" id="weight-rate-medium" min="0" max="10" value="1" aria-label="Weight for medium rate pressure">
-              <span class="input-unit text-muted">points</span>
-            </div>
-            <div class="input-row">
-              <label class="control-label" for="weight-rate-high">Weight: Rate 80%</label>
-              <input class="input-field" type="number" id="weight-rate-high" min="0" max="10" value="2" aria-label="Weight for high rate pressure">
-              <span class="input-unit text-muted">points</span>
-            </div>
-            <div class="info-panel panel-muted pad-sm">
-              <h4>Status</h4>
-              <div class="info-row">
-                <span class="info-label text-muted">Config:</span>
-                <span id="botness-config-status">--</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label text-muted">Default Challenge:</span>
-                <span id="challenge-default">--</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label text-muted">Default Maze:</span>
-                <span id="maze-threshold-default">--</span>
-              </div>
-            </div>
-            <div class="info-panel panel-muted pad-sm">
-              <h4>Scored Signals</h4>
-              <div id="botness-signal-list"></div>
-            </div>
-            <div class="info-panel panel-muted pad-sm">
-              <h4>Terminal Signals</h4>
-              <div id="botness-terminal-list"></div>
-            </div>
-          </div>
-          <button id="save-botness-config" class="btn" disabled>Save Botness Settings</button>
-        </div>
+        </section>
       </div>
       <div id="admin-msg" class="message"></div>
     </div>

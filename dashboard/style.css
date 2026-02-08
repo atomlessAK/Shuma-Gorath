@@ -505,11 +505,41 @@ code {
    Admin Controls
    =========================================== */
 
+.admin-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.admin-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-group-title {
+  margin: 0;
+  font-size: var(--text-xl);
+  color: var(--heading-fg);
+}
+
 .controls-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 20px;
   margin-bottom: 20px;
+}
+
+.controls-grid--manual {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.controls-grid--status {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.controls-grid--config {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 }
 
 .control-group {
