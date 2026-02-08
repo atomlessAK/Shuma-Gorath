@@ -365,6 +365,10 @@ table {
   overflow: hidden;
 }
 
+.bans-table-admin {
+  margin-bottom: 20px;
+}
+
 thead {
   background: var(--color-gray-100);
 }

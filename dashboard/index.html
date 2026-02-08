@@ -116,30 +116,25 @@
       </div>
     </div>
 
-    <!-- Ban List -->
-    <div class="section">
-      <h2>Current Bans</h2>
-      <table id="bans-table" class="panel panel-border">
-        <thead>
-          <tr>
-            <th class="caps-label">IP Address</th>
-            <th class="caps-label">Reason</th>
-            <th class="caps-label">Banned At</th>
-            <th class="caps-label">Expires</th>
-            <th class="caps-label">Signals</th>
-            <th class="caps-label">Actions</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-
     <!-- Admin Controls -->
     <div class="section admin-section">
     <h2>Admin Controls</h2>
       <div class="admin-groups">
         <section class="admin-group">
-          <h3 class="admin-group-title">Manual Banning</h3>
+          <h3 class="admin-group-title">Banning</h3>
+          <table id="bans-table" class="panel panel-border bans-table-admin">
+            <thead>
+              <tr>
+                <th class="caps-label">IP Address</th>
+                <th class="caps-label">Reason</th>
+                <th class="caps-label">Banned At</th>
+                <th class="caps-label">Expires</th>
+                <th class="caps-label">Signals</th>
+                <th class="caps-label">Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
           <div class="controls-grid controls-grid--manual">
             <div class="control-group panel-soft pad-md">
               <h3>Ban IP</h3>
