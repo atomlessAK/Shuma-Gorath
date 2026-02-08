@@ -157,36 +157,22 @@
             <div class="control-group panel-soft pad-md">
               <h3>Fail Mode Policy</h3>
               <p class="control-desc text-muted">
-                What happens when the data store goes down? Set at deploy time
-                via the SHUMA_FAIL_MODE environment variable.
+                Set at deploy time via <code>SHUMA_FAIL_MODE</code>. <strong>Open</strong> (default) allows requests when KV is unavailable so availability stays high but protection is bypassed. <strong>Closed</strong> blocks requests when KV is unavailable so protection stays strict but availability can drop.
               </p>
               <div class="status-rows">
                 <div class="info-row">
-                  <span class="info-label text-muted">Mode:</span>
+                  <span class="info-label text-muted">Status:</span>
                   <span id="fail-mode-value" class="status-value">--</span>
                 </div>
               </div>
-              <p class="control-desc control-desc-spaced text-muted">
-                <strong>Open</strong> (default) — if the KV store is unreachable,
-                requests are allowed through and bot checks are skipped. Your site
-                stays up but is unprotected until the store recovers.<br><br>
-                <strong>Closed</strong> — if the KV store is unreachable, all
-                requests are blocked. Choose this when the risk of undetected bot
-                traffic (scraping, credential stuffing, bandwidth abuse) outweighs
-                the cost of a temporary outage.
-              </p>
               <h3>Proof-of-Work (PoW)</h3>
               <p class="control-desc text-muted">
-                PoW adds a lightweight computational puzzle before JS verification to increase bot cost while keeping normal traffic usable.
+                PoW adds a lightweight computational puzzle before JS verification to increase bot cost while keeping normal traffic usable. Runtime mutability determines whether PoW settings are editable in the admin UI.
               </p>
               <div class="status-rows">
                 <div class="info-row">
-                  <span class="info-label text-muted">PoW Status:</span>
+                  <span class="info-label text-muted">Status:</span>
                   <span id="pow-status" class="status-value">--</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label text-muted">PoW Config:</span>
-                  <span id="pow-config-status" class="status-value">--</span>
                 </div>
               </div>
             </div>
