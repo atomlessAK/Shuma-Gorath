@@ -9,16 +9,18 @@ const statusPanelState = {
   powEnabled: false,
   powMutable: false,
   mazeEnabled: false,
-  mazeAutoBan: false,
-  cdpEnabled: false,
-  cdpAutoBan: false
+  cdpEnabled: false
 };
+
+function envVar(name) {
+  return `<code class="env-var">${name}</code>`;
+}
 
 const STATUS_DEFINITIONS = [
   {
     title: 'Fail Mode Policy',
     description: () => (
-      'Controlled by <code>SHUMA_FAIL_MODE</code>. <strong>Open</strong> allows requests when KV is unavailable; ' +
+      `Controlled by ${envVar('SHUMA_FAIL_MODE')}. <strong>Open</strong> allows requests when KV is unavailable; ` +
       '<strong>Closed</strong> blocks requests when KV is unavailable.'
     ),
     status: state => normalizeFailMode(state.failMode).toUpperCase()
@@ -27,8 +29,8 @@ const STATUS_DEFINITIONS = [
     title: 'Proof-of-Work (PoW)',
     description: state => (
       'PoW adds a lightweight computational puzzle before JS verification to increase bot cost. ' +
-      'The ENV var boolean toggle for it is <code>POW_ENABLED</code>; and runtime editability is controlled by ' +
-      `<code>POW_CONFIG_MUTABLE</code> and is currently set to ${formatPowMutability(state.powMutable)}.`
+      `The ENV var boolean toggle for it is ${envVar('POW_ENABLED')}; and runtime editability is controlled by ` +
+      `${envVar('POW_CONFIG_MUTABLE')} and is currently set to ${formatPowMutability(state.powMutable)}.`
     ),
     status: state => (state.powEnabled ? 'ENABLED' : 'DISABLED')
   },
@@ -36,25 +38,19 @@ const STATUS_DEFINITIONS = [
     title: 'Link Maze',
     description: () => (
       'Link Maze serves trap pages to suspicious traffic and can auto-ban repeat crawlers. ' +
-      'Botness routing defaults can be set with <code>BOTNESS_MAZE_THRESHOLD</code>; runtime settings are managed in admin config.'
+      `Botness routing defaults can be set with ${envVar('BOTNESS_MAZE_THRESHOLD')}; ` +
+      `runtime settings are managed in admin config via ${envVar('MAZE_ENABLED')}, ${envVar('MAZE_AUTO_BAN')}, and ${envVar('MAZE_AUTO_BAN_THRESHOLD')}.`
     ),
-    status: state => {
-      const mode = state.mazeEnabled ? 'ENABLED' : 'DISABLED';
-      const autoBan = state.mazeAutoBan ? 'AUTO-BAN ON' : 'AUTO-BAN OFF';
-      return `${mode} [${autoBan}]`;
-    }
+    status: state => (state.mazeEnabled ? 'ENABLED' : 'DISABLED')
   },
   {
     title: 'CDP (Detect Browser Automation)',
     description: () => (
       'CDP detection checks browser automation fingerprints and can auto-ban high-confidence detections. ' +
-      'Runtime settings are managed in admin config (<code>cdp_detection_enabled</code>, <code>cdp_auto_ban</code>, <code>cdp_detection_threshold</code>).'
+      `Runtime settings are managed in admin config via ${envVar('CDP_DETECTION_ENABLED')}, ` +
+      `${envVar('CDP_AUTO_BAN')}, and ${envVar('CDP_DETECTION_THRESHOLD')}.`
     ),
-    status: state => {
-      const mode = state.cdpEnabled ? 'ENABLED' : 'DISABLED';
-      const autoBan = state.cdpAutoBan ? 'AUTO-BAN ON' : 'AUTO-BAN OFF';
-      return `${mode} [${autoBan}]`;
-    }
+    status: state => (state.cdpEnabled ? 'ENABLED' : 'DISABLED')
   }
 ];
 
@@ -503,7 +499,6 @@ function updateMazeConfig(config) {
   }
   if (config.maze_auto_ban !== undefined) {
     document.getElementById('maze-auto-ban-toggle').checked = config.maze_auto_ban;
-    statusPanelState.mazeAutoBan = config.maze_auto_ban === true;
   }
   if (config.maze_auto_ban_threshold !== undefined) {
     document.getElementById('maze-threshold').value = config.maze_auto_ban_threshold;
@@ -762,7 +757,6 @@ function updateCdpConfig(config) {
   }
   if (config.cdp_auto_ban !== undefined) {
     document.getElementById('cdp-auto-ban-toggle').checked = config.cdp_auto_ban;
-    statusPanelState.cdpAutoBan = config.cdp_auto_ban === true;
   }
   if (config.cdp_detection_threshold !== undefined) {
     document.getElementById('cdp-threshold-slider').value = config.cdp_detection_threshold;

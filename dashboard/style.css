@@ -16,6 +16,7 @@
   --color-gray-800: #27272a;
   --color-gray-900: #18181b;
   --color-black: #09090b;
+  --color-env-var-bg: rgb(255, 205, 235);
 
   /* Primary accent (used sparingly) */
   --color-accent: #18181b;
@@ -414,6 +415,11 @@ code {
   font-family: 'Courier New', monospace;
   font-size: var(--text-base);
   color: var(--color-gray-700);
+}
+
+code.env-var {
+  background: var(--color-env-var-bg);
+  color: var(--color-black);
 }
 
 .expired {
