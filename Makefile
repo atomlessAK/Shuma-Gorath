@@ -58,7 +58,7 @@ dev: ## Build and run with file watching (auto-rebuild on save)
 	@./scripts/set_crate_type.sh rlib
 	@cargo watch --poll -w src -w dashboard -w spin.toml -i '*.wasm' -i 'src/bot_trap.wasm' -i '.spin/**' \
 		-s 'if [ ! -f target/wasm32-wasip1/release/shuma_gorath.wasm ] || find src -name "*.rs" -newer target/wasm32-wasip1/release/shuma_gorath.wasm -print -quit | grep -q .; then ./scripts/set_crate_type.sh cdylib && cargo build --target wasm32-wasip1 --release && cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm && ./scripts/set_crate_type.sh rlib; else echo "No Rust changes detected; skipping WASM rebuild."; fi' \
-		-s 'pkill -f "spin up" 2>/dev/null; SPIN_ALWAYS_BUILD=0 spin up $(SPIN_API_KEY) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) --listen 127.0.0.1:3000'
+		-s 'pkill -f "spin up" 2>/dev/null; SPIN_ALWAYS_BUILD=0 spin up --direct-mounts $(SPIN_API_KEY) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) --listen 127.0.0.1:3000'
 
 dev-closed: ## Build and run with file watching and SHUMA_KV_STORE_FAIL_MODE=closed (fail-closed)
 	@echo "$(CYAN)🚨 Starting development server with SHUMA_KV_STORE_FAIL_MODE=closed (fail-closed)...$(NC)"
@@ -73,7 +73,7 @@ dev-closed: ## Build and run with file watching and SHUMA_KV_STORE_FAIL_MODE=clo
 	@./scripts/set_crate_type.sh rlib
 	@cargo watch --poll -w src -w dashboard -w spin.toml -i '*.wasm' -i 'src/bot_trap.wasm' -i '.spin/**' \
 		-s 'if [ ! -f target/wasm32-wasip1/release/shuma_gorath.wasm ] || find src -name "*.rs" -newer target/wasm32-wasip1/release/shuma_gorath.wasm -print -quit | grep -q .; then ./scripts/set_crate_type.sh cdylib && cargo build --target wasm32-wasip1 --release && cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm && ./scripts/set_crate_type.sh rlib; else echo "No Rust changes detected; skipping WASM rebuild."; fi' \
-		-s 'pkill -f "spin up" 2>/dev/null; SPIN_ALWAYS_BUILD=0 spin up --env SHUMA_KV_STORE_FAIL_MODE=closed $(SPIN_API_KEY) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) --listen 127.0.0.1:3000'
+		-s 'pkill -f "spin up" 2>/dev/null; SPIN_ALWAYS_BUILD=0 spin up --direct-mounts --env SHUMA_KV_STORE_FAIL_MODE=closed $(SPIN_API_KEY) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) --listen 127.0.0.1:3000'
 
 local: dev ## Alias for dev
 
