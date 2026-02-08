@@ -1117,6 +1117,7 @@ input:checked + .toggle-slider:before {
     --slider-track-bg: var(--color-gray-500);
     --slider-track-border: var(--color-gray-400);
     --btn-contrast-fg: var(--color-black);
+    --color-env-var-bg: rgb(125, 75, 105);
   }
 
   body, .container, .card, .info-panel, .robots-preview {
