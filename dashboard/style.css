@@ -9,7 +9,7 @@
   --color-100: #f4edf5;
   --color-200: #e4d4e3;
   --color-300: #d4c4d8;
-  --color-400: #a1a1aa;
+  --color-400: #a191a7;
   --color-500: #71717a;
   --color-600: #523259;
   --color-700: #3f3f46;
@@ -1090,27 +1090,27 @@ input:checked + .toggle-slider:before {
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-back: #18071b;
-    --color-50: #232326;
-    --color-100: #232326;
-    --color-200: #27272a;
+    --color-back: #200b24;
+    --color-50: #251e24;
+    --color-100: #260e2a;
+    --color-200: #2c2430;
     --color-300: #3f1f46;
-    --color-400: #52525b;
-    --color-500: #71717a;
-    --color-600: #a1a1aa;
-    --color-700: #d4d4d8;
-    --color-800: #e4e4e7;
+    --color-400: #595062;
+    --color-500: #786a82;
+    --color-600: #a99ab0;
+    --color-700: #dccedf;
+    --color-800: #ece0ed;
     --color-900: #faeafa;
     --color-front: #ffeffc;
 
     --color-accent: #fff8fc;
-    --color-accent-hover: #e4e4e7;
-    --color-success: #e4e4e7;
-    --color-success-bg: #27272a;
+    --color-accent-hover: var(--color-800);
+    --color-success: var(--color-800);
+    --color-success-bg: var(--color-200);
     --color-error: #fff8fc;
-    --color-error-bg: #27272a;
-    --color-warning: #d4d4d8;
-    --color-warning-bg: #232326;
+    --color-error-bg: var(--color-200);
+    --color-warning: var(--color-700);
+    --color-warning-bg: var(--color-50);
     --color-toggle-active: #fff8fc;
     --field-bg: var(--color-200);
     --field-fg: var(--color-800);
@@ -1173,3 +1173,5 @@ input:checked + .toggle-slider:before {
   }
 
 }
+
+/* hot-test-1770569676 */
