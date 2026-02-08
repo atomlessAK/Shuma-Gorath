@@ -280,23 +280,6 @@
               <button id="save-maze-config" class="btn">Save Maze Settings</button>
             </div>
             <div class="control-group panel-soft pad-md">
-              <h3>Ban Durations</h3>
-              <p class="control-desc text-muted">Configure ban duration per offense type (seconds)</p>
-              <div class="duration-grid">
-                <label for="dur-honeypot">Honeypot:</label> <input id="dur-honeypot" class="input-field" type="number" value="86400" />
-                <label for="dur-rate-limit">Rate Limit:</label> <input id="dur-rate-limit" class="input-field" type="number" value="3600" />
-                <label for="dur-browser">Browser:</label> <input id="dur-browser" class="input-field" type="number" value="21600" />
-                <label for="dur-admin">Admin:</label> <input id="dur-admin" class="input-field" type="number" value="21600" />
-              </div>
-              <button id="save-durations-btn" class="btn btn-dark">Save Durations</button>
-            </div>
-          </div>
-        </section>
-
-        <section class="admin-group">
-          <h3 class="admin-group-title">Tuning Bot Detection</h3>
-          <div class="controls-grid controls-grid--tuning">
-            <div class="control-group panel-soft pad-md">
               <h3>CDP (Detect Browser Automation)</h3>
               <p class="control-desc text-muted">Detects bots controlling browsers on behalf of human users (Puppeteer, Playwright,
                 Selenium, etc.)</p>
@@ -366,6 +349,23 @@
               </div>
               <button id="save-pow-config" class="btn" disabled>Save PoW Settings</button>
             </div>
+            <div class="control-group panel-soft pad-md">
+              <h3>Ban Durations</h3>
+              <p class="control-desc text-muted">Configure ban duration per offense type (seconds)</p>
+              <div class="duration-grid">
+                <label for="dur-honeypot">Honeypot:</label> <input id="dur-honeypot" class="input-field" type="number" value="86400" />
+                <label for="dur-rate-limit">Rate Limit:</label> <input id="dur-rate-limit" class="input-field" type="number" value="3600" />
+                <label for="dur-browser">Browser:</label> <input id="dur-browser" class="input-field" type="number" value="21600" />
+                <label for="dur-admin">Admin:</label> <input id="dur-admin" class="input-field" type="number" value="21600" />
+              </div>
+              <button id="save-durations-btn" class="btn btn-dark">Save Durations</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="admin-group">
+          <h3 class="admin-group-title">Tuning Bot Detection</h3>
+          <div class="controls-grid controls-grid--tuning">
             <div class="control-group panel-soft pad-md">
               <h3>Botness Scoring</h3>
               <p class="control-desc text-muted">Weighted signals form a unified score. Moderate scores get the challenge; higher scores route to maze.</p>
