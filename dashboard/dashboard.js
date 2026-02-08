@@ -153,7 +153,10 @@ function initCharts() {
         label: 'Events',
         data: [],
         fill: true,
-        tension: 0.4
+        tension: 0.4,
+        borderWidth: 0,
+        pointRadius: 0,
+        pointHoverRadius: 0
       }]
     },
     options: {
@@ -341,7 +344,8 @@ function updateTimeSeriesChart() {
 
     timeSeriesChart.data.labels = labels;
     timeSeriesChart.data.datasets[0].data = counts;
-    timeSeriesChart.data.datasets[0].borderColor = CHART_PALETTE[7];
+    timeSeriesChart.data.datasets[0].borderColor = 'rgba(0, 0, 0, 0)';
+    timeSeriesChart.data.datasets[0].borderWidth = 0;
     timeSeriesChart.data.datasets[0].backgroundColor = CHART_PALETTE[0];
     timeSeriesChart.update();
   })
