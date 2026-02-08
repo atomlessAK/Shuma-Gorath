@@ -70,7 +70,7 @@ When `SHUMA_DEBUG_HEADERS=true`, the health response includes:
 - `GET /admin/analytics` - Ban/event statistics
 - `GET /admin/events?hours=N` - Recent events + summary stats
 - `GET /admin/config` - Read configuration
-- `POST /admin/config` - Update configuration (partial JSON)
+- `POST /admin/config` - Update configuration (partial JSON, disabled when `SHUMA_CONFIG_MODE=env_only`)
 - `GET /admin/maze` - Link maze stats
 - `GET /admin/robots` - robots.txt config and preview
 - `GET /admin/cdp` - CDP detection config and stats

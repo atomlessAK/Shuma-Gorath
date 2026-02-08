@@ -143,11 +143,115 @@ const MAZE_THRESHOLD_MAX: u8 = 10;
 const MAZE_THRESHOLD_DEFAULT: u8 = 6;
 const BOTNESS_WEIGHT_MIN: u8 = 0;
 const BOTNESS_WEIGHT_MAX: u8 = 10;
+const BOTNESS_WEIGHT_JS_REQUIRED_DEFAULT: u8 = 1;
+const BOTNESS_WEIGHT_GEO_RISK_DEFAULT: u8 = 2;
+const BOTNESS_WEIGHT_RATE_MEDIUM_DEFAULT: u8 = 1;
+const BOTNESS_WEIGHT_RATE_HIGH_DEFAULT: u8 = 2;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfigMode {
+    Hybrid,
+    EnvOnly,
+}
+
+pub(crate) fn parse_config_mode(value: Option<&str>) -> ConfigMode {
+    match value.map(|v| v.trim().to_ascii_lowercase()).as_deref() {
+        Some("env_only") => ConfigMode::EnvOnly,
+        _ => ConfigMode::Hybrid,
+    }
+}
+
+pub fn config_mode() -> ConfigMode {
+    parse_config_mode(env::var("SHUMA_CONFIG_MODE").ok().as_deref())
+}
+
+pub fn config_mode_label() -> &'static str {
+    match config_mode() {
+        ConfigMode::Hybrid => "hybrid",
+        ConfigMode::EnvOnly => "env_only",
+    }
+}
+
+fn parse_bool_like(value: &str) -> Option<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Some(true),
+        "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
+    }
+}
 
 fn parse_bool_env(value: Option<&str>) -> bool {
-    value
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
+    value.and_then(parse_bool_like).unwrap_or(false)
+}
+
+fn parse_bool_env_var(name: &str) -> Option<bool> {
+    env::var(name).ok().and_then(|v| parse_bool_like(v.as_str()))
+}
+
+fn parse_u64_env_var(name: &str) -> Option<u64> {
+    env::var(name).ok().and_then(|v| v.trim().parse::<u64>().ok())
+}
+
+fn parse_u32_env_var(name: &str) -> Option<u32> {
+    env::var(name).ok().and_then(|v| v.trim().parse::<u32>().ok())
+}
+
+fn parse_u8_env_var(name: &str) -> Option<u8> {
+    env::var(name).ok().and_then(|v| v.trim().parse::<u8>().ok())
+}
+
+fn parse_f32_env_var(name: &str) -> Option<f32> {
+    env::var(name).ok().and_then(|v| v.trim().parse::<f32>().ok())
+}
+
+fn parse_string_list_value(raw: &str) -> Option<Vec<String>> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Some(Vec::new());
+    }
+    if let Ok(v) = serde_json::from_str::<Vec<String>>(trimmed) {
+        return Some(v.into_iter().map(|item| item.trim().to_string()).filter(|item| !item.is_empty()).collect());
+    }
+    Some(
+        trimmed
+            .split(',')
+            .map(|item| item.trim().to_string())
+            .filter(|item| !item.is_empty())
+            .collect(),
+    )
+}
+
+fn parse_string_list_env_var(name: &str) -> Option<Vec<String>> {
+    env::var(name).ok().and_then(|v| parse_string_list_value(v.as_str()))
+}
+
+fn parse_browser_rules_value(raw: &str) -> Option<Vec<(String, u32)>> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Some(Vec::new());
+    }
+    if let Ok(v) = serde_json::from_str::<Vec<(String, u32)>>(trimmed) {
+        return Some(v.into_iter().filter(|(name, _)| !name.trim().is_empty()).collect());
+    }
+    let mut parsed = Vec::new();
+    for entry in trimmed.split(',') {
+        let item = entry.trim();
+        if item.is_empty() {
+            continue;
+        }
+        let (name, version) = item.split_once(':')?;
+        let name = name.trim();
+        if name.is_empty() {
+            return None;
+        }
+        let version = version.trim().parse::<u32>().ok()?;
+        parsed.push((name.to_string(), version));
+    }
+    Some(parsed)
+}
+
+fn parse_browser_rules_env_var(name: &str) -> Option<Vec<(String, u32)>> {
+    env::var(name).ok().and_then(|v| parse_browser_rules_value(v.as_str()))
 }
 
 pub fn pow_config_mutable() -> bool {
@@ -231,19 +335,31 @@ fn default_maze_threshold() -> u8 {
 }
 
 fn default_botness_weight_js_required() -> u8 {
-    parse_botness_weight(env::var("BOTNESS_WEIGHT_JS_REQUIRED").ok().as_deref(), 1)
+    parse_botness_weight(
+        env::var("BOTNESS_WEIGHT_JS_REQUIRED").ok().as_deref(),
+        BOTNESS_WEIGHT_JS_REQUIRED_DEFAULT,
+    )
 }
 
 fn default_botness_weight_geo_risk() -> u8 {
-    parse_botness_weight(env::var("BOTNESS_WEIGHT_GEO_RISK").ok().as_deref(), 2)
+    parse_botness_weight(
+        env::var("BOTNESS_WEIGHT_GEO_RISK").ok().as_deref(),
+        BOTNESS_WEIGHT_GEO_RISK_DEFAULT,
+    )
 }
 
 fn default_botness_weight_rate_medium() -> u8 {
-    parse_botness_weight(env::var("BOTNESS_WEIGHT_RATE_MEDIUM").ok().as_deref(), 1)
+    parse_botness_weight(
+        env::var("BOTNESS_WEIGHT_RATE_MEDIUM").ok().as_deref(),
+        BOTNESS_WEIGHT_RATE_MEDIUM_DEFAULT,
+    )
 }
 
 fn default_botness_weight_rate_high() -> u8 {
-    parse_botness_weight(env::var("BOTNESS_WEIGHT_RATE_HIGH").ok().as_deref(), 2)
+    parse_botness_weight(
+        env::var("BOTNESS_WEIGHT_RATE_HIGH").ok().as_deref(),
+        BOTNESS_WEIGHT_RATE_HIGH_DEFAULT,
+    )
 }
 
 fn default_maze_auto_ban() -> bool {
@@ -258,69 +374,187 @@ fn default_crawl_delay() -> u32 {
     2
 }
 
+fn default_config() -> Config {
+    Config {
+        ban_duration: 21600, // 6 hours (legacy default)
+        ban_durations: BanDurations::default(),
+        rate_limit: 80,
+        honeypots: vec!["/bot-trap".to_string()],
+        browser_block: vec![
+            ("Chrome".to_string(), 120),
+            ("Firefox".to_string(), 115),
+            ("Safari".to_string(), 15),
+        ],
+        browser_whitelist: vec![],
+        geo_risk: vec![],
+        whitelist: vec![],
+        path_whitelist: vec![],
+        test_mode: false,
+        maze_enabled: true,
+        maze_auto_ban: true,
+        maze_auto_ban_threshold: 50,
+        robots_enabled: true,
+        robots_block_ai_training: true,
+        robots_block_ai_search: false,
+        robots_allow_search_engines: true,
+        robots_crawl_delay: 2,
+        cdp_detection_enabled: true,
+        cdp_auto_ban: true,
+        cdp_detection_threshold: 0.8,
+        pow_difficulty: default_pow_difficulty(),
+        pow_ttl_seconds: default_pow_ttl_seconds(),
+        challenge_risk_threshold: default_challenge_threshold(),
+        botness_maze_threshold: default_maze_threshold(),
+        botness_weights: BotnessWeights::default(),
+    }
+}
+
+fn apply_env_overrides(cfg: &mut Config) {
+    if let Some(v) = parse_bool_env_var("TEST_MODE") {
+        cfg.test_mode = v;
+    }
+    if let Some(v) = parse_u64_env_var("SHUMA_BAN_DURATION") {
+        cfg.ban_duration = v;
+    }
+    if let Some(v) = parse_u64_env_var("SHUMA_BAN_DURATION_HONEYPOT") {
+        cfg.ban_durations.honeypot = v;
+    }
+    if let Some(v) = parse_u64_env_var("SHUMA_BAN_DURATION_RATE_LIMIT") {
+        cfg.ban_durations.rate_limit = v;
+    }
+    if let Some(v) = parse_u64_env_var("SHUMA_BAN_DURATION_BROWSER") {
+        cfg.ban_durations.browser = v;
+    }
+    if let Some(v) = parse_u64_env_var("SHUMA_BAN_DURATION_ADMIN") {
+        cfg.ban_durations.admin = v;
+    }
+    if let Some(v) = parse_u64_env_var("SHUMA_BAN_DURATION_CDP") {
+        cfg.ban_durations.cdp = v;
+    }
+    if let Some(v) = parse_u32_env_var("SHUMA_RATE_LIMIT") {
+        cfg.rate_limit = v;
+    }
+    if let Some(v) = parse_string_list_env_var("SHUMA_HONEYPOTS") {
+        cfg.honeypots = v;
+    }
+    if let Some(v) = parse_browser_rules_env_var("SHUMA_BROWSER_BLOCK") {
+        cfg.browser_block = v;
+    }
+    if let Some(v) = parse_browser_rules_env_var("SHUMA_BROWSER_WHITELIST") {
+        cfg.browser_whitelist = v;
+    }
+    if let Some(v) = parse_string_list_env_var("SHUMA_GEO_RISK") {
+        cfg.geo_risk = v;
+    }
+    if let Some(v) = parse_string_list_env_var("SHUMA_WHITELIST") {
+        cfg.whitelist = v;
+    }
+    if let Some(v) = parse_string_list_env_var("SHUMA_PATH_WHITELIST") {
+        cfg.path_whitelist = v;
+    }
+    if let Some(v) = parse_bool_env_var("SHUMA_MAZE_ENABLED") {
+        cfg.maze_enabled = v;
+    }
+    if let Some(v) = parse_bool_env_var("SHUMA_MAZE_AUTO_BAN") {
+        cfg.maze_auto_ban = v;
+    }
+    if let Some(v) = parse_u32_env_var("SHUMA_MAZE_AUTO_BAN_THRESHOLD") {
+        cfg.maze_auto_ban_threshold = v;
+    }
+    if let Some(v) = parse_bool_env_var("SHUMA_ROBOTS_ENABLED") {
+        cfg.robots_enabled = v;
+    }
+    if let Some(v) = parse_bool_env_var("SHUMA_ROBOTS_BLOCK_AI_TRAINING") {
+        cfg.robots_block_ai_training = v;
+    }
+    if let Some(v) = parse_bool_env_var("SHUMA_ROBOTS_BLOCK_AI_SEARCH") {
+        cfg.robots_block_ai_search = v;
+    }
+    if let Some(v) = parse_bool_env_var("SHUMA_ROBOTS_ALLOW_SEARCH_ENGINES") {
+        cfg.robots_allow_search_engines = v;
+    }
+    if let Some(v) = parse_u32_env_var("SHUMA_ROBOTS_CRAWL_DELAY") {
+        cfg.robots_crawl_delay = v;
+    }
+    if let Some(v) = parse_bool_env_var("SHUMA_CDP_DETECTION_ENABLED") {
+        cfg.cdp_detection_enabled = v;
+    }
+    if let Some(v) = parse_bool_env_var("SHUMA_CDP_AUTO_BAN") {
+        cfg.cdp_auto_ban = v;
+    }
+    if let Some(v) = parse_f32_env_var("SHUMA_CDP_DETECTION_THRESHOLD") {
+        cfg.cdp_detection_threshold = v.clamp(0.0, 1.0);
+    }
+    if let Some(v) = parse_u8_env_var("POW_DIFFICULTY") {
+        cfg.pow_difficulty = clamp_pow_difficulty(v);
+    }
+    if let Some(v) = parse_u64_env_var("POW_TTL_SECONDS") {
+        cfg.pow_ttl_seconds = clamp_pow_ttl(v);
+    }
+    if let Some(v) = parse_u8_env_var("CHALLENGE_RISK_THRESHOLD") {
+        cfg.challenge_risk_threshold = clamp_challenge_threshold(v);
+    }
+    if let Some(v) = parse_u8_env_var("BOTNESS_MAZE_THRESHOLD") {
+        cfg.botness_maze_threshold = clamp_maze_threshold(v);
+    }
+    if let Some(v) = parse_u8_env_var("BOTNESS_WEIGHT_JS_REQUIRED") {
+        cfg.botness_weights.js_required = clamp_botness_weight(v);
+    }
+    if let Some(v) = parse_u8_env_var("BOTNESS_WEIGHT_GEO_RISK") {
+        cfg.botness_weights.geo_risk = clamp_botness_weight(v);
+    }
+    if let Some(v) = parse_u8_env_var("BOTNESS_WEIGHT_RATE_MEDIUM") {
+        cfg.botness_weights.rate_medium = clamp_botness_weight(v);
+    }
+    if let Some(v) = parse_u8_env_var("BOTNESS_WEIGHT_RATE_HIGH") {
+        cfg.botness_weights.rate_high = clamp_botness_weight(v);
+    }
+}
+
+fn apply_mutability_policy(cfg: &mut Config) {
+    if !pow_config_mutable() {
+        cfg.pow_difficulty = default_pow_difficulty();
+        cfg.pow_ttl_seconds = default_pow_ttl_seconds();
+    }
+    cfg.pow_difficulty = clamp_pow_difficulty(cfg.pow_difficulty);
+    cfg.pow_ttl_seconds = clamp_pow_ttl(cfg.pow_ttl_seconds);
+
+    if !botness_config_mutable() {
+        cfg.challenge_risk_threshold = default_challenge_threshold();
+        cfg.botness_maze_threshold = default_maze_threshold();
+        cfg.botness_weights = BotnessWeights::default();
+    } else {
+        cfg.challenge_risk_threshold = clamp_challenge_threshold(cfg.challenge_risk_threshold);
+        cfg.botness_maze_threshold = clamp_maze_threshold(cfg.botness_maze_threshold);
+        cfg.botness_weights.js_required = clamp_botness_weight(cfg.botness_weights.js_required);
+        cfg.botness_weights.geo_risk = clamp_botness_weight(cfg.botness_weights.geo_risk);
+        cfg.botness_weights.rate_medium = clamp_botness_weight(cfg.botness_weights.rate_medium);
+        cfg.botness_weights.rate_high = clamp_botness_weight(cfg.botness_weights.rate_high);
+    }
+}
+
 impl Config {
     /// Loads config for a site from the key-value store, or returns defaults if not set.
     pub fn load(store: &impl KeyValueStore, site_id: &str) -> Self {
-        let key = format!("config:{}", site_id);
-        if let Ok(Some(val)) = store.get(&key) {
-            if let Ok(mut cfg) = serde_json::from_slice::<Config>(&val) {
-                // Allow override from env for test_mode
-                if let Ok(val) = env::var("TEST_MODE") {
-                    cfg.test_mode = val == "1" || val.eq_ignore_ascii_case("true");
-                }
-                if !pow_config_mutable() {
-                    cfg.pow_difficulty = default_pow_difficulty();
-                    cfg.pow_ttl_seconds = default_pow_ttl_seconds();
-                }
-                cfg.pow_difficulty = clamp_pow_difficulty(cfg.pow_difficulty);
-                cfg.pow_ttl_seconds = clamp_pow_ttl(cfg.pow_ttl_seconds);
-                if !botness_config_mutable() {
-                    cfg.challenge_risk_threshold = default_challenge_threshold();
-                    cfg.botness_maze_threshold = default_maze_threshold();
-                    cfg.botness_weights = BotnessWeights::default();
+        let mut cfg = match config_mode() {
+            ConfigMode::EnvOnly => default_config(),
+            ConfigMode::Hybrid => {
+                let key = format!("config:{}", site_id);
+                if let Ok(Some(val)) = store.get(&key) {
+                    if let Ok(cfg) = serde_json::from_slice::<Config>(&val) {
+                        cfg
+                    } else {
+                        default_config()
+                    }
                 } else {
-                    cfg.challenge_risk_threshold = clamp_challenge_threshold(cfg.challenge_risk_threshold);
-                    cfg.botness_maze_threshold = clamp_maze_threshold(cfg.botness_maze_threshold);
-                    cfg.botness_weights.js_required = clamp_botness_weight(cfg.botness_weights.js_required);
-                    cfg.botness_weights.geo_risk = clamp_botness_weight(cfg.botness_weights.geo_risk);
-                    cfg.botness_weights.rate_medium = clamp_botness_weight(cfg.botness_weights.rate_medium);
-                    cfg.botness_weights.rate_high = clamp_botness_weight(cfg.botness_weights.rate_high);
+                    default_config()
                 }
-                return cfg;
             }
-        }
-        // Defaults for all config fields
-        let test_mode = env::var("TEST_MODE").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false);
-        Config {
-            ban_duration: 21600, // 6 hours (legacy default)
-            ban_durations: BanDurations::default(),
-            rate_limit: 80,
-            honeypots: vec!["/bot-trap".to_string()],
-            browser_block: vec![("Chrome".to_string(), 120), ("Firefox".to_string(), 115), ("Safari".to_string(), 15)],
-            browser_whitelist: vec![],
-            geo_risk: vec![],
-            whitelist: vec![],
-            path_whitelist: vec![],
-            test_mode,
-            maze_enabled: true,        // Maze enabled by default
-            maze_auto_ban: true,       // Auto-ban crawlers after threshold
-            maze_auto_ban_threshold: 50, // Default: 50 maze pages triggers ban
-            // robots.txt defaults: block AI training, allow search engines
-            robots_enabled: true,
-            robots_block_ai_training: true,
-            robots_block_ai_search: false,
-            robots_allow_search_engines: true,
-            robots_crawl_delay: 2,
-            // CDP detection defaults: enabled with auto-ban
-            cdp_detection_enabled: true,
-            cdp_auto_ban: true,
-            cdp_detection_threshold: 0.8,
-            pow_difficulty: default_pow_difficulty(),
-            pow_ttl_seconds: default_pow_ttl_seconds(),
-            challenge_risk_threshold: default_challenge_threshold(),
-            botness_maze_threshold: default_maze_threshold(),
-            botness_weights: BotnessWeights::default(),
-        }
+        };
+
+        apply_env_overrides(&mut cfg);
+        apply_mutability_policy(&mut cfg);
+        cfg
     }
     
     /// Get ban duration for a specific ban type

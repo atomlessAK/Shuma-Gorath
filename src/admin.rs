@@ -252,6 +252,20 @@ mod admin_config_tests {
         assert_eq!(*resp.status(), 403u16);
         std::env::remove_var("CHALLENGE_CONFIG_MUTABLE");
     }
+
+    #[test]
+    fn admin_config_rejects_updates_in_env_only_mode() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+        std::env::set_var("SHUMA_CONFIG_MODE", "env_only");
+        let body = br#"{"test_mode":true}"#.to_vec();
+        let req = make_request(Method::Post, "/admin/config", body);
+        let store = TestStore::default();
+        let resp = handle_admin_config(&req, &store, "default");
+        assert_eq!(*resp.status(), 403u16);
+        let msg = String::from_utf8_lossy(resp.body());
+        assert!(msg.contains("SHUMA_CONFIG_MODE=env_only"));
+        std::env::remove_var("SHUMA_CONFIG_MODE");
+    }
 }
 
 /// Utility to get current unix timestamp
@@ -318,6 +332,9 @@ fn handle_admin_config(req: &Request, store: &impl crate::challenge::KeyValueSto
     // GET: Return current config
     // POST: Update config (supports {"test_mode": true/false})
     if *req.method() == spin_sdk::http::Method::Post {
+        if matches!(crate::config::config_mode(), crate::config::ConfigMode::EnvOnly) {
+            return Response::new(403, "Config updates are disabled when SHUMA_CONFIG_MODE=env_only");
+        }
         let body_str = String::from_utf8_lossy(req.body());
         let parsed: Result<serde_json::Value, _> = serde_json::from_str(&body_str);
         if let Ok(json) = parsed {
@@ -598,6 +615,7 @@ fn handle_admin_config(req: &Request, store: &impl crate::challenge::KeyValueSto
                     "pow_config_mutable": crate::config::pow_config_mutable(),
                     "pow_difficulty": cfg.pow_difficulty,
                     "pow_ttl_seconds": cfg.pow_ttl_seconds,
+                    "config_mode": crate::config::config_mode_label(),
                     "challenge_risk_threshold": cfg.challenge_risk_threshold,
                     "challenge_config_mutable": crate::config::challenge_config_mutable(),
                     "challenge_risk_threshold_default": challenge_default,
@@ -661,6 +679,7 @@ fn handle_admin_config(req: &Request, store: &impl crate::challenge::KeyValueSto
         "pow_config_mutable": crate::config::pow_config_mutable(),
         "pow_difficulty": cfg.pow_difficulty,
         "pow_ttl_seconds": cfg.pow_ttl_seconds,
+        "config_mode": crate::config::config_mode_label(),
         "challenge_risk_threshold": cfg.challenge_risk_threshold,
         "challenge_config_mutable": crate::config::challenge_config_mutable(),
         "challenge_risk_threshold_default": challenge_default,

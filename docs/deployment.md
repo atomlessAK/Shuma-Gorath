@@ -11,8 +11,12 @@ Shuma-Gorath is designed to **complement enterprise bot defenses** (such as Akam
 - `FORWARDED_IP_SECRET` - Required when trusting `X-Forwarded-For`
 - `ADMIN_IP_ALLOWLIST` - Optional; CIDR/IP allowlist for admin access
 - `EVENT_LOG_RETENTION_HOURS` - Event retention window
+- `SHUMA_CONFIG_MODE` - `hybrid` (default) or `env_only`
 - `SHUMA_KV_STORE_FAIL_MODE` - `open` (default) or `closed`
 - `SHUMA_DEBUG_HEADERS` - Optional; expose internal health/fail-mode headers (dev only)
+
+`SHUMA_CONFIG_MODE=env_only` makes runtime config fully env-driven and disables `POST /admin/config`.
+Use this for immutable infrastructure-style deployments.
 
 ## 🐙 Forwarded IP Trust
 
