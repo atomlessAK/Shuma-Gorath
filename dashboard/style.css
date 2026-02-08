@@ -542,6 +542,10 @@ code {
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 }
 
+.controls-grid--tuning {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
 .control-group {
 }
 

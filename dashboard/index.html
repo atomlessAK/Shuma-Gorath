@@ -182,15 +182,6 @@
                 the cost of a temporary outage.
               </p>
             </div>
-            <div class="control-group panel-soft pad-md">
-              <h3>Test Mode</h3>
-              <p class="control-desc text-muted">When enabled, logs actions without blocking users</p>
-              <label class="toggle-switch" for="test-mode-toggle">
-                <input type="checkbox" id="test-mode-toggle" aria-label="Enable Test Mode">
-                <span class="toggle-slider"></span>
-              </label>
-              <span id="test-mode-status">Loading...</span>
-            </div>
           </div>
         </section>
 
@@ -206,6 +197,15 @@
                 <input id="apikey" class="input-field input-field--mono" value="changeme-dev-only-api-key" size="30" type="password" aria-label="API key">
                 <button id="refresh" class="btn" aria-label="Refresh dashboard">Refresh</button>
               </div>
+            </div>
+            <div class="control-group panel-soft pad-md">
+              <h3>Test Mode</h3>
+              <p class="control-desc text-muted">When enabled, logs actions without blocking users</p>
+              <label class="toggle-switch" for="test-mode-toggle">
+                <input type="checkbox" id="test-mode-toggle" aria-label="Enable Test Mode">
+                <span class="toggle-slider"></span>
+              </label>
+              <span id="test-mode-status">Loading...</span>
             </div>
             <div class="control-group panel-soft pad-md">
               <h3>AI Training Opt-Out Policy</h3>
@@ -255,6 +255,49 @@
                 <pre id="robots-preview-content"></pre>
               </div>
             </div>
+            <div class="control-group panel-soft pad-md">
+              <h3>Link Maze</h3>
+              <p class="control-desc text-muted">Honeypot trap for crawlers</p>
+              <div class="admin-controls">
+                <div class="toggle-row">
+                  <label class="control-label" for="maze-enabled-toggle">Maze Enabled</label>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="maze-enabled-toggle" checked aria-label="Enable maze honeypot">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <div class="toggle-row">
+                  <label class="control-label" for="maze-auto-ban-toggle">Auto-Ban</label>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="maze-auto-ban-toggle" checked aria-label="Enable maze auto-ban">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <div class="input-row">
+                  <label class="control-label" for="maze-threshold">Ban Threshold</label>
+                  <input class="input-field" type="number" id="maze-threshold" value="50" min="5" max="500" aria-label="Maze ban threshold in pages">
+                  <span class="input-unit text-muted">pages</span>
+                </div>
+              </div>
+              <button id="save-maze-config" class="btn">Save Maze Settings</button>
+            </div>
+            <div class="control-group panel-soft pad-md">
+              <h3>Ban Durations</h3>
+              <p class="control-desc text-muted">Configure ban duration per offense type (seconds)</p>
+              <div class="duration-grid">
+                <label for="dur-honeypot">Honeypot:</label> <input id="dur-honeypot" class="input-field" type="number" value="86400" />
+                <label for="dur-rate-limit">Rate Limit:</label> <input id="dur-rate-limit" class="input-field" type="number" value="3600" />
+                <label for="dur-browser">Browser:</label> <input id="dur-browser" class="input-field" type="number" value="21600" />
+                <label for="dur-admin">Admin:</label> <input id="dur-admin" class="input-field" type="number" value="21600" />
+              </div>
+              <button id="save-durations-btn" class="btn btn-dark">Save Durations</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="admin-group">
+          <h3 class="admin-group-title">Tuning Bot Detection</h3>
+          <div class="controls-grid controls-grid--tuning">
             <div class="control-group panel-soft pad-md">
               <h3>CDP (Detect Browser Automation)</h3>
               <p class="control-desc text-muted">Detects bots controlling browsers on behalf of human users (Puppeteer, Playwright,
@@ -326,43 +369,6 @@
                 </div>
               </div>
               <button id="save-pow-config" class="btn" disabled>Save PoW Settings</button>
-            </div>
-            <div class="control-group panel-soft pad-md">
-              <h3>Link Maze</h3>
-              <p class="control-desc text-muted">Honeypot trap for crawlers</p>
-              <div class="admin-controls">
-                <div class="toggle-row">
-                  <label class="control-label" for="maze-enabled-toggle">Maze Enabled</label>
-                  <label class="toggle-switch">
-                    <input type="checkbox" id="maze-enabled-toggle" checked aria-label="Enable maze honeypot">
-                    <span class="toggle-slider"></span>
-                  </label>
-                </div>
-                <div class="toggle-row">
-                  <label class="control-label" for="maze-auto-ban-toggle">Auto-Ban</label>
-                  <label class="toggle-switch">
-                    <input type="checkbox" id="maze-auto-ban-toggle" checked aria-label="Enable maze auto-ban">
-                    <span class="toggle-slider"></span>
-                  </label>
-                </div>
-                <div class="input-row">
-                  <label class="control-label" for="maze-threshold">Ban Threshold</label>
-                  <input class="input-field" type="number" id="maze-threshold" value="50" min="5" max="500" aria-label="Maze ban threshold in pages">
-                  <span class="input-unit text-muted">pages</span>
-                </div>
-              </div>
-              <button id="save-maze-config" class="btn">Save Maze Settings</button>
-            </div>
-            <div class="control-group panel-soft pad-md">
-              <h3>Ban Durations</h3>
-              <p class="control-desc text-muted">Configure ban duration per offense type (seconds)</p>
-              <div class="duration-grid">
-                <label for="dur-honeypot">Honeypot:</label> <input id="dur-honeypot" class="input-field" type="number" value="86400" />
-                <label for="dur-rate-limit">Rate Limit:</label> <input id="dur-rate-limit" class="input-field" type="number" value="3600" />
-                <label for="dur-browser">Browser:</label> <input id="dur-browser" class="input-field" type="number" value="21600" />
-                <label for="dur-admin">Admin:</label> <input id="dur-admin" class="input-field" type="number" value="21600" />
-              </div>
-              <button id="save-durations-btn" class="btn btn-dark">Save Durations</button>
             </div>
             <div class="control-group panel-soft pad-md">
               <h3>Botness Scoring</h3>
