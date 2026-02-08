@@ -27,6 +27,8 @@ const statusPanelState = {
   challengeThreshold: 3,
   challengeMutable: false,
   mazeThreshold: 6,
+  rateLimit: 80,
+  geoRiskCount: 0,
   botnessMutable: false,
   botnessWeights: {
     js_required: 1,
@@ -96,15 +98,20 @@ const STATUS_DEFINITIONS = [
   {
     title: 'JS Required',
     description: state => (
-      `JS challenge contribution to botness scoring is weighted by ${envVar('SHUMA_BOTNESS_WEIGHT_JS_REQUIRED')} ` +
-      `(current weight: <strong>${state.botnessWeights.js_required || 0}</strong>).`
+      `Triggered when a request does not present a valid JS verification cookie. ` +
+      `This signal contributes via ${envVar('SHUMA_BOTNESS_WEIGHT_JS_REQUIRED')} ` +
+      `(current weight: <strong>${state.botnessWeights.js_required || 0}</strong>). ` +
+      `Combined botness routing uses score >= <strong>${state.challengeThreshold}</strong> for challenge and ` +
+      `>= <strong>${state.mazeThreshold}</strong> for Link Maze (when enabled).`
     ),
     status: state => boolStatus((state.botnessWeights.js_required || 0) > 0)
   },
   {
     title: 'GEO Fencing',
     description: state => (
-      `Geography-based contribution to botness scoring is weighted by ${envVar('SHUMA_BOTNESS_WEIGHT_GEO_RISK')} ` +
+      `Compares request <code>X-Geo-Country</code> header to configured high-risk countries in ${envVar('SHUMA_GEO_RISK')} ` +
+      `(current list size: <strong>${state.geoRiskCount}</strong>). ` +
+      `Matches contribute via ${envVar('SHUMA_BOTNESS_WEIGHT_GEO_RISK')} ` +
       `(current weight: <strong>${state.botnessWeights.geo_risk || 0}</strong>).`
     ),
     status: state => boolStatus((state.botnessWeights.geo_risk || 0) > 0)
@@ -112,8 +119,9 @@ const STATUS_DEFINITIONS = [
   {
     title: 'Rate Limiting',
     description: state => (
-      `Rate pressure contributes to botness scoring via ${envVar('SHUMA_BOTNESS_WEIGHT_RATE_MEDIUM')} and ` +
-      `${envVar('SHUMA_BOTNESS_WEIGHT_RATE_HIGH')} (current weights: <strong>${state.botnessWeights.rate_medium || 0}</strong> / ` +
+      `Rate pressure is measured against ${envVar('SHUMA_RATE_LIMIT')} (current limit: <strong>${state.rateLimit}</strong>). ` +
+      `Medium pressure (>=50%) contributes ${envVar('SHUMA_BOTNESS_WEIGHT_RATE_MEDIUM')} and high pressure (>=80%) ` +
+      `contributes ${envVar('SHUMA_BOTNESS_WEIGHT_RATE_HIGH')} (current weights: <strong>${state.botnessWeights.rate_medium || 0}</strong> / ` +
       `<strong>${state.botnessWeights.rate_high || 0}</strong>).`
     ),
     status: state => boolStatus(
@@ -927,6 +935,8 @@ function updateChallengeConfig(config) {
 
   statusPanelState.challengeThreshold = Number.isNaN(challengeThreshold) ? 3 : challengeThreshold;
   statusPanelState.mazeThreshold = Number.isNaN(mazeThreshold) ? 6 : mazeThreshold;
+  statusPanelState.rateLimit = parseInt(config.rate_limit, 10) || 80;
+  statusPanelState.geoRiskCount = Array.isArray(config.geo_risk) ? config.geo_risk.length : 0;
   statusPanelState.challengeMutable = challengeMutable;
   statusPanelState.botnessMutable = mutable;
   statusPanelState.botnessWeights = {
