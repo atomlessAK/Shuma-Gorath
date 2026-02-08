@@ -101,8 +101,7 @@ const STATUS_DEFINITIONS = [
       `Triggered when a request does not present a valid JS verification cookie. ` +
       `This signal contributes via ${envVar('SHUMA_BOTNESS_WEIGHT_JS_REQUIRED')} ` +
       `(current weight: <strong>${state.botnessWeights.js_required || 0}</strong>). ` +
-      `Combined botness routing uses score >= <strong>${state.challengeThreshold}</strong> for challenge and ` +
-      `>= <strong>${state.mazeThreshold}</strong> for Link Maze (when enabled).`
+      cumulativeBotnessRoutingText(state)
     ),
     status: state => boolStatus((state.botnessWeights.js_required || 0) > 0)
   },
@@ -112,7 +111,8 @@ const STATUS_DEFINITIONS = [
       `Compares request <code>X-Geo-Country</code> header to configured high-risk countries in ${envVar('SHUMA_GEO_RISK')} ` +
       `(current list size: <strong>${state.geoRiskCount}</strong>). ` +
       `Matches contribute via ${envVar('SHUMA_BOTNESS_WEIGHT_GEO_RISK')} ` +
-      `(current weight: <strong>${state.botnessWeights.geo_risk || 0}</strong>).`
+      `(current weight: <strong>${state.botnessWeights.geo_risk || 0}</strong>). ` +
+      cumulativeBotnessRoutingText(state)
     ),
     status: state => boolStatus((state.botnessWeights.geo_risk || 0) > 0)
   },
@@ -122,7 +122,8 @@ const STATUS_DEFINITIONS = [
       `Rate pressure is measured against ${envVar('SHUMA_RATE_LIMIT')} (current limit: <strong>${state.rateLimit}</strong>). ` +
       `Medium pressure (>=50%) contributes ${envVar('SHUMA_BOTNESS_WEIGHT_RATE_MEDIUM')} and high pressure (>=80%) ` +
       `contributes ${envVar('SHUMA_BOTNESS_WEIGHT_RATE_HIGH')} (current weights: <strong>${state.botnessWeights.rate_medium || 0}</strong> / ` +
-      `<strong>${state.botnessWeights.rate_high || 0}</strong>).`
+      `<strong>${state.botnessWeights.rate_high || 0}</strong>). ` +
+      cumulativeBotnessRoutingText(state)
     ),
     status: state => boolStatus(
       (state.botnessWeights.rate_medium || 0) > 0 || (state.botnessWeights.rate_high || 0) > 0
@@ -142,6 +143,14 @@ function formatMutability(isMutable) {
 
 function boolStatus(enabled) {
   return enabled ? 'ENABLED' : 'DISABLED';
+}
+
+function cumulativeBotnessRoutingText(state) {
+  return (
+    `This contributes to the cumulative <strong>botness</strong> score used for defense routing decisions ` +
+    `(challenge at <strong>${state.challengeThreshold}</strong>, maze at <strong>${state.mazeThreshold}</strong>, ` +
+    `and higher-severity controls such as tar pit or immediate IP ban where configured).`
+  );
 }
 
 function renderStatusItems() {
