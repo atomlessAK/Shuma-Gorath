@@ -191,14 +191,36 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
     // Challenge POST handler
     if path == "/challenge" && *req.method() == spin_sdk::http::Method::Post {
         if let Ok(store) = Store::open_default() {
-            return challenge::handle_challenge_submit(&store, req);
+            let (response, outcome) = challenge::handle_challenge_submit_with_outcome(&store, req);
+            match outcome {
+                challenge::ChallengeSubmitOutcome::Solved => {
+                    metrics::increment(&store, metrics::MetricName::ChallengeSolvedTotal, None);
+                }
+                challenge::ChallengeSubmitOutcome::Incorrect => {
+                    metrics::increment(&store, metrics::MetricName::ChallengeIncorrectTotal, None);
+                }
+                challenge::ChallengeSubmitOutcome::ExpiredReplay => {
+                    metrics::increment(
+                        &store,
+                        metrics::MetricName::ChallengeExpiredReplayTotal,
+                        None,
+                    );
+                }
+                challenge::ChallengeSubmitOutcome::Forbidden
+                | challenge::ChallengeSubmitOutcome::InvalidOutput => {}
+            }
+            return response;
         }
         return Response::new(500, "Key-value store error");
     }
     if path == "/challenge" && *req.method() == spin_sdk::http::Method::Get {
         if let Ok(store) = Store::open_default() {
             let cfg = config::Config::load(&store, "default");
-            return challenge::serve_challenge_page(req, cfg.test_mode);
+            let response = challenge::serve_challenge_page(req, cfg.test_mode);
+            if *response.status() == 200 {
+                metrics::increment(&store, metrics::MetricName::ChallengeServedTotal, None);
+            }
+            return response;
         }
         return Response::new(500, "Key-value store error");
     }
@@ -498,6 +520,7 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
     let risk_score = compute_risk_score(needs_js, geo_risk, rate_usage, cfg.rate_limit);
     if risk_score >= cfg.challenge_risk_threshold {
         metrics::increment(store, metrics::MetricName::ChallengesTotal, None);
+        metrics::increment(store, metrics::MetricName::ChallengeServedTotal, None);
         crate::admin::log_event(store, &crate::admin::EventLogEntry {
             ts: crate::admin::now_ts(),
             event: crate::admin::EventType::Challenge,

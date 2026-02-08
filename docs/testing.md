@@ -64,9 +64,10 @@ Integration coverage includes:
 2. Root endpoint behavior (block page / JS challenge)
 3. Honeypot ban flow
 4. Admin config + test-mode toggling
-5. Metrics endpoint
-6. CDP report ingestion and auto-ban flow
-7. Unban behavior
+5. Challenge single-use behavior (`Incorrect` then replay `Expired`)
+6. Metrics endpoint
+7. CDP report ingestion and auto-ban flow
+8. Unban behavior
 
 ## 🐙 Build Mode Notes
 
@@ -151,6 +152,28 @@ curl -X POST -H "Content-Type: application/json" \
   http://127.0.0.1:3000/cdp-report
 ```
 Expected: a success response and a CDP event recorded in analytics.
+
+9. Challenge replay behavior:
+```bash
+challenge_page=$(curl -s -H "X-Forwarded-For: 10.0.0.150" \
+  -H "X-Shuma-Forwarded-Secret: $FORWARDED_IP_SECRET" \
+  http://127.0.0.1:3000/challenge)
+seed=$(python3 -c 'import re,sys; m=re.search(r"name=\"seed\" value=\"([^\"]+)\"", sys.stdin.read()); print(m.group(1) if m else "")' <<< "$challenge_page")
+output=$(python3 -c 'import re,sys; m=re.search(r"name=\"output\"[^>]*value=\"([^\"]+)\"", sys.stdin.read()); print(m.group(1) if m else "")' <<< "$challenge_page")
+curl -s -X POST \
+  -H "X-Forwarded-For: 10.0.0.150" \
+  -H "X-Shuma-Forwarded-Secret: $FORWARDED_IP_SECRET" \
+  --data-urlencode "seed=$seed" \
+  --data-urlencode "output=$output" \
+  http://127.0.0.1:3000/challenge
+curl -s -X POST \
+  -H "X-Forwarded-For: 10.0.0.150" \
+  -H "X-Shuma-Forwarded-Secret: $FORWARDED_IP_SECRET" \
+  --data-urlencode "seed=$seed" \
+  --data-urlencode "output=$output" \
+  http://127.0.0.1:3000/challenge
+```
+Expected: first submit returns `Incorrect.` with a new-challenge link; second submit returns `Expired` with the same link.
 
 ## 🐙 Complete Manual Test Sequence
 

@@ -16,6 +16,10 @@ pub enum MetricName {
     BansTotal,
     BlocksTotal,
     ChallengesTotal,
+    ChallengeServedTotal,
+    ChallengeSolvedTotal,
+    ChallengeIncorrectTotal,
+    ChallengeExpiredReplayTotal,
     WhitelistedTotal,
     TestModeActions,
     MazeHits,
@@ -29,6 +33,10 @@ impl MetricName {
             MetricName::BansTotal => "bans_total",
             MetricName::BlocksTotal => "blocks_total",
             MetricName::ChallengesTotal => "challenges_total",
+            MetricName::ChallengeServedTotal => "challenge_served_total",
+            MetricName::ChallengeSolvedTotal => "challenge_solved_total",
+            MetricName::ChallengeIncorrectTotal => "challenge_incorrect_total",
+            MetricName::ChallengeExpiredReplayTotal => "challenge_expired_replay_total",
             MetricName::WhitelistedTotal => "whitelisted_total",
             MetricName::TestModeActions => "test_mode_actions_total",
             MetricName::MazeHits => "maze_hits_total",
@@ -137,6 +145,23 @@ pub fn render_metrics(store: &Store) -> String {
     output.push_str("\n# TYPE bot_trap_challenges_total counter\n");
     let challenges = get_counter(store, &format!("{}challenges_total", METRICS_PREFIX));
     output.push_str(&format!("bot_trap_challenges_total {}\n", challenges));
+
+    // Challenge outcomes
+    output.push_str("\n# TYPE bot_trap_challenge_served_total counter\n");
+    let challenge_served = get_counter(store, &format!("{}challenge_served_total", METRICS_PREFIX));
+    output.push_str(&format!("bot_trap_challenge_served_total {}\n", challenge_served));
+
+    output.push_str("\n# TYPE bot_trap_challenge_solved_total counter\n");
+    let challenge_solved = get_counter(store, &format!("{}challenge_solved_total", METRICS_PREFIX));
+    output.push_str(&format!("bot_trap_challenge_solved_total {}\n", challenge_solved));
+
+    output.push_str("\n# TYPE bot_trap_challenge_incorrect_total counter\n");
+    let challenge_incorrect = get_counter(store, &format!("{}challenge_incorrect_total", METRICS_PREFIX));
+    output.push_str(&format!("bot_trap_challenge_incorrect_total {}\n", challenge_incorrect));
+
+    output.push_str("\n# TYPE bot_trap_challenge_expired_replay_total counter\n");
+    let challenge_expired_replay = get_counter(store, &format!("{}challenge_expired_replay_total", METRICS_PREFIX));
+    output.push_str(&format!("bot_trap_challenge_expired_replay_total {}\n", challenge_expired_replay));
     
     // Whitelisted total
     output.push_str("\n# TYPE bot_trap_whitelisted_total counter\n");

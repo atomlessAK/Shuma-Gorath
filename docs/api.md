@@ -36,6 +36,19 @@ Output encoding:
 - `1` = black cell
 - `2` = pink cell
 
+### 🐙 Challenge Seed Lifecycle
+
+- Seeds are short-lived and single-use.
+- Any submit attempt consumes the seed, including incorrect attempts.
+- Re-submitting a consumed or expired seed returns `403 Expired`.
+- Invalid or tampered seed/token data returns `403 Forbidden. Please request a new challenge.`
+
+Challenge submit responses:
+- `200` - Correct answer (`Thank you! Challenge complete.`)
+- `403` - Incorrect answer (`Incorrect.` + `Request new challenge.` link)
+- `403` - Expired/replay (`Expired` + `Request new challenge.` link)
+- `403` - Invalid token/signature/IP binding (`Forbidden. Please request a new challenge.` + link)
+
 ### 🐙 Health Check Example
 
 ```bash

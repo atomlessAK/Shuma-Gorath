@@ -16,6 +16,10 @@ This endpoint is unauthenticated for Prometheus compatibility. Restrict access a
 - `bot_trap_bans_total{reason="..."}`
 - `bot_trap_blocks_total`
 - `bot_trap_challenges_total`
+- `bot_trap_challenge_served_total`
+- `bot_trap_challenge_solved_total`
+- `bot_trap_challenge_incorrect_total`
+- `bot_trap_challenge_expired_replay_total`
 - `bot_trap_whitelisted_total`
 - `bot_trap_test_mode_actions_total`
 - `bot_trap_maze_hits_total`
