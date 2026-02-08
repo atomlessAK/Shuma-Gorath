@@ -4,7 +4,7 @@
 # Default base_url: http://127.0.0.1:3000
 
 BASE_URL="${1:-http://127.0.0.1:3000}"
-API_KEY="changeme-supersecret"
+API_KEY="${API_KEY:-changeme-dev-only-api-key}"
 
 set -e
 

@@ -445,6 +445,7 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
               --color-white: #fff;
               --font-body: 1rem;
               --font-small: clamp(0.9rem, 0.86rem + 0.25vw, 0.96rem);
+              --font-medium: clamp(1.2rem, 1rem + 0.25vw, 1.5rem);
               --font-heading: clamp(1.7rem, 1.45rem + 0.9vw, 2.1rem);
               --puzzle-cell: clamp(30px, 5vw, 36px);
               --puzzle-gap: 4px;
@@ -470,7 +471,7 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
             button {{ padding: 8px 14px; font-size: var(--font-body); background: var(--color-black); color: var(--color-white); border: 1px solid var(--color-black); }}
             .legend {{ margin: 12px 0 16px; padding: 12px; border: 1px solid var(--color-border); background: var(--color-legend-bg); }}
             .legend-fieldset {{ border: 0; margin: 0; padding: 0; min-width: 0; }}
-            .legend-subtitle {{ font-size: var(--font-small); color: var(--color-black); margin: 0 auto 10px; width: var(--duo-grid-size); text-align: center; }}
+            .legend-subtitle {{ font-size: var(--font-medium); color: var(--color-black); margin: 0 auto 10px; width: var(--duo-grid-size); text-align: center; }}
             .legend-options {{ width: var(--duo-grid-size); margin: 0 auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }}
             .legend-row {{ display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; border: 1px solid transparent; padding: 0; }}
             .legend-row.is-selected {{ border-color: var(--color-black); }}

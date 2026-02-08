@@ -15,6 +15,8 @@ mod whitelist_path_tests;
 mod cdp_tests;
 #[cfg(test)]
 mod log_tests;
+#[cfg(test)]
+mod security_tests;
 mod auth;
 // src/lib.rs
 // Entry point for the WASM Stealth Bot Trap Spin app
@@ -51,12 +53,12 @@ mod pow;         // Proof-of-work verification
 /// If FORWARDED_IP_SECRET is set, require a matching X-Shuma-Forwarded-Secret header.
 fn forwarded_ip_trusted(req: &Request) -> bool {
     match env::var("FORWARDED_IP_SECRET") {
-        Ok(secret) => req
+        Ok(secret) if !secret.trim().is_empty() => req
             .header("x-shuma-forwarded-secret")
             .and_then(|v| v.as_str())
             .map(|v| v == secret)
             .unwrap_or(false),
-        Err(_) => true,
+        _ => false,
     }
 }
 
@@ -92,6 +94,26 @@ pub(crate) fn extract_client_ip(req: &Request) -> String {
 /// Return the configured fail mode: "open" (default) or "closed".
 fn shuma_fail_mode() -> String {
     env::var("SHUMA_FAIL_MODE").unwrap_or_else(|_| "open".to_string()).to_lowercase()
+}
+
+fn debug_headers_enabled() -> bool {
+    env::var("SHUMA_DEBUG_HEADERS")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+fn response_with_optional_debug_headers(status: u16, body: &str, kv_status: &str, fail_mode: &str) -> Response {
+    let mut response_builder = Response::builder();
+    let builder = response_builder.status(status);
+    if debug_headers_enabled() {
+        builder
+            .header("X-KV-Status", kv_status)
+            .header("X-Shuma-Fail-Mode", fail_mode)
+            .body(body)
+            .build()
+    } else {
+        builder.body(body).build()
+    }
 }
 
 fn rate_proximity_score(rate_count: u32, rate_limit: u32) -> u8 {
@@ -137,7 +159,7 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
     };
     let path = req.path();
 
-    // Health check endpoint (accessible from localhost/browser)
+    // Health check endpoint
     if path == "/health" {
         let allowed = ["127.0.0.1", "::1"];
         let ip = extract_client_ip(req);
@@ -151,24 +173,19 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
             let ok = store.get(test_key).is_ok();
             let _ = store.delete(test_key);
             if ok {
-                return Response::builder()
-                    .status(200)
-                    .header("X-KV-Status", "available")
-                    .header("X-Shuma-Fail-Mode", mode.as_str())
-                    .body("OK")
-                    .build();
+                return response_with_optional_debug_headers(200, "OK", "available", mode.as_str());
             }
         }
         log_line(&format!(
             "[KV OUTAGE] Key-value store unavailable; SHUMA_FAIL_MODE={}",
             mode
         ));
-        return Response::builder()
-            .status(500)
-            .header("X-KV-Status", "unavailable")
-            .header("X-Shuma-Fail-Mode", mode.as_str())
-            .body("Key-value store error")
-            .build();
+        return response_with_optional_debug_headers(
+            500,
+            "Key-value store error",
+            "unavailable",
+            mode.as_str(),
+        );
     }
 
     // Challenge POST handler
@@ -238,19 +255,19 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
             mode
         ));
         if mode == "closed" {
-            return Response::builder()
-                .status(500)
-                .header("X-KV-Status", "unavailable")
-                .header("X-Shuma-Fail-Mode", mode.as_str())
-                .body("Key-value store error (fail-closed)")
-                .build();
+            return response_with_optional_debug_headers(
+                500,
+                "Key-value store error (fail-closed)",
+                "unavailable",
+                mode.as_str(),
+            );
         }
-        return Response::builder()
-            .status(200)
-            .header("X-KV-Status", "unavailable")
-            .header("X-Shuma-Fail-Mode", mode.as_str())
-            .body("OK (bot trap: store unavailable, all checks bypassed)")
-            .build();
+        return response_with_optional_debug_headers(
+            200,
+            "OK (bot trap: store unavailable, all checks bypassed)",
+            "unavailable",
+            mode.as_str(),
+        );
     }
     let store = store.as_ref().unwrap();
 

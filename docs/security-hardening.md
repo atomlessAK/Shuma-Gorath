@@ -10,7 +10,7 @@ This guide focuses on deployment security controls and operational hardening.
 
 ## 🐙 Forwarded IP Trust
 
-If you set `FORWARDED_IP_SECRET`, the app only trusts `X-Forwarded-For` when the request also includes:
+When `FORWARDED_IP_SECRET` is set, the app only trusts `X-Forwarded-For` when the request also includes:
 
 ```
 X-Shuma-Forwarded-Secret: <same value>
@@ -35,10 +35,10 @@ This is a **policy decision** and should be explicitly chosen for each deploymen
 
 ## 🐙 Health Endpoint Access
 
-`/health` only allows loopback IPs (`127.0.0.1` and `::1`).
+`/health` only allows loopback IPs (`127.0.0.1` and `::1`) and trusted forwarded headers.
 If your monitoring goes through a proxy, set:
 - `X-Forwarded-For: 127.0.0.1`
-- `X-Shuma-Forwarded-Secret: <FORWARDED_IP_SECRET>` (if enabled)
+- `X-Shuma-Forwarded-Secret: <FORWARDED_IP_SECRET>`
 
 ## 🐙 Test Mode vs Fail Mode
 

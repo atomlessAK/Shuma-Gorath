@@ -195,7 +195,7 @@ mod admin_config_tests {
         builder
             .method(method)
             .uri(path)
-            .header("authorization", "Bearer changeme-supersecret")
+            .header("authorization", "Bearer changeme-dev-only-api-key")
             .body(body);
         builder.build()
     }
@@ -560,6 +560,9 @@ pub fn handle_admin(req: &Request) -> Response {
     // Optional admin IP allowlist
     if !crate::auth::is_admin_ip_allowed(req) {
         return Response::new(403, "Forbidden");
+    }
+    if !crate::auth::is_admin_api_key_configured() {
+        return Response::new(503, "Admin API disabled: API_KEY must be set to a non-default value");
     }
     // Require valid API key
     if !crate::auth::is_authorized(req) {

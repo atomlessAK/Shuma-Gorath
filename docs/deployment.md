@@ -8,14 +8,15 @@ Shuma-Gorath is designed to **complement enterprise bot defenses** (such as Akam
 
 - `API_KEY` - Admin API bearer token
 - `JS_SECRET` - Signs the `js_verified` cookie
-- `FORWARDED_IP_SECRET` - Optional; required to trust `X-Forwarded-For`
+- `FORWARDED_IP_SECRET` - Required when trusting `X-Forwarded-For`
 - `ADMIN_IP_ALLOWLIST` - Optional; CIDR/IP allowlist for admin access
 - `EVENT_LOG_RETENTION_HOURS` - Event retention window
 - `SHUMA_FAIL_MODE` - `open` (default) or `closed`
+- `SHUMA_DEBUG_HEADERS` - Optional; expose internal health/fail-mode headers (dev only)
 
 ## 🐙 Forwarded IP Trust
 
-If `FORWARDED_IP_SECRET` is set, the app only trusts `X-Forwarded-For` when the request also includes:
+When `FORWARDED_IP_SECRET` is set, the app only trusts `X-Forwarded-For` when the request also includes:
 
 ```
 X-Shuma-Forwarded-Secret: <same value>
@@ -88,19 +89,19 @@ spin cloud apps metrics
 
 ### 🐙 Forwarded IP Secret on Fermyon Cloud
 
-If you set `FORWARDED_IP_SECRET`, you must inject the matching `X-Shuma-Forwarded-Secret` header upstream. If you are not adding a CDN/proxy that can inject that header, leave `FORWARDED_IP_SECRET` unset and rely on the platform-provided `X-Forwarded-For`.
+If you set `FORWARDED_IP_SECRET`, you must inject the matching `X-Shuma-Forwarded-Secret` header upstream. If you do not inject that header, requests that rely on `X-Forwarded-For` are treated as untrusted.
 
 ## 🐙 Other Deploy Targets
 
 - Set environment variables in your platform’s secret/config system (Kubernetes, Docker, systemd, etc.)
-- Ensure your proxy/CDN adds `X-Shuma-Forwarded-Secret` if `FORWARDED_IP_SECRET` is set
+- Ensure your proxy/CDN adds `X-Shuma-Forwarded-Secret` when `FORWARDED_IP_SECRET` is set
 - Use TLS for all admin traffic
 - Restrict `/admin/*` access using `ADMIN_IP_ALLOWLIST` or platform firewall rules
 
 ## 🐙 Local Dev Defaults
 
-`make dev` sets a dev-only default for `FORWARDED_IP_SECRET` and passes it to Spin. Override as needed:
+`make dev` sets dev-only defaults for `FORWARDED_IP_SECRET` and `API_KEY`, enables internal debug headers, and passes them to Spin. Override as needed:
 
 ```bash
-make dev FORWARDED_IP_SECRET="your-dev-secret"
+make dev FORWARDED_IP_SECRET="your-dev-secret" API_KEY="your-dev-api-key"
 ```

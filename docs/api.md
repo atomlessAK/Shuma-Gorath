@@ -6,8 +6,10 @@ All admin endpoints require:
 - `Authorization: Bearer <API_KEY>`
 - If `ADMIN_IP_ALLOWLIST` is set, the client IP must be in the allowlist
 
-If `FORWARDED_IP_SECRET` is set, any request that relies on `X-Forwarded-For` must also include:
+If `FORWARDED_IP_SECRET` is configured, any request that relies on `X-Forwarded-For` must also include:
 - `X-Shuma-Forwarded-Secret: <FORWARDED_IP_SECRET>`
+
+If `API_KEY` is missing or set to the insecure default (`changeme-supersecret`), `/admin/*` endpoints are disabled.
 
 ## 🐙 Public Endpoints
 
@@ -42,7 +44,7 @@ curl -H "X-Forwarded-For: 127.0.0.1" \
   http://127.0.0.1:3000/health
 ```
 
-The health response includes:
+When `SHUMA_DEBUG_HEADERS=true`, the health response includes:
 - `X-KV-Status` (available/unavailable)
 - `X-Shuma-Fail-Mode` (open/closed)
 

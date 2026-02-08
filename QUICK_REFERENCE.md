@@ -143,14 +143,14 @@ Full configuration reference: `docs/configuration.md`.
 
 1. Open `http://127.0.0.1:3000/dashboard/index.html` in browser
 2. Enter API endpoint: `http://127.0.0.1:3000`
-3. Enter API key (default: `changeme-supersecret`)
+3. Enter API key (default: `changeme-dev-only-api-key`)
 4. View analytics and manage bans
 
 ## 🐙 Common Tasks
 
 ### 🐙 Ban an IP manually
 ```bash
-curl -X POST -H "Authorization: Bearer changeme-supersecret" \
+curl -X POST -H "Authorization: Bearer changeme-dev-only-api-key" \
   -H "Content-Type: application/json" \
   -d '{"ip":"1.2.3.4","reason":"spam","duration":3600}' \
   http://127.0.0.1:3000/admin/ban
@@ -158,13 +158,13 @@ curl -X POST -H "Authorization: Bearer changeme-supersecret" \
 
 ### 🐙 Unban an IP
 ```bash
-curl -X POST -H "Authorization: Bearer changeme-supersecret" \
+curl -X POST -H "Authorization: Bearer changeme-dev-only-api-key" \
   "http://127.0.0.1:3000/admin/unban?ip=1.2.3.4"
 ```
 
 ### 🐙 View recent events
 ```bash
-curl -H "Authorization: Bearer changeme-supersecret" \
+curl -H "Authorization: Bearer changeme-dev-only-api-key" \
   "http://127.0.0.1:3000/admin/events?hours=24" | jq
 ```
 

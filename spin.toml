@@ -22,14 +22,13 @@ files = [{ source = "dashboard", destination = "/" }]
 
 [component.bot-trap]
 source = "src/bot_trap.wasm"
-allowed_outbound_hosts = ["http://*", "https://*"]
 key_value_stores = ["default"]
 ## NOTE: For production/CI, do NOT commit secrets here. Move `API_KEY`,
 ## `JS_SECRET`, and `SHUMA_FAIL_MODE` into your CI/deployment secret store and inject
 ## them at deploy/runtime. This inline placeholder is for local/dev only.
-## Optional hardening: set `FORWARDED_IP_SECRET` in your deploy environment to
-## require the `X-Shuma-Forwarded-Secret` header when trusting X-Forwarded-For.
-environment = { API_KEY = "changeme-supersecret", JS_SECRET = "changeme-js-secret", EVENT_LOG_RETENTION_HOURS = "168", ADMIN_IP_ALLOWLIST = "", SHUMA_FAIL_MODE = "open", POW_ENABLED = "true", POW_DIFFICULTY = "15", POW_TTL_SECONDS = "90", POW_CONFIG_MUTABLE = "false" }
+## `FORWARDED_IP_SECRET` should be set in every environment where X-Forwarded-For
+## is trusted. Requests without a matching X-Shuma-Forwarded-Secret are ignored.
+environment = { JS_SECRET = "changeme-js-secret", EVENT_LOG_RETENTION_HOURS = "168", ADMIN_IP_ALLOWLIST = "", SHUMA_FAIL_MODE = "open", POW_ENABLED = "true", POW_DIFFICULTY = "15", POW_TTL_SECONDS = "90", POW_CONFIG_MUTABLE = "false" }
 
 [component.bot-trap.build]
 command = "./scripts/set_crate_type.sh cdylib && cargo build --target wasm32-wasip1 --release && cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm && ./scripts/set_crate_type.sh rlib"

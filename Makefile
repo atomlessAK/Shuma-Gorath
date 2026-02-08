@@ -19,10 +19,17 @@ DEV_FORWARDED_IP_SECRET ?= changeme-dev-only-ip-secret
 FORWARDED_IP_SECRET ?= $(DEV_FORWARDED_IP_SECRET)
 export FORWARDED_IP_SECRET
 
+# Dev-only default for admin API key (override with API_KEY=...)
+DEV_API_KEY ?= changeme-dev-only-api-key
+API_KEY ?= $(DEV_API_KEY)
+export API_KEY
+
 # Optional header/env for forwarded IP trust (only if FORWARDED_IP_SECRET is set)
 FORWARDED_SECRET_HEADER := $(if $(FORWARDED_IP_SECRET),-H "X-Shuma-Forwarded-Secret: $(FORWARDED_IP_SECRET)",)
 SPIN_FORWARD_SECRET := $(if $(FORWARDED_IP_SECRET),--env FORWARDED_IP_SECRET=$(FORWARDED_IP_SECRET),)
+SPIN_API_KEY := $(if $(API_KEY),--env API_KEY=$(API_KEY),)
 SPIN_CHALLENGE_MUTABLE := --env CHALLENGE_CONFIG_MUTABLE=true
+SPIN_DEBUG_HEADERS := --env SHUMA_DEBUG_HEADERS=true
 
 #--------------------------
 # Setup (first-time)
@@ -49,7 +56,7 @@ dev: ## Build and run with file watching (auto-rebuild on save)
 	@cargo build --target wasm32-wasip1 --release
 	@cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm
 	@./scripts/set_crate_type.sh rlib
-	@cargo watch -w src -i '*.wasm' -s './scripts/set_crate_type.sh cdylib && cargo build --target wasm32-wasip1 --release' -s 'pkill -f "spin up" 2>/dev/null; cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm && ./scripts/set_crate_type.sh rlib && spin up $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) --listen 127.0.0.1:3000'
+	@cargo watch -w src -i '*.wasm' -s './scripts/set_crate_type.sh cdylib && cargo build --target wasm32-wasip1 --release' -s 'pkill -f "spin up" 2>/dev/null; cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm && ./scripts/set_crate_type.sh rlib && spin up $(SPIN_API_KEY) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) --listen 127.0.0.1:3000'
 
 dev-closed: ## Build and run with file watching and SHUMA_FAIL_MODE=closed (fail-closed)
 	@echo "$(CYAN)🚨 Starting development server with SHUMA_FAIL_MODE=closed (fail-closed)...$(NC)"
@@ -62,7 +69,7 @@ dev-closed: ## Build and run with file watching and SHUMA_FAIL_MODE=closed (fail
 	@cargo build --target wasm32-wasip1 --release
 	@cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm
 	@./scripts/set_crate_type.sh rlib
-	@cargo watch -w src -i '*.wasm' -s './scripts/set_crate_type.sh cdylib && cargo build --target wasm32-wasip1 --release' -s 'pkill -f "spin up" 2>/dev/null; cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm && ./scripts/set_crate_type.sh rlib && spin up --env SHUMA_FAIL_MODE=closed $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) --listen 127.0.0.1:3000'
+	@cargo watch -w src -i '*.wasm' -s './scripts/set_crate_type.sh cdylib && cargo build --target wasm32-wasip1 --release' -s 'pkill -f "spin up" 2>/dev/null; cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm && ./scripts/set_crate_type.sh rlib && spin up --env SHUMA_FAIL_MODE=closed $(SPIN_API_KEY) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) --listen 127.0.0.1:3000'
 
 local: dev ## Alias for dev
 
@@ -78,7 +85,7 @@ run: ## Build once and run (no file watching)
 	@echo "$(YELLOW)📊 Dashboard: http://127.0.0.1:3000/dashboard/index.html$(NC)"
 	@echo "$(YELLOW)📈 Metrics:   http://127.0.0.1:3000/metrics$(NC)"
 	@echo "$(YELLOW)❤️  Health:    http://127.0.0.1:3000/health$(NC)"
-	@spin up $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) --listen 127.0.0.1:3000
+	@spin up $(SPIN_API_KEY) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) --listen 127.0.0.1:3000
 
 #--------------------------
 # Production

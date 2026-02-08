@@ -11,7 +11,7 @@ fail() { echo -e "${RED}✗ FAIL${NC} $1"; }
 info() { echo -e "${YELLOW}→ INFO${NC} $1"; }
 
 BASE_URL="http://127.0.0.1:3000"
-API_KEY="changeme-supersecret"
+API_KEY="${API_KEY:-changeme-dev-only-api-key}"
 
 FORWARDED_SECRET_HEADER=()
 if [[ -n "${FORWARDED_IP_SECRET:-}" ]]; then

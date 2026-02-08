@@ -86,7 +86,7 @@ curl -H "X-Forwarded-For: 127.0.0.1" \
   -H "X-Shuma-Forwarded-Secret: $FORWARDED_IP_SECRET" \
   http://127.0.0.1:3000/health
 ```
-Expected: `OK` and headers `X-KV-Status` and `X-Shuma-Fail-Mode`.
+Expected: `OK`. If `SHUMA_DEBUG_HEADERS=true`, headers `X-KV-Status` and `X-Shuma-Fail-Mode` are also present.
 
 2. Root endpoint (JS challenge / block page):
 ```bash
@@ -160,7 +160,7 @@ If you are using `FORWARDED_IP_SECRET`, export it before running this sequence.
 ```bash
 set -e
 BASE_URL="http://127.0.0.1:3000"
-API_KEY="${API_KEY:-changeme-supersecret}"
+API_KEY="${API_KEY:-changeme-dev-only-api-key}"
 FORWARDED_SECRET_HEADER=()
 if [[ -n "${FORWARDED_IP_SECRET:-}" ]]; then
   FORWARDED_SECRET_HEADER=(-H "X-Shuma-Forwarded-Secret: ${FORWARDED_IP_SECRET}")
@@ -262,7 +262,7 @@ Verify:
 - Ban/unban controls work
 - Test mode toggle updates banner
 - Fail-open/closed indicator matches deployment policy
-- API key defaults to `changeme-supersecret` for local dev (replace in production)
+- API key defaults to `changeme-dev-only-api-key` for local dev (replace in production)
 - Use the dashboard Ban IP and Unban actions to validate the admin API wiring
 
 ## 🐙 Tips
