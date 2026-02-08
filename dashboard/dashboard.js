@@ -7,7 +7,11 @@ let currentTimeRange = 'hour';
 const statusPanelState = {
   failMode: 'unknown',
   powEnabled: false,
-  powMutable: false
+  powMutable: false,
+  mazeEnabled: false,
+  mazeAutoBan: false,
+  cdpEnabled: false,
+  cdpAutoBan: false
 };
 
 const STATUS_DEFINITIONS = [
@@ -27,6 +31,30 @@ const STATUS_DEFINITIONS = [
       `<code>POW_CONFIG_MUTABLE</code> and is currently set to ${formatPowMutability(state.powMutable)}.`
     ),
     status: state => (state.powEnabled ? 'ENABLED' : 'DISABLED')
+  },
+  {
+    title: 'Link Maze',
+    description: () => (
+      'Link Maze serves trap pages to suspicious traffic and can auto-ban repeat crawlers. ' +
+      'Botness routing defaults can be set with <code>BOTNESS_MAZE_THRESHOLD</code>; runtime settings are managed in admin config.'
+    ),
+    status: state => {
+      const mode = state.mazeEnabled ? 'ENABLED' : 'DISABLED';
+      const autoBan = state.mazeAutoBan ? 'AUTO-BAN ON' : 'AUTO-BAN OFF';
+      return `${mode} [${autoBan}]`;
+    }
+  },
+  {
+    title: 'CDP (Detect Browser Automation)',
+    description: () => (
+      'CDP detection checks browser automation fingerprints and can auto-ban high-confidence detections. ' +
+      'Runtime settings are managed in admin config (<code>cdp_detection_enabled</code>, <code>cdp_auto_ban</code>, <code>cdp_detection_threshold</code>).'
+    ),
+    status: state => {
+      const mode = state.cdpEnabled ? 'ENABLED' : 'DISABLED';
+      const autoBan = state.cdpAutoBan ? 'AUTO-BAN ON' : 'AUTO-BAN OFF';
+      return `${mode} [${autoBan}]`;
+    }
   }
 ];
 
@@ -471,13 +499,16 @@ function updateMazeStats(data) {
 function updateMazeConfig(config) {
   if (config.maze_enabled !== undefined) {
     document.getElementById('maze-enabled-toggle').checked = config.maze_enabled;
+    statusPanelState.mazeEnabled = config.maze_enabled === true;
   }
   if (config.maze_auto_ban !== undefined) {
     document.getElementById('maze-auto-ban-toggle').checked = config.maze_auto_ban;
+    statusPanelState.mazeAutoBan = config.maze_auto_ban === true;
   }
   if (config.maze_auto_ban_threshold !== undefined) {
     document.getElementById('maze-threshold').value = config.maze_auto_ban_threshold;
   }
+  renderStatusItems();
 }
 
 // Update robots.txt config controls from loaded config
@@ -727,9 +758,11 @@ document.getElementById('preview-robots').onclick = async function() {
 function updateCdpConfig(config) {
   if (config.cdp_detection_enabled !== undefined) {
     document.getElementById('cdp-enabled-toggle').checked = config.cdp_detection_enabled;
+    statusPanelState.cdpEnabled = config.cdp_detection_enabled === true;
   }
   if (config.cdp_auto_ban !== undefined) {
     document.getElementById('cdp-auto-ban-toggle').checked = config.cdp_auto_ban;
+    statusPanelState.cdpAutoBan = config.cdp_auto_ban === true;
   }
   if (config.cdp_detection_threshold !== undefined) {
     document.getElementById('cdp-threshold-slider').value = config.cdp_detection_threshold;
@@ -745,6 +778,7 @@ function updateCdpConfig(config) {
   const btn = document.getElementById('save-cdp-config');
   btn.disabled = true;
   btn.textContent = 'Save CDP Settings';
+  renderStatusItems();
 }
 
 // Update PoW config controls from loaded config
