@@ -1042,6 +1042,11 @@ input:checked + .toggle-slider:before {
   color: var(--color-black);
 }
 
+/* Status section: dotted separators for state rows */
+.admin-group--status .info-row {
+  border-bottom: 1px dotted var(--color-gray-300);
+}
+
 /* ===========================================
    Responsive
    =========================================== */
