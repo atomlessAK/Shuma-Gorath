@@ -16,6 +16,9 @@ This file tracks the audit findings and remediation tasks discussed on 2026-02-0
 - [x] Add event log retention cleanup by hour (configurable). (src/admin.rs, spin.toml, docs)
 - [x] Add optional admin IP allowlist (env-driven). (src/auth.rs, src/admin.rs, docs)
 - [ ] Design strategy for syncing bans/unbans across global edge instances. (architecture, ops)
+- [ ] Design runtime-agnostic architecture that keeps core detection logic portable while preserving Fermyon-first performance paths. (architecture)
+- [ ] Define platform scope boundaries to avoid overreach by leaning on upstream bot managers (for example Akamai) for features better handled there. (product architecture)
+- [ ] Mature GEO defense model: trust boundary for geo headers, add ASN/network dimensions, endpoint-aware GEO policy tiers, admin policy editing, and geo/ASN observability + alerting. (src/geo.rs, src/lib.rs, src/admin.rs, dashboard, docs)
 
 ## 🐙 Low Priority (DX / Docs / Hygiene)
 - [x] Fix dashboard time-series request param: use `hours` instead of `limit`. (dashboard/dashboard.js)
