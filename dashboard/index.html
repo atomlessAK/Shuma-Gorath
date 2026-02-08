@@ -166,6 +166,15 @@
                   <span class="info-label text-muted">Mode:</span>
                   <span id="fail-mode-value">--</span>
                 </div>
+                <h4 class="status-subheading">Proof-of-Work</h4>
+                <div class="info-row">
+                  <span class="info-label text-muted">PoW Status:</span>
+                  <span id="pow-status">--</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label text-muted">PoW Config:</span>
+                  <span id="pow-config-status">--</span>
+                </div>
               </div>
               <p class="control-desc control-desc-spaced text-muted">
                 <strong>Open</strong> (default) — if the KV store is unreachable,
@@ -334,17 +343,6 @@
                 <div class="input-row">
                   <label class="control-label" for="pow-ttl">Seed TTL (seconds)</label>
                   <input class="input-field" type="number" id="pow-ttl" min="30" max="300" value="90" aria-label="PoW seed TTL in seconds">
-                </div>
-                <div class="info-panel panel-muted pad-sm">
-                  <h4>Status</h4>
-                  <div class="info-row">
-                  <span class="info-label text-muted">PoW Status:</span>
-                    <span id="pow-status">--</span>
-                  </div>
-                  <div class="info-row">
-                  <span class="info-label text-muted">Config:</span>
-                    <span id="pow-config-status">--</span>
-                  </div>
                 </div>
               </div>
               <button id="save-pow-config" class="btn" disabled>Save PoW Settings</button>
