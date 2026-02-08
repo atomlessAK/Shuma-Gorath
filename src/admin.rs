@@ -42,7 +42,7 @@ const POW_TTL_MAX: u64 = crate::config::POW_TTL_MAX;
 static LAST_EVENTLOG_CLEANUP_HOUR: Lazy<Mutex<u64>> = Lazy::new(|| Mutex::new(0));
 
 fn event_log_retention_hours() -> u64 {
-    env::var("EVENT_LOG_RETENTION_HOURS")
+    env::var("SHUMA_EVENT_LOG_RETENTION_HOURS")
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
         .unwrap_or(DEFAULT_EVENT_RETENTION_HOURS)
@@ -225,8 +225,8 @@ mod admin_config_tests {
     #[test]
     fn admin_config_includes_challenge_fields() {
         let _lock = ENV_MUTEX.lock().unwrap();
-        std::env::remove_var("CHALLENGE_CONFIG_MUTABLE");
-        std::env::remove_var("BOTNESS_CONFIG_MUTABLE");
+        std::env::remove_var("SHUMA_CHALLENGE_CONFIG_MUTABLE");
+        std::env::remove_var("SHUMA_BOTNESS_CONFIG_MUTABLE");
         let req = make_request(Method::Get, "/admin/config", Vec::new());
         let store = TestStore::default();
         let resp = handle_admin_config(&req, &store, "default");
@@ -244,13 +244,13 @@ mod admin_config_tests {
     #[test]
     fn admin_config_rejects_challenge_update_when_immutable() {
         let _lock = ENV_MUTEX.lock().unwrap();
-        std::env::set_var("CHALLENGE_CONFIG_MUTABLE", "0");
+        std::env::set_var("SHUMA_CHALLENGE_CONFIG_MUTABLE", "0");
         let body = br#"{"challenge_risk_threshold":5}"#.to_vec();
         let req = make_request(Method::Post, "/admin/config", body);
         let store = TestStore::default();
         let resp = handle_admin_config(&req, &store, "default");
         assert_eq!(*resp.status(), 403u16);
-        std::env::remove_var("CHALLENGE_CONFIG_MUTABLE");
+        std::env::remove_var("SHUMA_CHALLENGE_CONFIG_MUTABLE");
     }
 
     #[test]
@@ -286,11 +286,11 @@ fn sanitize_path(path: &str) -> bool {
 }
 
 fn challenge_threshold_default() -> u8 {
-    crate::config::parse_challenge_threshold(env::var("CHALLENGE_RISK_THRESHOLD").ok().as_deref())
+    crate::config::parse_challenge_threshold(env::var("SHUMA_CHALLENGE_RISK_THRESHOLD").ok().as_deref())
 }
 
 fn maze_threshold_default() -> u8 {
-    crate::config::parse_maze_threshold(env::var("BOTNESS_MAZE_THRESHOLD").ok().as_deref())
+    crate::config::parse_maze_threshold(env::var("SHUMA_BOTNESS_MAZE_THRESHOLD").ok().as_deref())
 }
 
 fn botness_signal_definitions(cfg: &crate::config::Config) -> serde_json::Value {
@@ -447,7 +447,7 @@ fn handle_admin_config(req: &Request, store: &impl crate::challenge::KeyValueSto
             // Update PoW settings if provided (guarded by env flag)
             if json.get("pow_difficulty").is_some() || json.get("pow_ttl_seconds").is_some() {
                 if !crate::config::pow_config_mutable() {
-                    return Response::new(403, "PoW config is immutable (set POW_CONFIG_MUTABLE=1 to allow changes)");
+                    return Response::new(403, "PoW config is immutable (set SHUMA_POW_CONFIG_MUTABLE=1 to allow changes)");
                 }
             }
             if let Some(pow_difficulty) = json.get("pow_difficulty").and_then(|v| v.as_u64()) {
@@ -496,7 +496,7 @@ fn handle_admin_config(req: &Request, store: &impl crate::challenge::KeyValueSto
             if botness_update_requested && !botness_mutable {
                 return Response::new(
                     403,
-                    "Botness config is immutable (set BOTNESS_CONFIG_MUTABLE=true or CHALLENGE_CONFIG_MUTABLE=true to allow changes)"
+                    "Botness config is immutable (set SHUMA_BOTNESS_CONFIG_MUTABLE=true or SHUMA_CHALLENGE_CONFIG_MUTABLE=true to allow changes)"
                 );
             }
             if let Some(challenge_threshold) = json.get("challenge_risk_threshold").and_then(|v| v.as_u64()) {
@@ -713,7 +713,7 @@ pub fn handle_admin(req: &Request) -> Response {
         return Response::new(403, "Forbidden");
     }
     if !crate::auth::is_admin_api_key_configured() {
-        return Response::new(503, "Admin API disabled: API_KEY must be set to a non-default value");
+        return Response::new(503, "Admin API disabled: SHUMA_API_KEY must be set to a non-default value");
     }
     // Require valid API key
     if !crate::auth::is_authorized(req) {

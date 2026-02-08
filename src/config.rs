@@ -255,7 +255,7 @@ fn parse_browser_rules_env_var(name: &str) -> Option<Vec<(String, u32)>> {
 }
 
 pub fn pow_config_mutable() -> bool {
-    env::var("POW_CONFIG_MUTABLE")
+    env::var("SHUMA_POW_CONFIG_MUTABLE")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
 }
@@ -265,11 +265,11 @@ pub(crate) fn challenge_config_mutable_from_env(value: Option<&str>) -> bool {
 }
 
 pub fn challenge_config_mutable() -> bool {
-    challenge_config_mutable_from_env(env::var("CHALLENGE_CONFIG_MUTABLE").ok().as_deref())
+    challenge_config_mutable_from_env(env::var("SHUMA_CHALLENGE_CONFIG_MUTABLE").ok().as_deref())
 }
 
 pub fn botness_config_mutable() -> bool {
-    match env::var("BOTNESS_CONFIG_MUTABLE") {
+    match env::var("SHUMA_BOTNESS_CONFIG_MUTABLE") {
         Ok(v) => parse_bool_env(Some(v.as_str())),
         Err(_) => challenge_config_mutable(),
     }
@@ -311,7 +311,7 @@ pub(crate) fn parse_botness_weight(value: Option<&str>, default_value: u8) -> u8
 }
 
 fn default_pow_difficulty() -> u8 {
-    let v = env::var("POW_DIFFICULTY")
+    let v = env::var("SHUMA_POW_DIFFICULTY")
         .ok()
         .and_then(|val| val.parse::<u8>().ok())
         .unwrap_or(15);
@@ -319,7 +319,7 @@ fn default_pow_difficulty() -> u8 {
 }
 
 fn default_pow_ttl_seconds() -> u64 {
-    let v = env::var("POW_TTL_SECONDS")
+    let v = env::var("SHUMA_POW_TTL_SECONDS")
         .ok()
         .and_then(|val| val.parse::<u64>().ok())
         .unwrap_or(90);
@@ -327,37 +327,37 @@ fn default_pow_ttl_seconds() -> u64 {
 }
 
 fn default_challenge_threshold() -> u8 {
-    parse_challenge_threshold(env::var("CHALLENGE_RISK_THRESHOLD").ok().as_deref())
+    parse_challenge_threshold(env::var("SHUMA_CHALLENGE_RISK_THRESHOLD").ok().as_deref())
 }
 
 fn default_maze_threshold() -> u8 {
-    parse_maze_threshold(env::var("BOTNESS_MAZE_THRESHOLD").ok().as_deref())
+    parse_maze_threshold(env::var("SHUMA_BOTNESS_MAZE_THRESHOLD").ok().as_deref())
 }
 
 fn default_botness_weight_js_required() -> u8 {
     parse_botness_weight(
-        env::var("BOTNESS_WEIGHT_JS_REQUIRED").ok().as_deref(),
+        env::var("SHUMA_BOTNESS_WEIGHT_JS_REQUIRED").ok().as_deref(),
         BOTNESS_WEIGHT_JS_REQUIRED_DEFAULT,
     )
 }
 
 fn default_botness_weight_geo_risk() -> u8 {
     parse_botness_weight(
-        env::var("BOTNESS_WEIGHT_GEO_RISK").ok().as_deref(),
+        env::var("SHUMA_BOTNESS_WEIGHT_GEO_RISK").ok().as_deref(),
         BOTNESS_WEIGHT_GEO_RISK_DEFAULT,
     )
 }
 
 fn default_botness_weight_rate_medium() -> u8 {
     parse_botness_weight(
-        env::var("BOTNESS_WEIGHT_RATE_MEDIUM").ok().as_deref(),
+        env::var("SHUMA_BOTNESS_WEIGHT_RATE_MEDIUM").ok().as_deref(),
         BOTNESS_WEIGHT_RATE_MEDIUM_DEFAULT,
     )
 }
 
 fn default_botness_weight_rate_high() -> u8 {
     parse_botness_weight(
-        env::var("BOTNESS_WEIGHT_RATE_HIGH").ok().as_deref(),
+        env::var("SHUMA_BOTNESS_WEIGHT_RATE_HIGH").ok().as_deref(),
         BOTNESS_WEIGHT_RATE_HIGH_DEFAULT,
     )
 }
@@ -410,7 +410,7 @@ fn default_config() -> Config {
 }
 
 fn apply_env_overrides(cfg: &mut Config) {
-    if let Some(v) = parse_bool_env_var("TEST_MODE") {
+    if let Some(v) = parse_bool_env_var("SHUMA_TEST_MODE") {
         cfg.test_mode = v;
     }
     if let Some(v) = parse_u64_env_var("SHUMA_BAN_DURATION") {
@@ -485,28 +485,28 @@ fn apply_env_overrides(cfg: &mut Config) {
     if let Some(v) = parse_f32_env_var("SHUMA_CDP_DETECTION_THRESHOLD") {
         cfg.cdp_detection_threshold = v.clamp(0.0, 1.0);
     }
-    if let Some(v) = parse_u8_env_var("POW_DIFFICULTY") {
+    if let Some(v) = parse_u8_env_var("SHUMA_POW_DIFFICULTY") {
         cfg.pow_difficulty = clamp_pow_difficulty(v);
     }
-    if let Some(v) = parse_u64_env_var("POW_TTL_SECONDS") {
+    if let Some(v) = parse_u64_env_var("SHUMA_POW_TTL_SECONDS") {
         cfg.pow_ttl_seconds = clamp_pow_ttl(v);
     }
-    if let Some(v) = parse_u8_env_var("CHALLENGE_RISK_THRESHOLD") {
+    if let Some(v) = parse_u8_env_var("SHUMA_CHALLENGE_RISK_THRESHOLD") {
         cfg.challenge_risk_threshold = clamp_challenge_threshold(v);
     }
-    if let Some(v) = parse_u8_env_var("BOTNESS_MAZE_THRESHOLD") {
+    if let Some(v) = parse_u8_env_var("SHUMA_BOTNESS_MAZE_THRESHOLD") {
         cfg.botness_maze_threshold = clamp_maze_threshold(v);
     }
-    if let Some(v) = parse_u8_env_var("BOTNESS_WEIGHT_JS_REQUIRED") {
+    if let Some(v) = parse_u8_env_var("SHUMA_BOTNESS_WEIGHT_JS_REQUIRED") {
         cfg.botness_weights.js_required = clamp_botness_weight(v);
     }
-    if let Some(v) = parse_u8_env_var("BOTNESS_WEIGHT_GEO_RISK") {
+    if let Some(v) = parse_u8_env_var("SHUMA_BOTNESS_WEIGHT_GEO_RISK") {
         cfg.botness_weights.geo_risk = clamp_botness_weight(v);
     }
-    if let Some(v) = parse_u8_env_var("BOTNESS_WEIGHT_RATE_MEDIUM") {
+    if let Some(v) = parse_u8_env_var("SHUMA_BOTNESS_WEIGHT_RATE_MEDIUM") {
         cfg.botness_weights.rate_medium = clamp_botness_weight(v);
     }
-    if let Some(v) = parse_u8_env_var("BOTNESS_WEIGHT_RATE_HIGH") {
+    if let Some(v) = parse_u8_env_var("SHUMA_BOTNESS_WEIGHT_RATE_HIGH") {
         cfg.botness_weights.rate_high = clamp_botness_weight(v);
     }
 }

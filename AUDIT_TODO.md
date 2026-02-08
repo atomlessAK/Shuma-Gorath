@@ -3,7 +3,7 @@
 This file tracks the audit findings and remediation tasks discussed on 2026-02-04.
 
 ## 🐙 High Priority (Security)
-- [x] Move JS challenge HMAC secret to environment (`JS_SECRET`) and document it. (src/js.rs, spin.toml, docs)
+- [x] Move JS challenge HMAC secret to environment (`SHUMA_JS_SECRET`) and document it. (src/js.rs, spin.toml, docs)
 - [x] Tighten `/health` access: do not allow "unknown" IP; rely on explicit loopback headers. (src/lib.rs)
 
 ## 🐙 Medium Priority (Correctness / Ops)

@@ -14,21 +14,21 @@ CARGO_HOME ?= $(HOME)/.cargo
 PATH := $(CARGO_HOME)/bin:$(PATH)
 export PATH
 
-# Dev-only default for forwarded IP secret (override with FORWARDED_IP_SECRET=...)
+# Dev-only default for forwarded IP secret (override with SHUMA_FORWARDED_IP_SECRET=...)
 DEV_FORWARDED_IP_SECRET ?= changeme-dev-only-ip-secret
-FORWARDED_IP_SECRET ?= $(DEV_FORWARDED_IP_SECRET)
-export FORWARDED_IP_SECRET
+SHUMA_FORWARDED_IP_SECRET ?= $(DEV_FORWARDED_IP_SECRET)
+export SHUMA_FORWARDED_IP_SECRET
 
-# Dev-only default for admin API key (override with API_KEY=...)
+# Dev-only default for admin API key (override with SHUMA_API_KEY=...)
 DEV_API_KEY ?= changeme-dev-only-api-key
-API_KEY ?= $(DEV_API_KEY)
-export API_KEY
+SHUMA_API_KEY ?= $(DEV_API_KEY)
+export SHUMA_API_KEY
 
-# Optional header/env for forwarded IP trust (only if FORWARDED_IP_SECRET is set)
-FORWARDED_SECRET_HEADER := $(if $(FORWARDED_IP_SECRET),-H "X-Shuma-Forwarded-Secret: $(FORWARDED_IP_SECRET)",)
-SPIN_FORWARD_SECRET := $(if $(FORWARDED_IP_SECRET),--env FORWARDED_IP_SECRET=$(FORWARDED_IP_SECRET),)
-SPIN_API_KEY := $(if $(API_KEY),--env API_KEY=$(API_KEY),)
-SPIN_CHALLENGE_MUTABLE := --env CHALLENGE_CONFIG_MUTABLE=true
+# Optional header/env for forwarded IP trust (only if SHUMA_FORWARDED_IP_SECRET is set)
+FORWARDED_SECRET_HEADER := $(if $(SHUMA_FORWARDED_IP_SECRET),-H "X-Shuma-Forwarded-Secret: $(SHUMA_FORWARDED_IP_SECRET)",)
+SPIN_FORWARD_SECRET := $(if $(SHUMA_FORWARDED_IP_SECRET),--env SHUMA_FORWARDED_IP_SECRET=$(SHUMA_FORWARDED_IP_SECRET),)
+SPIN_API_KEY := $(if $(SHUMA_API_KEY),--env SHUMA_API_KEY=$(SHUMA_API_KEY),)
+SPIN_CHALLENGE_MUTABLE := --env SHUMA_CHALLENGE_CONFIG_MUTABLE=true
 SPIN_DEBUG_HEADERS := --env SHUMA_DEBUG_HEADERS=true
 
 #--------------------------

@@ -6,11 +6,11 @@ Shuma-Gorath is designed to **complement enterprise bot defenses** (such as Akam
 
 ## 🐙 Required Secrets / Env Vars
 
-- `API_KEY` - Admin API bearer token
-- `JS_SECRET` - Signs the `js_verified` cookie
-- `FORWARDED_IP_SECRET` - Required when trusting `X-Forwarded-For`
-- `ADMIN_IP_ALLOWLIST` - Optional; CIDR/IP allowlist for admin access
-- `EVENT_LOG_RETENTION_HOURS` - Event retention window
+- `SHUMA_API_KEY` - Admin API bearer token
+- `SHUMA_JS_SECRET` - Signs the `js_verified` cookie
+- `SHUMA_FORWARDED_IP_SECRET` - Required when trusting `X-Forwarded-For`
+- `SHUMA_ADMIN_IP_ALLOWLIST` - Optional; CIDR/IP allowlist for admin access
+- `SHUMA_EVENT_LOG_RETENTION_HOURS` - Event retention window
 - `SHUMA_CONFIG_MODE` - `hybrid` (default) or `env_only`
 - `SHUMA_KV_STORE_FAIL_MODE` - `open` (default) or `closed`
 - `SHUMA_DEBUG_HEADERS` - Optional; expose internal health/fail-mode headers (dev only)
@@ -20,7 +20,7 @@ Use this for immutable infrastructure-style deployments.
 
 ## 🐙 Forwarded IP Trust
 
-When `FORWARDED_IP_SECRET` is set, the app only trusts `X-Forwarded-For` when the request also includes:
+When `SHUMA_FORWARDED_IP_SECRET` is set, the app only trusts `X-Forwarded-For` when the request also includes:
 
 ```
 X-Shuma-Forwarded-Secret: <same value>
@@ -73,9 +73,9 @@ js_secret = { default = "" }
 
 [component.bot-trap]
 environment = {
-  API_KEY = "{{ api_key }}",
-  JS_SECRET = "{{ js_secret }}",
-  FORWARDED_IP_SECRET = "{{ forwarded_ip_secret }}"
+  SHUMA_API_KEY = "{{ api_key }}",
+  SHUMA_JS_SECRET = "{{ js_secret }}",
+  SHUMA_FORWARDED_IP_SECRET = "{{ forwarded_ip_secret }}"
 }
 ```
 
@@ -104,19 +104,19 @@ spin cloud apps metrics
 
 ### 🐙 Forwarded IP Secret on Fermyon Cloud
 
-If you set `FORWARDED_IP_SECRET`, you must inject the matching `X-Shuma-Forwarded-Secret` header upstream. If you do not inject that header, requests that rely on `X-Forwarded-For` are treated as untrusted.
+If you set `SHUMA_FORWARDED_IP_SECRET`, you must inject the matching `X-Shuma-Forwarded-Secret` header upstream. If you do not inject that header, requests that rely on `X-Forwarded-For` are treated as untrusted.
 
 ## 🐙 Other Deploy Targets
 
 - Set environment variables in your platform’s secret/config system (Kubernetes, Docker, systemd, etc.)
-- Ensure your proxy/CDN adds `X-Shuma-Forwarded-Secret` when `FORWARDED_IP_SECRET` is set
+- Ensure your proxy/CDN adds `X-Shuma-Forwarded-Secret` when `SHUMA_FORWARDED_IP_SECRET` is set
 - Use TLS for all admin traffic
-- Restrict `/admin/*` access using `ADMIN_IP_ALLOWLIST` or platform firewall rules
+- Restrict `/admin/*` access using `SHUMA_ADMIN_IP_ALLOWLIST` or platform firewall rules
 
 ## 🐙 Local Dev Defaults
 
-`make dev` sets dev-only defaults for `FORWARDED_IP_SECRET` and `API_KEY`, enables internal debug headers, and passes them to Spin. Override as needed:
+`make dev` sets dev-only defaults for `SHUMA_FORWARDED_IP_SECRET` and `SHUMA_API_KEY`, enables internal debug headers, and passes them to Spin. Override as needed:
 
 ```bash
-make dev FORWARDED_IP_SECRET="your-dev-secret" API_KEY="your-dev-api-key"
+make dev SHUMA_FORWARDED_IP_SECRET="your-dev-secret" SHUMA_API_KEY="your-dev-api-key"
 ```

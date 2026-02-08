@@ -26,9 +26,9 @@ use base64::{engine::general_purpose, Engine as _};
 /// Secret used for HMAC token generation for JS verification cookies.
 /// Pull from env to avoid a repo-known static secret in production.
 fn get_js_secret() -> String {
-    // Prefer dedicated JS_SECRET, fall back to API_KEY for dev convenience.
-    std::env::var("JS_SECRET")
-        .or_else(|_| std::env::var("API_KEY"))
+    // Prefer dedicated SHUMA_JS_SECRET, fall back to SHUMA_API_KEY for dev convenience.
+    std::env::var("SHUMA_JS_SECRET")
+        .or_else(|_| std::env::var("SHUMA_API_KEY"))
         .unwrap_or_else(|_| "changeme-js-secret".to_string())
 }
 
@@ -95,7 +95,7 @@ pub fn inject_js_challenge(ip: &str, pow_difficulty: u8, pow_ttl_seconds: u64) -
             }}
 
             const POW_SEED = "{seed}";
-            const POW_DIFFICULTY = {difficulty};
+            const SHUMA_POW_DIFFICULTY = {difficulty};
 
             function hasLeadingZeroBits(bytes, bits) {{
                 let remaining = bits;
@@ -139,7 +139,7 @@ pub fn inject_js_challenge(ip: &str, pow_difficulty: u8, pow_ttl_seconds: u64) -
                     return;
                 }}
                 document.body.innerText = 'Verifying...';
-                const nonce = await solvePow(POW_SEED, POW_DIFFICULTY);
+                const nonce = await solvePow(POW_SEED, SHUMA_POW_DIFFICULTY);
                 const resp = await fetch('/pow/verify', {{
                     method: 'POST',
                     headers: {{ 'Content-Type': 'application/json' }},

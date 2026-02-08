@@ -41,22 +41,22 @@ make help             # Show all commands
 ## 🐙 Configuration (Short List)
 
 Key environment variables:
-- `API_KEY` - Admin API bearer token
-- `JS_SECRET` - Signs the `js_verified` cookie
-- `FORWARDED_IP_SECRET` - Trusts `X-Forwarded-For` only when `X-Shuma-Forwarded-Secret` matches
-- `ADMIN_IP_ALLOWLIST` - CIDR/IP allowlist for admin access
-- `EVENT_LOG_RETENTION_HOURS` - Event log retention window
+- `SHUMA_API_KEY` - Admin API bearer token
+- `SHUMA_JS_SECRET` - Signs the `js_verified` cookie
+- `SHUMA_FORWARDED_IP_SECRET` - Trusts `X-Forwarded-For` only when `X-Shuma-Forwarded-Secret` matches
+- `SHUMA_ADMIN_IP_ALLOWLIST` - CIDR/IP allowlist for admin access
+- `SHUMA_EVENT_LOG_RETENTION_HOURS` - Event log retention window
 - `SHUMA_CONFIG_MODE` - `hybrid` (default) or `env_only` (full env-driven config, admin writes disabled)
 - `SHUMA_KV_STORE_FAIL_MODE` - `open` or `closed`
-- `POW_ENABLED` - Enable proof-of-work before JS verification
-- `POW_DIFFICULTY` - Leading zero bits required (default: 15)
-- `POW_TTL_SECONDS` - PoW seed expiry in seconds (default: 90)
-- `POW_SECRET` - Optional PoW signing secret (defaults to `JS_SECRET`)
-- `POW_CONFIG_MUTABLE` - Allow admin API to tune PoW difficulty/TTL
-- `CHALLENGE_RISK_THRESHOLD` - Risk score to trigger step-up challenge (default: 3)
-- `CHALLENGE_CONFIG_MUTABLE` - Allow admin API to tune challenge threshold
-- `BOTNESS_CONFIG_MUTABLE` - Allow admin API to tune botness thresholds/weights
-- `CHALLENGE_TRANSFORM_COUNT` - Number of transforms offered in challenge UI (4-8, default: 6)
+- `SHUMA_POW_ENABLED` - Enable proof-of-work before JS verification
+- `SHUMA_POW_DIFFICULTY` - Leading zero bits required (default: 15)
+- `SHUMA_POW_TTL_SECONDS` - PoW seed expiry in seconds (default: 90)
+- `SHUMA_POW_SECRET` - Optional PoW signing secret (defaults to `SHUMA_JS_SECRET`)
+- `SHUMA_POW_CONFIG_MUTABLE` - Allow admin API to tune PoW difficulty/TTL
+- `SHUMA_CHALLENGE_RISK_THRESHOLD` - Risk score to trigger step-up challenge (default: 3)
+- `SHUMA_CHALLENGE_CONFIG_MUTABLE` - Allow admin API to tune challenge threshold
+- `SHUMA_BOTNESS_CONFIG_MUTABLE` - Allow admin API to tune botness thresholds/weights
+- `SHUMA_CHALLENGE_TRANSFORM_COUNT` - Number of transforms offered in challenge UI (4-8, default: 6)
 
 Deployment policy note: `SHUMA_KV_STORE_FAIL_MODE` is a critical choice (fail-open vs fail-closed) when the KV store is unavailable. See `docs/security-hardening.md` and `docs/deployment.md`.
 

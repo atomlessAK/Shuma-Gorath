@@ -17,7 +17,7 @@ const INSECURE_DEFAULT_API_KEY: &str = "changeme-supersecret";
 
 /// Returns the admin API key only when explicitly configured and non-default.
 fn get_admin_api_key() -> Option<String> {
-    let key = std::env::var("API_KEY").ok()?;
+    let key = std::env::var("SHUMA_API_KEY").ok()?;
     let key = key.trim();
     if key.is_empty() || key == INSECURE_DEFAULT_API_KEY {
         return None;
@@ -53,9 +53,9 @@ pub fn is_authorized(req: &Request) -> bool {
 }
 
 /// Returns true if admin access is allowed from this IP.
-/// If ADMIN_IP_ALLOWLIST is unset, all IPs are allowed (auth still required).
+/// If SHUMA_ADMIN_IP_ALLOWLIST is unset, all IPs are allowed (auth still required).
 pub fn is_admin_ip_allowed(req: &Request) -> bool {
-    let list = match std::env::var("ADMIN_IP_ALLOWLIST") {
+    let list = match std::env::var("SHUMA_ADMIN_IP_ALLOWLIST") {
         Ok(v) => {
             let items: Vec<String> = v
                 .split(',')
@@ -95,7 +95,7 @@ mod tests {
     #[test]
     fn unauthorized_when_api_key_missing() {
         let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
-        std::env::remove_var("API_KEY");
+        std::env::remove_var("SHUMA_API_KEY");
         let req = request_with_auth(Some("Bearer any-key"));
         assert!(!is_authorized(&req));
     }
@@ -103,7 +103,7 @@ mod tests {
     #[test]
     fn unauthorized_when_api_key_is_insecure_default() {
         let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
-        std::env::set_var("API_KEY", INSECURE_DEFAULT_API_KEY);
+        std::env::set_var("SHUMA_API_KEY", INSECURE_DEFAULT_API_KEY);
         let req = request_with_auth(Some("Bearer changeme-supersecret"));
         assert!(!is_authorized(&req));
     }
@@ -111,7 +111,7 @@ mod tests {
     #[test]
     fn authorized_when_api_key_is_explicitly_set() {
         let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
-        std::env::set_var("API_KEY", "test-admin-key");
+        std::env::set_var("SHUMA_API_KEY", "test-admin-key");
         let req = request_with_auth(Some("Bearer test-admin-key"));
         assert!(is_authorized(&req));
     }

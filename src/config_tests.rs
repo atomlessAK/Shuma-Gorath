@@ -100,13 +100,13 @@ mod tests {
             "SHUMA_CONFIG_MODE",
             "SHUMA_RATE_LIMIT",
             "SHUMA_MAZE_ENABLED",
-            "TEST_MODE",
+            "SHUMA_TEST_MODE",
         ];
         clear_env(&keys);
         std::env::set_var("SHUMA_CONFIG_MODE", "env_only");
         std::env::set_var("SHUMA_RATE_LIMIT", "321");
         std::env::set_var("SHUMA_MAZE_ENABLED", "0");
-        std::env::set_var("TEST_MODE", "1");
+        std::env::set_var("SHUMA_TEST_MODE", "1");
 
         let store = TestStore::default();
         let mut kv_cfg = crate::config::Config::load(&store, "default");

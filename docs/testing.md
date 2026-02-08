@@ -51,10 +51,10 @@ make test-integration
 ```
 
 These tests exercise the full HTTP + KV runtime and are required for end-to-end validation.
-If your Spin environment sets `FORWARDED_IP_SECRET`, export it before running integration tests so the curl requests include the matching `X-Shuma-Forwarded-Secret` header:
+If your Spin environment sets `SHUMA_FORWARDED_IP_SECRET`, export it before running integration tests so the curl requests include the matching `X-Shuma-Forwarded-Secret` header:
 
 ```bash
-export FORWARDED_IP_SECRET="your-forwarded-ip-secret"
+export SHUMA_FORWARDED_IP_SECRET="your-forwarded-ip-secret"
 ```
 
 The integration suite is implemented in `test_spin_colored.sh` and is invoked by `make test-integration`.
@@ -79,13 +79,13 @@ Use the Makefile targets rather than calling scripts directly.
 ## 🐙 Manual Test Sequence (Optional)
 
 Use these steps to manually validate behavior. They mirror the integration suite but let you inspect responses in detail.
-If `FORWARDED_IP_SECRET` is set, include the matching `X-Shuma-Forwarded-Secret` header on requests that use `X-Forwarded-For`.
+If `SHUMA_FORWARDED_IP_SECRET` is set, include the matching `X-Shuma-Forwarded-Secret` header on requests that use `X-Forwarded-For`.
 Start the server in another terminal with `make dev` before running these steps.
 
 1. Health check (loopback only):
 ```bash
 curl -H "X-Forwarded-For: 127.0.0.1" \
-  -H "X-Shuma-Forwarded-Secret: $FORWARDED_IP_SECRET" \
+  -H "X-Shuma-Forwarded-Secret: $SHUMA_FORWARDED_IP_SECRET" \
   http://127.0.0.1:3000/health
 ```
 Expected: `OK`. If `SHUMA_DEBUG_HEADERS=true`, headers `X-KV-Status` and `X-Shuma-Fail-Mode` are also present.
@@ -93,27 +93,27 @@ Expected: `OK`. If `SHUMA_DEBUG_HEADERS=true`, headers `X-KV-Status` and `X-Shum
 2. Root endpoint (JS challenge / block page):
 ```bash
 curl -i -H "X-Forwarded-For: 1.2.3.4" \
-  -H "X-Shuma-Forwarded-Secret: $FORWARDED_IP_SECRET" \
+  -H "X-Shuma-Forwarded-Secret: $SHUMA_FORWARDED_IP_SECRET" \
   http://127.0.0.1:3000/
 ```
 Expected: an "Access Blocked" page or a JS challenge that sets a `js_verified` cookie.
-If `POW_ENABLED` is true, the JS challenge performs a short proof‑of‑work step first.
+If `SHUMA_POW_ENABLED` is true, the JS challenge performs a short proof‑of‑work step first.
 For browser checks, use a private window and confirm the cookie is set after the first visit.
 
 3. Honeypot ban:
 ```bash
 curl -s -H "X-Forwarded-For: 1.2.3.4" \
-  -H "X-Shuma-Forwarded-Secret: $FORWARDED_IP_SECRET" \
+  -H "X-Shuma-Forwarded-Secret: $SHUMA_FORWARDED_IP_SECRET" \
   http://127.0.0.1:3000/bot-trap > /dev/null
 curl -s -H "X-Forwarded-For: 1.2.3.4" \
-  -H "X-Shuma-Forwarded-Secret: $FORWARDED_IP_SECRET" \
+  -H "X-Shuma-Forwarded-Secret: $SHUMA_FORWARDED_IP_SECRET" \
   http://127.0.0.1:3000/ | head -5
 ```
 Expected: "Access Blocked" for the banned IP.
 
 4. Admin ban:
 ```bash
-curl -X POST -H "Authorization: Bearer $API_KEY" \
+curl -X POST -H "Authorization: Bearer $SHUMA_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"ip":"10.20.30.40","reason":"test","duration":3600}' \
   http://127.0.0.1:3000/admin/ban
@@ -123,7 +123,7 @@ Optional: verify with `GET /admin/ban` to confirm the IP is listed.
 
 5. Admin unban:
 ```bash
-curl -X POST -H "Authorization: Bearer $API_KEY" \
+curl -X POST -H "Authorization: Bearer $SHUMA_API_KEY" \
   "http://127.0.0.1:3000/admin/unban?ip=1.2.3.4"
 ```
 Expected: the IP removed from the ban list.
@@ -131,7 +131,7 @@ Optional: verify with `GET /admin/ban` that the entry is gone.
 
 6. Test mode toggle:
 ```bash
-curl -X POST -H "Authorization: Bearer $API_KEY" \
+curl -X POST -H "Authorization: Bearer $SHUMA_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"test_mode": true}' \
   http://127.0.0.1:3000/admin/config
@@ -148,7 +148,7 @@ Expected: Prometheus metrics output.
 ```bash
 curl -X POST -H "Content-Type: application/json" \
   -H "X-Forwarded-For: 10.0.0.200" \
-  -H "X-Shuma-Forwarded-Secret: $FORWARDED_IP_SECRET" \
+  -H "X-Shuma-Forwarded-Secret: $SHUMA_FORWARDED_IP_SECRET" \
   -d '{"cdp_detected":true,"score":0.5,"checks":["webdriver"]}' \
   http://127.0.0.1:3000/cdp-report
 ```
@@ -157,19 +157,19 @@ Expected: a success response and a CDP event recorded in analytics.
 9. Challenge replay behavior:
 ```bash
 challenge_page=$(curl -s -H "X-Forwarded-For: 10.0.0.150" \
-  -H "X-Shuma-Forwarded-Secret: $FORWARDED_IP_SECRET" \
+  -H "X-Shuma-Forwarded-Secret: $SHUMA_FORWARDED_IP_SECRET" \
   http://127.0.0.1:3000/challenge)
 seed=$(python3 -c 'import re,sys; m=re.search(r"name=\"seed\" value=\"([^\"]+)\"", sys.stdin.read()); print(m.group(1) if m else "")' <<< "$challenge_page")
 output=$(python3 -c 'import re,sys; m=re.search(r"name=\"output\"[^>]*value=\"([^\"]+)\"", sys.stdin.read()); print(m.group(1) if m else "")' <<< "$challenge_page")
 curl -s -X POST \
   -H "X-Forwarded-For: 10.0.0.150" \
-  -H "X-Shuma-Forwarded-Secret: $FORWARDED_IP_SECRET" \
+  -H "X-Shuma-Forwarded-Secret: $SHUMA_FORWARDED_IP_SECRET" \
   --data-urlencode "seed=$seed" \
   --data-urlencode "output=$output" \
   http://127.0.0.1:3000/challenge
 curl -s -X POST \
   -H "X-Forwarded-For: 10.0.0.150" \
-  -H "X-Shuma-Forwarded-Secret: $FORWARDED_IP_SECRET" \
+  -H "X-Shuma-Forwarded-Secret: $SHUMA_FORWARDED_IP_SECRET" \
   --data-urlencode "seed=$seed" \
   --data-urlencode "output=$output" \
   http://127.0.0.1:3000/challenge
@@ -179,15 +179,15 @@ Expected: first submit returns `Incorrect.` with a new-challenge link; second su
 ## 🐙 Complete Manual Test Sequence
 
 Assumes the server is already running in another terminal via `make dev`.
-If you are using `FORWARDED_IP_SECRET`, export it before running this sequence.
+If you are using `SHUMA_FORWARDED_IP_SECRET`, export it before running this sequence.
 
 ```bash
 set -e
 BASE_URL="http://127.0.0.1:3000"
-API_KEY="${API_KEY:-changeme-dev-only-api-key}"
+SHUMA_API_KEY="${SHUMA_API_KEY:-changeme-dev-only-api-key}"
 FORWARDED_SECRET_HEADER=()
-if [[ -n "${FORWARDED_IP_SECRET:-}" ]]; then
-  FORWARDED_SECRET_HEADER=(-H "X-Shuma-Forwarded-Secret: ${FORWARDED_IP_SECRET}")
+if [[ -n "${SHUMA_FORWARDED_IP_SECRET:-}" ]]; then
+  FORWARDED_SECRET_HEADER=(-H "X-Shuma-Forwarded-Secret: ${SHUMA_FORWARDED_IP_SECRET}")
 fi
 
 echo "1) Health"
@@ -204,22 +204,22 @@ curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 1.2.3.4" "$BASE_URL
 echo ""
 
 echo "4) Admin ban"
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $API_KEY" \
+curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $SHUMA_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"ip":"10.20.30.40","reason":"manual_test","duration":3600}' \
   "$BASE_URL/admin/ban"
 echo ""
 
 echo "5) Admin unban"
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $API_KEY" \
+curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $SHUMA_API_KEY" \
   "$BASE_URL/admin/unban?ip=1.2.3.4"
 echo ""
 
 echo "6) Test mode on, then off"
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $API_KEY" \
+curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $SHUMA_API_KEY" \
   -H "Content-Type: application/json" -d '{"test_mode": true}' \
   "$BASE_URL/admin/config"
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $API_KEY" \
+curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $SHUMA_API_KEY" \
   -H "Content-Type: application/json" -d '{"test_mode": false}' \
   "$BASE_URL/admin/config"
 echo ""
@@ -241,7 +241,7 @@ echo ""
 - If you visit `/bot-trap` in a browser without `X-Forwarded-For`, your IP is detected as `unknown`.
 - To unban yourself locally:
 ```bash
-curl -X POST -H "Authorization: Bearer $API_KEY" \
+curl -X POST -H "Authorization: Bearer $SHUMA_API_KEY" \
   "http://127.0.0.1:3000/admin/unban?ip=unknown"
 ```
 
@@ -257,12 +257,12 @@ curl -X POST -H "Authorization: Bearer $API_KEY" \
 
 Problem: `/health` returns 403
 - Ensure you passed `X-Forwarded-For: 127.0.0.1`
-- If `FORWARDED_IP_SECRET` is set, include `X-Shuma-Forwarded-Secret`
+- If `SHUMA_FORWARDED_IP_SECRET` is set, include `X-Shuma-Forwarded-Secret`
 - Confirm the server is running with `make status`
 
 Problem: Admin calls fail with 401/403
-- Confirm `API_KEY` is correct
-- If `ADMIN_IP_ALLOWLIST` is set, ensure your IP is included
+- Confirm `SHUMA_API_KEY` is correct
+- If `SHUMA_ADMIN_IP_ALLOWLIST` is set, ensure your IP is included
 
 Problem: Integration tests were skipped
 - Start the server with `make dev`
@@ -271,7 +271,7 @@ Problem: Integration tests were skipped
 Problem: Unsure what IP the bot trap detected
 - Query the ban list:
 ```bash
-curl -H "Authorization: Bearer $API_KEY" \
+curl -H "Authorization: Bearer $SHUMA_API_KEY" \
   http://127.0.0.1:3000/admin/ban
 ```
 

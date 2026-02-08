@@ -48,7 +48,7 @@ make test-integration      # In terminal 2
 - `POST /cdp-report` - CDP automation report intake
 - `POST /challenge` - Submit challenge answer (if challenge re-enabled)
 
-### 🐙 Admin API (requires `Authorization: Bearer <API_KEY>`)
+### 🐙 Admin API (requires `Authorization: Bearer <SHUMA_API_KEY>`)
 - `GET /admin/ban` - List all bans
 - `POST /admin/ban` - Manually ban IP (JSON: `{"ip":"x.x.x.x","reason":"...","duration":3600}`)
 - `POST /admin/unban?ip=x.x.x.x` - Unban an IP
@@ -67,24 +67,24 @@ make test-integration      # In terminal 2
 Set in `spin.toml` or environment:
 ```toml
 [component.bot-trap]
-environment = { API_KEY = "your-secret-key-here", JS_SECRET = "your-js-secret-here", EVENT_LOG_RETENTION_HOURS = "168", ADMIN_IP_ALLOWLIST = "203.0.113.0/24,198.51.100.10" }
+environment = { SHUMA_API_KEY = "your-secret-key-here", SHUMA_JS_SECRET = "your-js-secret-here", SHUMA_EVENT_LOG_RETENTION_HOURS = "168", SHUMA_ADMIN_IP_ALLOWLIST = "203.0.113.0/24,198.51.100.10" }
 ```
 
-`JS_SECRET` is used to sign the `js_verified` cookie for the JS challenge.
-`FORWARDED_IP_SECRET` is optional and is used to trust `X-Forwarded-For` from your proxy/CDN (it must also send `X-Shuma-Forwarded-Secret`). If you set it, include that header in integration tests.
-`EVENT_LOG_RETENTION_HOURS` controls how long event logs are kept (set to `0` to disable cleanup).
-`ADMIN_IP_ALLOWLIST` limits admin API access to specific IPs/CIDRs (comma-separated).
+`SHUMA_JS_SECRET` is used to sign the `js_verified` cookie for the JS challenge.
+`SHUMA_FORWARDED_IP_SECRET` is optional and is used to trust `X-Forwarded-For` from your proxy/CDN (it must also send `X-Shuma-Forwarded-Secret`). If you set it, include that header in integration tests.
+`SHUMA_EVENT_LOG_RETENTION_HOURS` controls how long event logs are kept (set to `0` to disable cleanup).
+`SHUMA_ADMIN_IP_ALLOWLIST` limits admin API access to specific IPs/CIDRs (comma-separated).
 `SHUMA_KV_STORE_FAIL_MODE` controls fail-open/closed behavior when the KV store is unavailable.
-`POW_ENABLED` enables proof-of-work before JS verification (default: true in dev).
-`POW_DIFFICULTY` sets the leading-zero bit target (default: 15).
-`POW_TTL_SECONDS` controls PoW seed expiry (default: 90).
-`POW_SECRET` optionally overrides the PoW signing secret (falls back to `JS_SECRET`).
-`POW_CONFIG_MUTABLE` allows admin config updates for PoW difficulty/TTL (default: false).
+`SHUMA_POW_ENABLED` enables proof-of-work before JS verification (default: true in dev).
+`SHUMA_POW_DIFFICULTY` sets the leading-zero bit target (default: 15).
+`SHUMA_POW_TTL_SECONDS` controls PoW seed expiry (default: 90).
+`SHUMA_POW_SECRET` optionally overrides the PoW signing secret (falls back to `SHUMA_JS_SECRET`).
+`SHUMA_POW_CONFIG_MUTABLE` allows admin config updates for PoW difficulty/TTL (default: false).
 
 ### 🐙 Forwarded IP Secret (Deployment)
 Local dev (Makefile): `make dev` sets a dev-only default and passes it to Spin. Override as needed:
 ```bash
-make dev FORWARDED_IP_SECRET="your-dev-secret"
+make dev SHUMA_FORWARDED_IP_SECRET="your-dev-secret"
 ```
 
 Fermyon / Spin Cloud (recommended):
@@ -98,11 +98,11 @@ Example `spin.toml` wiring (no secret committed):
 forwarded_ip_secret = { default = "" }
 
 [component.bot-trap]
-environment = { FORWARDED_IP_SECRET = "{{ forwarded_ip_secret }}" }
+environment = { SHUMA_FORWARDED_IP_SECRET = "{{ forwarded_ip_secret }}" }
 ```
 
 Other deploy targets:
-- Set `FORWARDED_IP_SECRET` as an environment variable in your platform's secrets/config (Kubernetes, Docker, systemd, etc.).
+- Set `SHUMA_FORWARDED_IP_SECRET` as an environment variable in your platform's secrets/config (Kubernetes, Docker, systemd, etc.).
 - Ensure your proxy/CDN sends `X-Shuma-Forwarded-Secret` with the same value on each request.
 
 For more deployment detail, see `docs/deployment.md`.
@@ -127,7 +127,7 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
 
 **Via environment (requires restart):**
 ```toml
-environment = { TEST_MODE = "1" }
+environment = { SHUMA_TEST_MODE = "1" }
 ```
 
 ### 🐙 Default Config
@@ -169,10 +169,10 @@ curl -H "Authorization: Bearer changeme-dev-only-api-key" \
 ```
 
 ### 🐙 Test honeypot
-If `FORWARDED_IP_SECRET` is set, include the matching header:
+If `SHUMA_FORWARDED_IP_SECRET` is set, include the matching header:
 ```bash
 curl -H "X-Forwarded-For: 1.2.3.4" \
-  -H "X-Shuma-Forwarded-Secret: $FORWARDED_IP_SECRET" \
+  -H "X-Shuma-Forwarded-Secret: $SHUMA_FORWARDED_IP_SECRET" \
   http://127.0.0.1:3000/bot-trap
 # Subsequent requests from 1.2.3.4 will be blocked
 ```
@@ -221,7 +221,7 @@ test_spin_colored.sh # Integration tests (shell)
 ## 🐙 Security Notes
 
 - **Never commit API keys** - Use environment variables
-- **Rotate keys regularly** - Change API_KEY in production
+- **Rotate keys regularly** - Change SHUMA_API_KEY in production
 - **Use HTTPS in production** - TLS required for API key security
 - **Restrict admin access** - Use IP allowlist or VPN
 - **Monitor event logs** - Review admin actions regularly

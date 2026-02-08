@@ -11,11 +11,11 @@ fail() { echo -e "${RED}✗ FAIL${NC} $1"; }
 info() { echo -e "${YELLOW}→ INFO${NC} $1"; }
 
 BASE_URL="http://127.0.0.1:3000"
-API_KEY="${API_KEY:-changeme-dev-only-api-key}"
+SHUMA_API_KEY="${SHUMA_API_KEY:-changeme-dev-only-api-key}"
 
 FORWARDED_SECRET_HEADER=()
-if [[ -n "${FORWARDED_IP_SECRET:-}" ]]; then
-  FORWARDED_SECRET_HEADER=(-H "X-Shuma-Forwarded-Secret: ${FORWARDED_IP_SECRET}")
+if [[ -n "${SHUMA_FORWARDED_IP_SECRET:-}" ]]; then
+  FORWARDED_SECRET_HEADER=(-H "X-Shuma-Forwarded-Secret: ${SHUMA_FORWARDED_IP_SECRET}")
 fi
 
 echo ""
@@ -56,7 +56,7 @@ fi
 
 # Test 4: Admin ban endpoint
 info "Test 4/5: Admin API manual ban..."
-ban_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $API_KEY" \
+ban_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $SHUMA_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"ip":"5.6.7.8","reason":"test_ban","duration":3600}' \
   "$BASE_URL/admin/ban")
@@ -64,7 +64,7 @@ pass "Admin ban endpoint executed successfully"
 
 # Test 5: Unban via admin API
 info "Test 5/5: Admin API unban..."
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $API_KEY" \
+curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $SHUMA_API_KEY" \
   "$BASE_URL/admin/unban?ip=1.2.3.4" > /dev/null
 sleep 0.5
 resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 1.2.3.4" "$BASE_URL/")

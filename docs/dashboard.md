@@ -28,13 +28,13 @@ Controls:
 - Manual ban/unban
 - robots.txt configuration
 - CDP detection controls
-- PoW status panel and difficulty/TTL tuning (when `POW_CONFIG_MUTABLE=1`)
+- PoW status panel and difficulty/TTL tuning (when `SHUMA_POW_CONFIG_MUTABLE=1`)
 - Botness scoring controls:
 - challenge threshold
 - maze threshold
 - per-signal weights (`js_required`, `geo_risk`, `rate_medium`, `rate_high`)
 - read-only terminal signal catalog
-- editable only when `BOTNESS_CONFIG_MUTABLE=1` (or `CHALLENGE_CONFIG_MUTABLE=1` fallback)
+- editable only when `SHUMA_BOTNESS_CONFIG_MUTABLE=1` (or `SHUMA_CHALLENGE_CONFIG_MUTABLE=1` fallback)
 - Link maze stats
 - Enter key submits inputs (endpoint, API key, ban, unban)
 - Auto-refresh every 30 seconds
@@ -43,17 +43,17 @@ Controls:
 
 Development:
 - `http://127.0.0.1:3000/dashboard/index.html`
-- API key: `API_KEY` from environment or `spin.toml`
+- API key: `SHUMA_API_KEY` from environment or `spin.toml`
 
 Production (recommended):
 - Protect the dashboard with auth
-- Use `ADMIN_IP_ALLOWLIST` to restrict admin access
+- Use `SHUMA_ADMIN_IP_ALLOWLIST` to restrict admin access
 - Serve over HTTPS
 - Store secrets in your platform’s secret store
 
 ## 🐙 Event Retention
 
-Event log retention is controlled by `EVENT_LOG_RETENTION_HOURS` (default: `168`). Set to `0` to disable cleanup.
+Event log retention is controlled by `SHUMA_EVENT_LOG_RETENTION_HOURS` (default: `168`). Set to `0` to disable cleanup.
 
 ## 🐙 API Endpoints Used
 
@@ -84,6 +84,6 @@ dashboard/
 3. Auto-refresh updates stats, charts, and tables
 
 Note: `SHUMA_KV_STORE_FAIL_MODE` is an environment-level policy and is shown read-only in the dashboard.
-Note: PoW enable/disable is environment-level; difficulty/TTL are editable only if `POW_CONFIG_MUTABLE=1`.
+Note: PoW enable/disable is environment-level; difficulty/TTL are editable only if `SHUMA_POW_CONFIG_MUTABLE=1`.
 Note: PoW config changes are logged to the event log as admin actions.
 Note: Botness scoring changes are logged as `botness_config_update` admin actions.

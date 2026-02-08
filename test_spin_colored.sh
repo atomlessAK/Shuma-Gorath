@@ -43,11 +43,11 @@ fail() { echo -e "${RED}FAIL${NC} $1"; }
 info() { echo -e "${YELLOW}INFO${NC} $1"; }
 
 BASE_URL="http://127.0.0.1:3000"
-API_KEY="${API_KEY:-changeme-dev-only-api-key}"
+SHUMA_API_KEY="${SHUMA_API_KEY:-changeme-dev-only-api-key}"
 
 FORWARDED_SECRET_HEADER=()
-if [[ -n "${FORWARDED_IP_SECRET:-}" ]]; then
-  FORWARDED_SECRET_HEADER=(-H "X-Shuma-Forwarded-Secret: ${FORWARDED_IP_SECRET}")
+if [[ -n "${SHUMA_FORWARDED_IP_SECRET:-}" ]]; then
+  FORWARDED_SECRET_HEADER=(-H "X-Shuma-Forwarded-Secret: ${SHUMA_FORWARDED_IP_SECRET}")
 fi
 
 # Test 1: Health check
@@ -64,14 +64,14 @@ fi
 # Preflight: normalize runtime config so tests are deterministic
 info "Resetting test_mode=false before integration scenarios..."
 curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -X POST \
-  -H "Authorization: Bearer $API_KEY" \
+  -H "Authorization: Bearer $SHUMA_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"test_mode": false}' \
   "$BASE_URL/admin/config" > /dev/null || true
 
 info "Clearing bans for test IP..."
 curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" \
-  -H "Authorization: Bearer $API_KEY" \
+  -H "Authorization: Bearer $SHUMA_API_KEY" \
   "$BASE_URL/admin/unban?ip=127.0.0.1" > /dev/null || true
 
 # Test 2: PoW challenge (if enabled)
@@ -167,7 +167,7 @@ fi
 
 # Test 5: Unban 'unknown' via admin API
 info "Testing admin unban for 'unknown'..."
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" "$BASE_URL/admin/unban?ip=unknown" -H "Authorization: Bearer $API_KEY" > /dev/null
+curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" "$BASE_URL/admin/unban?ip=unknown" -H "Authorization: Bearer $SHUMA_API_KEY" > /dev/null
 resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" "$BASE_URL/")
 if ! echo "$resp" | grep -q 'Blocked: Banned'; then
   pass "Unban for 'unknown' works"
@@ -185,7 +185,7 @@ fi
 
 # Test 7: Get config via admin API
 info "Testing GET /admin/config..."
-config_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin/config")
+config_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/config")
 if echo "$config_resp" | grep -q '"test_mode"'; then
   pass "GET /admin/config returns test_mode field"
 else
@@ -195,7 +195,7 @@ fi
 
 # Test 8: Enable test mode
 info "Testing POST /admin/config to enable test_mode..."
-enable_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
+enable_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $SHUMA_API_KEY" -H "Content-Type: application/json" \
   -d '{"test_mode": true}' "$BASE_URL/admin/config")
 if echo "$enable_resp" | grep -q '"test_mode":true'; then
   pass "POST /admin/config enables test_mode"
@@ -254,7 +254,7 @@ fi
 # Test 10: Test mode allows honeypot access without blocking
 info "Testing test_mode behavior (honeypot should not block)..."
 # First, unban the test IP to ensure clean state
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin/unban?ip=10.0.0.99" > /dev/null
+curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/unban?ip=10.0.0.99" > /dev/null
 # Hit honeypot with test IP
 honeypot_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 10.0.0.99" "$BASE_URL/bot-trap")
 if echo "$honeypot_resp" | grep -q 'TEST MODE'; then
@@ -275,7 +275,7 @@ fi
 
 # Test 11: Disable test mode and verify blocking resumes
 info "Testing POST /admin/config to disable test_mode..."
-disable_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
+disable_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $SHUMA_API_KEY" -H "Content-Type: application/json" \
   -d '{"test_mode": false}' "$BASE_URL/admin/config")
 if echo "$disable_resp" | grep -q '"test_mode":false'; then
   pass "POST /admin/config disables test_mode"
@@ -287,7 +287,7 @@ fi
 # Test 12: Verify blocking works again after test mode disabled
 info "Testing that blocking resumes after test_mode disabled..."
 # Unban first to get clean state
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin/unban?ip=10.0.0.100" > /dev/null
+curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/unban?ip=10.0.0.100" > /dev/null
 # Hit honeypot - should now actually ban
 curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 10.0.0.100" "$BASE_URL/bot-trap" > /dev/null
 block_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 10.0.0.100" "$BASE_URL/")
@@ -299,9 +299,9 @@ else
 fi
 
 # Cleanup: unban test IPs
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin/unban?ip=10.0.0.99" > /dev/null
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin/unban?ip=10.0.0.100" > /dev/null
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin/unban?ip=10.0.0.150" > /dev/null
+curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/unban?ip=10.0.0.99" > /dev/null
+curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/unban?ip=10.0.0.100" > /dev/null
+curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/unban?ip=10.0.0.150" > /dev/null
 
 # Test 13: Prometheus metrics endpoint
 info "Testing GET /metrics (Prometheus format)..."
@@ -344,7 +344,7 @@ fi
 
 # Test 16: CDP config available via admin API
 info "Testing CDP config in /admin/cdp..."
-cdp_config=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin/cdp")
+cdp_config=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/cdp")
 if echo "$cdp_config" | grep -qE '"enabled"|cdp_detection'; then
   pass "/admin/cdp returns CDP configuration"
 else
@@ -354,7 +354,7 @@ fi
 
 # Test 17: CDP stats counters reflect reports
 info "Testing CDP stats counters..."
-cdp_stats_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin/cdp")
+cdp_stats_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/cdp")
 cdp_total_detections=$(python3 -c 'import json,sys; d=json.loads(sys.stdin.read()); print(int(d.get("stats",{}).get("total_detections",0)))' <<< "$cdp_stats_resp")
 cdp_total_autobans=$(python3 -c 'import json,sys; d=json.loads(sys.stdin.read()); print(int(d.get("stats",{}).get("auto_bans",0)))' <<< "$cdp_stats_resp")
 if [[ "$cdp_total_detections" -ge 2 ]] && [[ "$cdp_total_autobans" -ge 1 ]]; then
@@ -367,9 +367,9 @@ fi
 # Test 18: unban_ip function works via admin endpoint  
 info "Testing unban functionality..."
 # First ban an IP
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin/ban?ip=10.0.0.202&reason=test" > /dev/null
+curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/ban?ip=10.0.0.202&reason=test" > /dev/null
 # Then unban it
-unban_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin/unban?ip=10.0.0.202")
+unban_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/unban?ip=10.0.0.202")
 if echo "$unban_resp" | grep -qi 'unbanned'; then
   pass "Unban via admin API works correctly"
 else
@@ -378,7 +378,7 @@ else
 fi
 
 # Cleanup: unban test CDP IPs
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin/unban?ip=10.0.0.200" > /dev/null
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin/unban?ip=10.0.0.201" > /dev/null
+curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/unban?ip=10.0.0.200" > /dev/null
+curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/unban?ip=10.0.0.201" > /dev/null
 
 echo -e "\n${GREEN}All integration tests complete.${NC}"

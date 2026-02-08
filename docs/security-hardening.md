@@ -10,7 +10,7 @@ This guide focuses on deployment security controls and operational hardening.
 
 ## 🐙 Forwarded IP Trust
 
-When `FORWARDED_IP_SECRET` is set, the app only trusts `X-Forwarded-For` when the request also includes:
+When `SHUMA_FORWARDED_IP_SECRET` is set, the app only trusts `X-Forwarded-For` when the request also includes:
 
 ```
 X-Shuma-Forwarded-Secret: <same value>
@@ -28,8 +28,8 @@ This is a **policy decision** and should be explicitly chosen for each deploymen
 
 ## 🐙 Admin API Protection
 
-- Rotate `API_KEY` regularly
-- Restrict access with `ADMIN_IP_ALLOWLIST`
+- Rotate `SHUMA_API_KEY` regularly
+- Restrict access with `SHUMA_ADMIN_IP_ALLOWLIST`
 - Limit `/admin/*` access at the CDN or firewall
 - Use TLS for all admin traffic
 
@@ -38,7 +38,7 @@ This is a **policy decision** and should be explicitly chosen for each deploymen
 `/health` only allows loopback IPs (`127.0.0.1` and `::1`) and trusted forwarded headers.
 If your monitoring goes through a proxy, set:
 - `X-Forwarded-For: 127.0.0.1`
-- `X-Shuma-Forwarded-Secret: <FORWARDED_IP_SECRET>`
+- `X-Shuma-Forwarded-Secret: <SHUMA_FORWARDED_IP_SECRET>`
 
 ## 🐙 Test Mode vs Fail Mode
 
@@ -49,7 +49,7 @@ Do not treat test mode as a substitute for fail-open/closed behavior.
 
 ## 🐙 Event Retention
 
-Control log retention with `EVENT_LOG_RETENTION_HOURS`:
+Control log retention with `SHUMA_EVENT_LOG_RETENTION_HOURS`:
 - Default: 168 hours (7 days)
 - Set to `0` to disable cleanup
 

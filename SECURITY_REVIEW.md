@@ -39,7 +39,7 @@ High-risk patterns found:
 - Many `let _ = store.set(...)` calls ignore errors and lack backoff/retry logic.
 
 Secondary issues:
-- `spin.toml` initially contained a placeholder `API_KEY` — now noted and commented; sensitive values should be moved to CI secrets.
+- `spin.toml` initially contained a placeholder `SHUMA_API_KEY` — now noted and commented; sensitive values should be moved to CI secrets.
 - `allowed_outbound_hosts = ["http://*", "https://*"]` is permissive and can enable unexpected outbound behavior.
 - `X-KV-Status` and `X-Shuma-Fail-Mode` are useful for health checks but leak internal state if exposed in production.
 
@@ -108,7 +108,7 @@ Longer-term / Hardening:
 ------------------------------
 - Add load tests that simulate large numbers of unique IPs to validate KV behavior under attack conditions.
 - Add alerts for rapid growth in `get_keys()` results, high KV error rates, and unusual value sizes.
-- Move secrets (API_KEY) into CI secret store and do not commit them into `spin.toml`.
+- Move secrets (SHUMA_API_KEY) into CI secret store and do not commit them into `spin.toml`.
 
 7) Immediate next steps I can implement (pick one or more)
 ---------------------------------------------------------
@@ -116,7 +116,7 @@ Longer-term / Hardening:
 - Implement buffered metrics in `src/metrics.rs` (moderate effort).
 - Rework `log_event` to paged buckets with capped size.
 - Replace `get_keys()` scans in admin APIs with indexed lists.
-- Remove placeholder `API_KEY` from `spin.toml` and add CI secret docs (if desired).
+- Remove placeholder `SHUMA_API_KEY` from `spin.toml` and add CI secret docs (if desired).
 
 Appendix: original quick notes from the audit
 -------------------------------------------

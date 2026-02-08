@@ -4,7 +4,7 @@
 # Default base_url: http://127.0.0.1:3000
 
 BASE_URL="${1:-http://127.0.0.1:3000}"
-API_KEY="${API_KEY:-changeme-dev-only-api-key}"
+SHUMA_API_KEY="${SHUMA_API_KEY:-changeme-dev-only-api-key}"
 
 set -e
 
@@ -21,13 +21,13 @@ curl -i "$BASE_URL/admin"
 echo
 
 echo "[4] Test: admin endpoint (authorized)"
-curl -i -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin"
+curl -i -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin"
 echo
 
 echo "[5] Test: admin/ban endpoint (authorized)"
-curl -i -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin/ban"
+curl -i -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/ban"
 echo
 
 echo "[6] Test: admin/analytics endpoint (authorized)"
-curl -i -H "Authorization: Bearer $API_KEY" "$BASE_URL/admin/analytics"
+curl -i -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/analytics"
 echo

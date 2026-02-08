@@ -22,30 +22,30 @@ Full `spin.toml` environment object (copy/paste, then edit values):
 ```toml
 [component.bot-trap]
 environment = {
-  API_KEY = "changeme-prod-api-key",
-  JS_SECRET = "changeme-prod-js-secret",
-  FORWARDED_IP_SECRET = "changeme-prod-forwarded-ip-secret",
-  ADMIN_IP_ALLOWLIST = "",
-  EVENT_LOG_RETENTION_HOURS = "168",
+  SHUMA_API_KEY = "changeme-prod-api-key",
+  SHUMA_JS_SECRET = "changeme-prod-js-secret",
+  SHUMA_FORWARDED_IP_SECRET = "changeme-prod-forwarded-ip-secret",
+  SHUMA_ADMIN_IP_ALLOWLIST = "",
+  SHUMA_EVENT_LOG_RETENTION_HOURS = "168",
   SHUMA_CONFIG_MODE = "hybrid",
   SHUMA_KV_STORE_FAIL_MODE = "open",
   SHUMA_DEBUG_HEADERS = "false",
-  TEST_MODE = "false",
-  POW_ENABLED = "true",
-  POW_SECRET = "",
-  POW_DIFFICULTY = "15",
-  POW_TTL_SECONDS = "90",
-  POW_CONFIG_MUTABLE = "false",
-  CHALLENGE_SECRET = "",
-  CHALLENGE_TRANSFORM_COUNT = "6",
-  CHALLENGE_RISK_THRESHOLD = "3",
-  CHALLENGE_CONFIG_MUTABLE = "false",
-  BOTNESS_CONFIG_MUTABLE = "false",
-  BOTNESS_MAZE_THRESHOLD = "6",
-  BOTNESS_WEIGHT_JS_REQUIRED = "1",
-  BOTNESS_WEIGHT_GEO_RISK = "2",
-  BOTNESS_WEIGHT_RATE_MEDIUM = "1",
-  BOTNESS_WEIGHT_RATE_HIGH = "2",
+  SHUMA_TEST_MODE = "false",
+  SHUMA_POW_ENABLED = "true",
+  SHUMA_POW_SECRET = "",
+  SHUMA_POW_DIFFICULTY = "15",
+  SHUMA_POW_TTL_SECONDS = "90",
+  SHUMA_POW_CONFIG_MUTABLE = "false",
+  SHUMA_CHALLENGE_SECRET = "",
+  SHUMA_CHALLENGE_TRANSFORM_COUNT = "6",
+  SHUMA_CHALLENGE_RISK_THRESHOLD = "3",
+  SHUMA_CHALLENGE_CONFIG_MUTABLE = "false",
+  SHUMA_BOTNESS_CONFIG_MUTABLE = "false",
+  SHUMA_BOTNESS_MAZE_THRESHOLD = "6",
+  SHUMA_BOTNESS_WEIGHT_JS_REQUIRED = "1",
+  SHUMA_BOTNESS_WEIGHT_GEO_RISK = "2",
+  SHUMA_BOTNESS_WEIGHT_RATE_MEDIUM = "1",
+  SHUMA_BOTNESS_WEIGHT_RATE_HIGH = "2",
   SHUMA_BAN_DURATION = "21600",
   SHUMA_BAN_DURATION_HONEYPOT = "86400",
   SHUMA_BAN_DURATION_RATE_LIMIT = "3600",
@@ -76,7 +76,7 @@ environment = {
 ## 🐙 Update Config (Example)
 
 ```bash
-curl -X POST -H "Authorization: Bearer $API_KEY" \
+curl -X POST -H "Authorization: Bearer $SHUMA_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"test_mode": true}' \
   http://127.0.0.1:3000/admin/config
@@ -86,7 +86,7 @@ curl -X POST -H "Authorization: Bearer $API_KEY" \
 
 - `SHUMA_CONFIG_MODE` - `hybrid` (default) or `env_only`
 - `SHUMA_KV_STORE_FAIL_MODE` - `open` or `closed` when KV is unavailable
-- `TEST_MODE` - Log-only mode (`true/false`, `1/0`)
+- `SHUMA_TEST_MODE` - Log-only mode (`true/false`, `1/0`)
 
 ## 🐙 Full Runtime Config Via Env Vars
 
@@ -116,23 +116,23 @@ All runtime config fields can be set with env vars:
 - `SHUMA_CDP_DETECTION_ENABLED`
 - `SHUMA_CDP_AUTO_BAN`
 - `SHUMA_CDP_DETECTION_THRESHOLD`
-- `POW_DIFFICULTY`
-- `POW_TTL_SECONDS`
-- `CHALLENGE_RISK_THRESHOLD`
-- `BOTNESS_MAZE_THRESHOLD`
-- `BOTNESS_WEIGHT_JS_REQUIRED`
-- `BOTNESS_WEIGHT_GEO_RISK`
-- `BOTNESS_WEIGHT_RATE_MEDIUM`
-- `BOTNESS_WEIGHT_RATE_HIGH`
+- `SHUMA_POW_DIFFICULTY`
+- `SHUMA_POW_TTL_SECONDS`
+- `SHUMA_CHALLENGE_RISK_THRESHOLD`
+- `SHUMA_BOTNESS_MAZE_THRESHOLD`
+- `SHUMA_BOTNESS_WEIGHT_JS_REQUIRED`
+- `SHUMA_BOTNESS_WEIGHT_GEO_RISK`
+- `SHUMA_BOTNESS_WEIGHT_RATE_MEDIUM`
+- `SHUMA_BOTNESS_WEIGHT_RATE_HIGH`
 
 Supporting control vars:
 
-- `POW_ENABLED`
-- `POW_SECRET`
-- `POW_CONFIG_MUTABLE`
-- `CHALLENGE_CONFIG_MUTABLE`
-- `BOTNESS_CONFIG_MUTABLE`
-- `CHALLENGE_TRANSFORM_COUNT`
+- `SHUMA_POW_ENABLED`
+- `SHUMA_POW_SECRET`
+- `SHUMA_POW_CONFIG_MUTABLE`
+- `SHUMA_CHALLENGE_CONFIG_MUTABLE`
+- `SHUMA_BOTNESS_CONFIG_MUTABLE`
+- `SHUMA_CHALLENGE_TRANSFORM_COUNT`
 
 ## 🐙 Env Value Formats
 
@@ -146,8 +146,8 @@ Supporting control vars:
 
 ## 🐙 Mutability Notes
 
-- `POW_DIFFICULTY` and `POW_TTL_SECONDS` are always env-controlled unless `POW_CONFIG_MUTABLE=1`.
-- `CHALLENGE_RISK_THRESHOLD`, `BOTNESS_MAZE_THRESHOLD`, and `BOTNESS_WEIGHT_*` are env-controlled unless `BOTNESS_CONFIG_MUTABLE=true` (or legacy fallback `CHALLENGE_CONFIG_MUTABLE=true`).
+- `SHUMA_POW_DIFFICULTY` and `SHUMA_POW_TTL_SECONDS` are always env-controlled unless `SHUMA_POW_CONFIG_MUTABLE=1`.
+- `SHUMA_CHALLENGE_RISK_THRESHOLD`, `SHUMA_BOTNESS_MAZE_THRESHOLD`, and `BOTNESS_WEIGHT_*` are env-controlled unless `SHUMA_BOTNESS_CONFIG_MUTABLE=true` (or legacy fallback `SHUMA_CHALLENGE_CONFIG_MUTABLE=true`).
 - In `env_only`, admin writes are blocked regardless of mutability flags.
 
 ## 🐙 Example Config (Partial)

@@ -51,9 +51,9 @@ mod pow;         // Proof-of-work verification
 
 
 /// Returns true if forwarded IP headers should be trusted for this request.
-/// If FORWARDED_IP_SECRET is set, require a matching X-Shuma-Forwarded-Secret header.
+/// If SHUMA_FORWARDED_IP_SECRET is set, require a matching X-Shuma-Forwarded-Secret header.
 fn forwarded_ip_trusted(req: &Request) -> bool {
-    match env::var("FORWARDED_IP_SECRET") {
+    match env::var("SHUMA_FORWARDED_IP_SECRET") {
         Ok(secret) if !secret.trim().is_empty() => req
             .header("x-shuma-forwarded-secret")
             .and_then(|v| v.as_str())

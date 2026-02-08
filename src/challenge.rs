@@ -70,8 +70,8 @@ pub(crate) struct ChallengePuzzle {
 }
 
 fn get_challenge_secret() -> String {
-    std::env::var("CHALLENGE_SECRET")
-        .or_else(|_| std::env::var("API_KEY"))
+    std::env::var("SHUMA_CHALLENGE_SECRET")
+        .or_else(|_| std::env::var("SHUMA_API_KEY"))
         .unwrap_or_else(|_| "changeme-challenge-secret".to_string())
 }
 
@@ -198,7 +198,7 @@ pub(crate) fn parse_transform_count(value: Option<&str>) -> usize {
 }
 
 fn configured_transform_count() -> usize {
-    parse_transform_count(std::env::var("CHALLENGE_TRANSFORM_COUNT").ok().as_deref())
+    parse_transform_count(std::env::var("SHUMA_CHALLENGE_TRANSFORM_COUNT").ok().as_deref())
 }
 
 pub(crate) fn transforms_for_count(count: usize) -> Vec<Transform> {

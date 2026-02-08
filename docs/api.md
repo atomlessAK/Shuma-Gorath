@@ -3,13 +3,13 @@
 ## 🐙 Authentication
 
 All admin endpoints require:
-- `Authorization: Bearer <API_KEY>`
-- If `ADMIN_IP_ALLOWLIST` is set, the client IP must be in the allowlist
+- `Authorization: Bearer <SHUMA_API_KEY>`
+- If `SHUMA_ADMIN_IP_ALLOWLIST` is set, the client IP must be in the allowlist
 
-If `FORWARDED_IP_SECRET` is configured, any request that relies on `X-Forwarded-For` must also include:
-- `X-Shuma-Forwarded-Secret: <FORWARDED_IP_SECRET>`
+If `SHUMA_FORWARDED_IP_SECRET` is configured, any request that relies on `X-Forwarded-For` must also include:
+- `X-Shuma-Forwarded-Secret: <SHUMA_FORWARDED_IP_SECRET>`
 
-If `API_KEY` is missing or set to the insecure default (`changeme-supersecret`), `/admin/*` endpoints are disabled.
+If `SHUMA_API_KEY` is missing or set to the insecure default (`changeme-supersecret`), `/admin/*` endpoints are disabled.
 
 ## 🐙 Public Endpoints
 
@@ -22,7 +22,7 @@ If `API_KEY` is missing or set to the insecure default (`changeme-supersecret`),
 - `POST /cdp-report` - Client automation reports (JSON)
 - `GET /robots.txt` - robots.txt (configurable)
 - `GET /dashboard/...` - Dashboard static assets
-- `GET /challenge` - Dev-only challenge page (TEST_MODE only)
+- `GET /challenge` - Dev-only challenge page (SHUMA_TEST_MODE only)
 - `POST /challenge` - Challenge answer submission
 
 ### 🐙 Challenge Submission Format
@@ -53,7 +53,7 @@ Challenge submit responses:
 
 ```bash
 curl -H "X-Forwarded-For: 127.0.0.1" \
-  -H "X-Shuma-Forwarded-Secret: $FORWARDED_IP_SECRET" \
+  -H "X-Shuma-Forwarded-Secret: $SHUMA_FORWARDED_IP_SECRET" \
   http://127.0.0.1:3000/health
 ```
 
@@ -93,7 +93,7 @@ When `SHUMA_DEBUG_HEADERS=true`, the health response includes:
 ### 🐙 Example: List Bans
 
 ```bash
-curl -H "Authorization: Bearer $API_KEY" \
+curl -H "Authorization: Bearer $SHUMA_API_KEY" \
   http://127.0.0.1:3000/admin/ban
 ```
 
@@ -110,7 +110,7 @@ Each ban entry includes:
 ### 🐙 Example: Ban an IP
 
 ```bash
-curl -X POST -H "Authorization: Bearer $API_KEY" \
+curl -X POST -H "Authorization: Bearer $SHUMA_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"ip":"1.2.3.4","reason":"admin_ban","duration":3600}' \
   http://127.0.0.1:3000/admin/ban
@@ -119,7 +119,7 @@ curl -X POST -H "Authorization: Bearer $API_KEY" \
 ### 🐙 Example: Fetch Events
 
 ```bash
-curl -H "Authorization: Bearer $API_KEY" \
+curl -H "Authorization: Bearer $SHUMA_API_KEY" \
   http://127.0.0.1:3000/admin/events?hours=24
 ```
 
@@ -139,8 +139,8 @@ Scored weights:
 
 Mutability:
 - `botness_config_mutable` indicates whether score/weight settings can be changed at runtime.
-- Runtime mutation is disabled by default; enable with `BOTNESS_CONFIG_MUTABLE=true`.
-- For dev compatibility, `CHALLENGE_CONFIG_MUTABLE=true` also enables botness mutation if `BOTNESS_CONFIG_MUTABLE` is unset.
+- Runtime mutation is disabled by default; enable with `SHUMA_BOTNESS_CONFIG_MUTABLE=true`.
+- For dev compatibility, `SHUMA_CHALLENGE_CONFIG_MUTABLE=true` also enables botness mutation if `SHUMA_BOTNESS_CONFIG_MUTABLE` is unset.
 
 Signal catalog:
 - `botness_signal_definitions.scored_signals` lists weighted contributors.

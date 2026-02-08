@@ -29,14 +29,14 @@ fn now_ts() -> u64 {
 }
 
 fn get_pow_secret() -> String {
-    std::env::var("POW_SECRET")
-        .or_else(|_| std::env::var("JS_SECRET"))
-        .or_else(|_| std::env::var("API_KEY"))
+    std::env::var("SHUMA_POW_SECRET")
+        .or_else(|_| std::env::var("SHUMA_JS_SECRET"))
+        .or_else(|_| std::env::var("SHUMA_API_KEY"))
         .unwrap_or_else(|_| "changeme-pow-secret".to_string())
 }
 
 pub fn pow_enabled() -> bool {
-    std::env::var("POW_ENABLED")
+    std::env::var("SHUMA_POW_ENABLED")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(true)
 }

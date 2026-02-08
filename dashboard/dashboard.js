@@ -52,7 +52,7 @@ const STATUS_DEFINITIONS = [
   {
     title: 'Test Mode',
     description: () => (
-      `When enabled, actions are logged without blocking traffic. Startup default can be set with ${envVar('TEST_MODE')} ` +
+      `When enabled, actions are logged without blocking traffic. Startup default can be set with ${envVar('SHUMA_TEST_MODE')} ` +
       'and can be toggled in admin.'
     ),
     status: state => boolStatus(state.testMode)
@@ -61,17 +61,17 @@ const STATUS_DEFINITIONS = [
     title: 'Proof-of-Work (PoW)',
     description: state => (
       'PoW adds a lightweight computational puzzle before JS verification to increase bot cost. ' +
-      `Primary controls are ${envVar('POW_ENABLED')}, ${envVar('POW_DIFFICULTY')}, and ${envVar('POW_TTL_SECONDS')}. ` +
-      `Runtime editability is controlled by ${envVar('POW_CONFIG_MUTABLE')} and is currently ${formatMutability(state.powMutable)}.`
+      `Primary controls are ${envVar('SHUMA_POW_ENABLED')}, ${envVar('SHUMA_POW_DIFFICULTY')}, and ${envVar('SHUMA_POW_TTL_SECONDS')}. ` +
+      `Runtime editability is controlled by ${envVar('SHUMA_POW_CONFIG_MUTABLE')} and is currently ${formatMutability(state.powMutable)}.`
     ),
     status: state => boolStatus(state.powEnabled)
   },
   {
     title: 'Challenge',
     description: state => (
-      `Step-up challenge is gated by ${envVar('CHALLENGE_RISK_THRESHOLD')} (current: <strong>${state.challengeThreshold}</strong>) ` +
-      `and uses ${envVar('CHALLENGE_TRANSFORM_COUNT')} for puzzle complexity. ` +
-      `Runtime threshold mutability is controlled by ${envVar('CHALLENGE_CONFIG_MUTABLE')} / ${envVar('BOTNESS_CONFIG_MUTABLE')} and is currently ${formatMutability(state.challengeMutable || state.botnessMutable)}.`
+      `Step-up challenge is gated by ${envVar('SHUMA_CHALLENGE_RISK_THRESHOLD')} (current: <strong>${state.challengeThreshold}</strong>) ` +
+      `and uses ${envVar('SHUMA_CHALLENGE_TRANSFORM_COUNT')} for puzzle complexity. ` +
+      `Runtime threshold mutability is controlled by ${envVar('SHUMA_CHALLENGE_CONFIG_MUTABLE')} / ${envVar('SHUMA_BOTNESS_CONFIG_MUTABLE')} and is currently ${formatMutability(state.challengeMutable || state.botnessMutable)}.`
     ),
     status: state => boolStatus(state.challengeThreshold >= 1)
   },
@@ -105,9 +105,9 @@ const STATUS_DEFINITIONS = [
   {
     title: 'Botness Scoring',
     description: state => (
-      `Unified scoring uses ${envVar('BOTNESS_WEIGHT_JS_REQUIRED')}, ${envVar('BOTNESS_WEIGHT_GEO_RISK')}, ` +
-      `${envVar('BOTNESS_WEIGHT_RATE_MEDIUM')}, ${envVar('BOTNESS_WEIGHT_RATE_HIGH')}, and routing thresholds ` +
-      `${envVar('CHALLENGE_RISK_THRESHOLD')} / ${envVar('BOTNESS_MAZE_THRESHOLD')} (current maze threshold: <strong>${state.mazeThreshold}</strong>).`
+      `Unified scoring uses ${envVar('SHUMA_BOTNESS_WEIGHT_JS_REQUIRED')}, ${envVar('SHUMA_BOTNESS_WEIGHT_GEO_RISK')}, ` +
+      `${envVar('SHUMA_BOTNESS_WEIGHT_RATE_MEDIUM')}, ${envVar('SHUMA_BOTNESS_WEIGHT_RATE_HIGH')}, and routing thresholds ` +
+      `${envVar('SHUMA_CHALLENGE_RISK_THRESHOLD')} / ${envVar('SHUMA_BOTNESS_MAZE_THRESHOLD')} (current maze threshold: <strong>${state.mazeThreshold}</strong>).`
     ),
     status: state => botnessStatus(state)
   }

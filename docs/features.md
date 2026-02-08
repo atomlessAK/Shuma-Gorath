@@ -14,7 +14,7 @@
 - robots.txt generation and policy controls
 - Admin API (ban/unban, analytics, events, config, maze, robots, CDP)
 - Test mode (log-only, no enforcement)
-- Event logging with retention (`EVENT_LOG_RETENTION_HOURS`)
+- Event logging with retention (`SHUMA_EVENT_LOG_RETENTION_HOURS`)
 - Prometheus metrics (`/metrics`)
 - Web dashboard for analytics and admin control
 - Makefile-based setup, build, and test workflows

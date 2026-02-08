@@ -22,7 +22,7 @@ fn has_header(resp: &spin_sdk::http::Response, name: &str) -> bool {
 #[test]
 fn forwarded_headers_are_not_trusted_without_secret() {
     let _lock = ENV_MUTEX.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    std::env::remove_var("FORWARDED_IP_SECRET");
+    std::env::remove_var("SHUMA_FORWARDED_IP_SECRET");
 
     let req = request_with_headers("/health", &[("x-forwarded-for", "127.0.0.1")]);
     assert!(!forwarded_ip_trusted(&req));
@@ -53,7 +53,7 @@ fn health_internal_headers_visible_when_enabled() {
 #[test]
 fn forwarded_headers_are_trusted_with_matching_secret() {
     let _lock = ENV_MUTEX.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    std::env::set_var("FORWARDED_IP_SECRET", "test-forwarded-secret");
+    std::env::set_var("SHUMA_FORWARDED_IP_SECRET", "test-forwarded-secret");
     let req = request_with_headers(
         "/health",
         &[

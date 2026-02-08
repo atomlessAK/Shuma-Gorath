@@ -2,9 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Replace the placeholder math challenge with a deterministic ARC-style 4x4 grid challenge, add a dev-only manual page at `GET /challenge` (TEST_MODE only), wire verification at `POST /challenge`, and introduce an admin-configurable risk threshold for step-up challenge gating.
+**Goal:** Replace the placeholder math challenge with a deterministic ARC-style 4x4 grid challenge, add a dev-only manual page at `GET /challenge` (SHUMA_TEST_MODE only), wire verification at `POST /challenge`, and introduce an admin-configurable risk threshold for step-up challenge gating.
 
-**Architecture:** Challenge generation is deterministic from a signed seed; verification recomputes expected output and uses KV to prevent replay. Production gating uses a simple risk score and serves the challenge inline when threshold is exceeded. Admin config for threshold is mutable only when `CHALLENGE_CONFIG_MUTABLE=true` (set in `make dev`).
+**Architecture:** Challenge generation is deterministic from a signed seed; verification recomputes expected output and uses KV to prevent replay. Production gating uses a simple risk score and serves the challenge inline when threshold is exceeded. Admin config for threshold is mutable only when `SHUMA_CHALLENGE_CONFIG_MUTABLE=true` (set in `make dev`).
 
 **Tech Stack:** Rust (Spin SDK), KV store, HMAC signing, HTML/JS (inline), dashboard JS/CSS.
 
@@ -39,8 +39,8 @@ Run: `make test` (expect compile error: missing field `challenge_risk_threshold`
 
 **Step 3: Write minimal implementation**
 - Add `challenge_risk_threshold: u8` to `Config` with default 3.
-- Add clamp helper (`1..=10`) and env override from `CHALLENGE_RISK_THRESHOLD` similar to PoW defaults.
-- Add `challenge_config_mutable()` reading `CHALLENGE_CONFIG_MUTABLE`.
+- Add clamp helper (`1..=10`) and env override from `SHUMA_CHALLENGE_RISK_THRESHOLD` similar to PoW defaults.
+- Add `challenge_config_mutable()` reading `SHUMA_CHALLENGE_CONFIG_MUTABLE`.
 
 **Step 4: Run test to verify it passes**
 Run: `make test` (expect green unit tests).
@@ -101,7 +101,7 @@ git add src/challenge.rs src/challenge_tests.rs
 
 ---
 
-### Task 3: Wire GET /challenge (TEST_MODE only) and POST /challenge
+### Task 3: Wire GET /challenge (SHUMA_TEST_MODE only) and POST /challenge
 
 **Files:**
 - Modify: `src/lib.rs`
@@ -110,8 +110,8 @@ git add src/challenge.rs src/challenge_tests.rs
 
 **Step 1: Write failing tests**
 Add tests for:
-- `GET /challenge` 404 when `TEST_MODE=false`
-- `GET /challenge` 200 when `TEST_MODE=true`
+- `GET /challenge` 404 when `SHUMA_TEST_MODE=false`
+- `GET /challenge` 200 when `SHUMA_TEST_MODE=true`
 - `POST /challenge` success on correct output
 
 **Step 2: Run test to verify it fails**
@@ -186,9 +186,9 @@ Run: `make test`.
 
 **Step 3: Implement**
 - Add `challenge_risk_threshold` to admin config GET/POST.
-- Enforce `CHALLENGE_CONFIG_MUTABLE` gating like PoW.
+- Enforce `SHUMA_CHALLENGE_CONFIG_MUTABLE` gating like PoW.
 - Add dashboard UI block showing current value, default, and mutability.
-- Add `make dev` export `CHALLENGE_CONFIG_MUTABLE=true`.
+- Add `make dev` export `SHUMA_CHALLENGE_CONFIG_MUTABLE=true`.
 
 **Step 4: Run tests to verify pass**
 Run: `make test`.
