@@ -4,6 +4,17 @@ let topIpsChart = null;
 let timeSeriesChart = null;
 let currentTimeRange = 'hour';
 
+const CHART_PALETTE = [
+  "rgb(255,205,235)",
+  "rgb(225,175,205)",
+  "rgb(205, 155, 185)",
+  "rgb(190, 140, 170)",
+  "rgb(175, 125, 155)",
+  "rgb(160, 110, 140)",
+  "rgb(147, 97, 127)",
+  "rgb(135, 85, 115)"
+];
+
 const statusPanelState = {
   failMode: 'unknown',
   powEnabled: false,
@@ -99,9 +110,6 @@ function initCharts() {
       plugins: {
         legend: {
           position: 'bottom'
-        },
-        colorschemes: {
-          scheme: 'brewer.Reds3'
         }
       }
     }
@@ -131,9 +139,6 @@ function initCharts() {
       plugins: {
         legend: {
           display: false
-        },
-        colorschemes: {
-          scheme: 'brewer.Reds3'
         }
       }
     }
@@ -165,9 +170,6 @@ function initCharts() {
       plugins: {
         legend: {
           display: false
-        },
-        colorschemes: {
-          scheme: 'brewer.Reds3'
         }
       }
     }
@@ -230,11 +232,9 @@ function updateEventTypesChart(eventCounts) {
   
   eventTypesChart.data.labels = labels;
   eventTypesChart.data.datasets[0].data = data;
-  // Explicitly apply Reds3 palette to ensure doughnut uses intended colors
-  const reds3 = ["#fee0d2", "#fc9272", "#de2d26"];
-  const bg = data.map((_, i) => reds3[i % reds3.length]);
+  const bg = data.map((_, i) => CHART_PALETTE[i % CHART_PALETTE.length]);
   eventTypesChart.data.datasets[0].backgroundColor = bg;
-  eventTypesChart.data.datasets[0].borderColor = bg.map(c => c);
+  eventTypesChart.data.datasets[0].borderColor = bg;
   eventTypesChart.update();
 }
 
@@ -242,10 +242,7 @@ function updateEventTypesChart(eventCounts) {
 function updateTopIpsChart(topIps) {
   const labels = topIps.map(([ip, _]) => ip);
   const data = topIps.map(([_, count]) => count);
-
-  // Reds3 palette (ColorBrewer 3-class reds)
-  const reds3 = ["#fee0d2", "#fc9272", "#de2d26"];
-  const barColors = data.map((_, i) => reds3[i % reds3.length]);
+  const barColors = data.map((_, i) => CHART_PALETTE[i % CHART_PALETTE.length]);
 
   topIpsChart.data.labels = labels;
   topIpsChart.data.datasets[0].data = data;
@@ -342,12 +339,10 @@ function updateTimeSeriesChart() {
 
     const counts = sortedBuckets.map(time => buckets[time]);
 
-    // Use Reds3 palette for time series
-    const reds3 = ["#fee0d2", "#fc9272", "#de2d26"];
     timeSeriesChart.data.labels = labels;
     timeSeriesChart.data.datasets[0].data = counts;
-    timeSeriesChart.data.datasets[0].borderColor = reds3[2];
-    timeSeriesChart.data.datasets[0].backgroundColor = reds3[0];
+    timeSeriesChart.data.datasets[0].borderColor = CHART_PALETTE[7];
+    timeSeriesChart.data.datasets[0].backgroundColor = CHART_PALETTE[0];
     timeSeriesChart.update();
   })
   .catch(err => console.error('Failed to update time series:', err));
