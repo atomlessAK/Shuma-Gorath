@@ -4,7 +4,7 @@
    =========================================== */
 :root {
   /* Monochrome scale */
-  --color-back: rgb(255, 249, 253);
+  --color-back: rgb(255, 250, 253);
   --color-50: #faf2fa;
   --color-100: #f4edf5;
   --color-200: #e4d4e3;
@@ -185,7 +185,13 @@ html {
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background: var(--page-bg);
+  background: repeating-linear-gradient(
+  -45deg,
+  #fffafd,
+  #fffafd 10px,
+  #faf2fa 10px,
+  #faf2fa 20px
+  );
   color: var(--page-fg);
   padding: 20px;
   min-height: 100vh;
@@ -1124,6 +1130,15 @@ input:checked + .toggle-slider:before {
   body, .container, .card, .info-panel, .robots-preview {
     background: var(--color-100);
     color: var(--color-800);
+  }
+  body {
+    background: repeating-linear-gradient(
+    -45deg,
+    #200b24,
+    #200b24 10px,
+    #251e24 10px,
+    #251e24 20px
+    );
   }
 
   .chart-container, .maze-section, .maze-crawlers, .maze-stat {
