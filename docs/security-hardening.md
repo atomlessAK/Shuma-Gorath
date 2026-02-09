@@ -20,9 +20,9 @@ This prevents spoofing of client IP headers.
 
 ## 🐙 Fail-Open vs Fail-Closed
 
-`SHUMA_KV_STORE_FAIL_MODE` controls behavior when the KV store is unavailable during request handling:
-- `open` (default): allow requests through and bypass checks
-- `closed`: return a 500 error and block
+`SHUMA_KV_STORE_FAIL_OPEN` controls behavior when the KV store is unavailable during request handling:
+- `true` (default): allow requests through and bypass checks
+- `false`: return a 500 error and block
 
 This is a **policy decision** and should be explicitly chosen for each deployment.
 

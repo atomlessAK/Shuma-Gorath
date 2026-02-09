@@ -11,11 +11,11 @@ Shuma-Gorath is designed to **complement enterprise bot defenses** (such as Akam
 - `SHUMA_FORWARDED_IP_SECRET` - Required when trusting `X-Forwarded-For`
 - `SHUMA_ADMIN_IP_ALLOWLIST` - Optional; CIDR/IP allowlist for admin access
 - `SHUMA_EVENT_LOG_RETENTION_HOURS` - Event retention window
-- `SHUMA_CONFIG_MODE` - `env_only` (default) or `hybrid`
-- `SHUMA_KV_STORE_FAIL_MODE` - `open` (default) or `closed`
+- `SHUMA_ADMIN_PAGE_CONFIG` - `false` (default) or `true`
+- `SHUMA_KV_STORE_FAIL_OPEN` - `true` (default) or `false`
 - `SHUMA_DEBUG_HEADERS` - Optional; expose internal health/fail-mode headers (dev only)
 
-`SHUMA_CONFIG_MODE=env_only` makes runtime config fully env-driven and disables `POST /admin/config`.
+`SHUMA_ADMIN_PAGE_CONFIG=false` makes runtime config fully env-driven and disables `POST /admin/config`.
 Use this for immutable infrastructure-style deployments.
 
 ## 🐙 Forwarded IP Trust
@@ -30,10 +30,10 @@ Configure your CDN/reverse proxy to add that header on inbound requests.
 
 ## 🐙 Fail-Open vs Fail-Closed (Critical Policy)
 
-`SHUMA_KV_STORE_FAIL_MODE` controls what happens when the KV store is unavailable during request handling:
+`SHUMA_KV_STORE_FAIL_OPEN` controls what happens when the KV store is unavailable during request handling:
 
-- `open` (default): allow requests through and bypass checks
-- `closed`: return a 500 error and block
+- `true` (default): allow requests through and bypass checks
+- `false`: return a 500 error and block
 
 Choose this deliberately for your security posture. See `docs/security-hardening.md` for guidance.
 
@@ -121,8 +121,8 @@ If you set `SHUMA_FORWARDED_IP_SECRET`, you must inject the matching `X-Shuma-Fo
 make dev SHUMA_FORWARDED_IP_SECRET="your-dev-secret" SHUMA_API_KEY="your-dev-api-key"
 ```
 
-`make dev` also sets `SHUMA_CONFIG_MODE=hybrid` by default. To preview ENV-only behavior locally:
+`make dev` also sets `SHUMA_ADMIN_PAGE_CONFIG=true` by default. To preview ENV-only behavior locally:
 
 ```bash
-make dev DEV_CONFIG_MODE=env_only
+make dev DEV_ADMIN_PAGE_CONFIG=false
 ```

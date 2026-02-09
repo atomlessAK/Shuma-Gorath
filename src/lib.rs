@@ -94,9 +94,13 @@ pub(crate) fn extract_client_ip(req: &Request) -> String {
     "unknown".to_string()
 }
 
-/// Return the configured fail mode: "open" (default) or "closed".
-fn shuma_fail_mode() -> String {
-    env::var("SHUMA_KV_STORE_FAIL_MODE").unwrap_or_else(|_| "open".to_string()).to_lowercase()
+/// Return true when KV outage policy is fail-open.
+fn shuma_fail_open() -> bool {
+    config::kv_store_fail_open()
+}
+
+fn fail_mode_label(fail_open: bool) -> &'static str {
+    if fail_open { "open" } else { "closed" }
 }
 
 fn debug_headers_enabled() -> bool {
@@ -339,25 +343,26 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
         if !allowed.contains(&ip.as_str()) {
             return Response::new(403, "Forbidden");
         }
-        let mode = shuma_fail_mode();
+        let fail_open = shuma_fail_open();
+        let mode = fail_mode_label(fail_open);
         if let Ok(store) = Store::open_default() {
             let test_key = "health:test";
             let _ = store.set(test_key, b"ok");
             let ok = store.get(test_key).is_ok();
             let _ = store.delete(test_key);
             if ok {
-                return response_with_optional_debug_headers(200, "OK", "available", mode.as_str());
+                return response_with_optional_debug_headers(200, "OK", "available", mode);
             }
         }
         log_line(&format!(
-            "[KV OUTAGE] Key-value store unavailable; SHUMA_KV_STORE_FAIL_MODE={}",
-            mode
+            "[KV OUTAGE] Key-value store unavailable; SHUMA_KV_STORE_FAIL_OPEN={}",
+            fail_open
         ));
         return response_with_optional_debug_headers(
             500,
             "Key-value store error",
             "unavailable",
-            mode.as_str(),
+            mode,
         );
     }
 
@@ -444,24 +449,25 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
         return admin::handle_admin(req);
     }
     if store.is_none() {
-        let mode = shuma_fail_mode();
+        let fail_open = shuma_fail_open();
+        let mode = fail_mode_label(fail_open);
         log_line(&format!(
-            "[KV OUTAGE] Store unavailable during request handling; SHUMA_KV_STORE_FAIL_MODE={}",
-            mode
+            "[KV OUTAGE] Store unavailable during request handling; SHUMA_KV_STORE_FAIL_OPEN={}",
+            fail_open
         ));
-        if mode == "closed" {
+        if !fail_open {
             return response_with_optional_debug_headers(
                 500,
                 "Key-value store error (fail-closed)",
                 "unavailable",
-                mode.as_str(),
+                mode,
             );
         }
         return response_with_optional_debug_headers(
             200,
             "OK (bot trap: store unavailable, all checks bypassed)",
             "unavailable",
-            mode.as_str(),
+            mode,
         );
     }
     let store = store.as_ref().unwrap();

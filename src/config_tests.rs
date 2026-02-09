@@ -81,33 +81,25 @@ mod tests {
     }
 
     #[test]
-    fn parse_config_mode_defaults_to_env_only() {
-        assert_eq!(crate::config::parse_config_mode(None), crate::config::ConfigMode::EnvOnly);
-        assert_eq!(
-            crate::config::parse_config_mode(Some("junk")),
-            crate::config::ConfigMode::EnvOnly
-        );
-        assert_eq!(
-            crate::config::parse_config_mode(Some("hybrid")),
-            crate::config::ConfigMode::Hybrid
-        );
-        assert_eq!(
-            crate::config::parse_config_mode(Some("env_only")),
-            crate::config::ConfigMode::EnvOnly
-        );
+    fn parse_admin_page_config_defaults_to_disabled() {
+        assert!(!crate::config::parse_admin_page_config_enabled(None));
+        assert!(!crate::config::parse_admin_page_config_enabled(Some("junk")));
+        assert!(crate::config::parse_admin_page_config_enabled(Some("true")));
+        assert!(crate::config::parse_admin_page_config_enabled(Some("1")));
+        assert!(!crate::config::parse_admin_page_config_enabled(Some("false")));
     }
 
     #[test]
-    fn load_env_only_ignores_kv_values() {
+    fn load_admin_page_config_disabled_ignores_kv_values() {
         let _lock = ENV_MUTEX.lock().unwrap();
         let keys = [
-            "SHUMA_CONFIG_MODE",
+            "SHUMA_ADMIN_PAGE_CONFIG",
             "SHUMA_RATE_LIMIT",
             "SHUMA_MAZE_ENABLED",
             "SHUMA_TEST_MODE",
         ];
         clear_env(&keys);
-        std::env::set_var("SHUMA_CONFIG_MODE", "env_only");
+        std::env::set_var("SHUMA_ADMIN_PAGE_CONFIG", "false");
         std::env::set_var("SHUMA_RATE_LIMIT", "321");
         std::env::set_var("SHUMA_MAZE_ENABLED", "0");
         std::env::set_var("SHUMA_TEST_MODE", "1");
@@ -129,11 +121,11 @@ mod tests {
     }
 
     #[test]
-    fn load_hybrid_applies_env_overrides_over_kv() {
+    fn load_admin_page_config_enabled_applies_env_overrides_over_kv() {
         let _lock = ENV_MUTEX.lock().unwrap();
-        let keys = ["SHUMA_CONFIG_MODE", "SHUMA_RATE_LIMIT", "SHUMA_HONEYPOTS"];
+        let keys = ["SHUMA_ADMIN_PAGE_CONFIG", "SHUMA_RATE_LIMIT", "SHUMA_HONEYPOTS"];
         clear_env(&keys);
-        std::env::set_var("SHUMA_CONFIG_MODE", "hybrid");
+        std::env::set_var("SHUMA_ADMIN_PAGE_CONFIG", "true");
         std::env::set_var("SHUMA_RATE_LIMIT", "222");
         std::env::set_var("SHUMA_HONEYPOTS", "[\"/trap-a\",\"/trap-b\"]");
 

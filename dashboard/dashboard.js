@@ -46,24 +46,24 @@ function envVar(name) {
   return `<code class="env-var">${name}</code>`;
 }
 
-function normalizeConfigMode(value) {
-  const mode = String(value || '').toLowerCase();
-  if (mode === 'hybrid') return 'hybrid';
-  return 'env_only';
+function parseBoolLike(value, fallback = false) {
+  if (typeof value === 'boolean') return value;
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on') return true;
+  if (normalized === '0' || normalized === 'false' || normalized === 'no' || normalized === 'off') return false;
+  return fallback;
 }
 
-function adminConfigEnabledForMode(mode) {
-  return normalizeConfigMode(mode) === 'hybrid';
+function adminPageConfigEnabled(config) {
+  return parseBoolLike(config && config.admin_page_config_enabled, false);
 }
 
 function updateConfigModeUi(config) {
-  const mode = normalizeConfigMode(config && config.config_mode);
-  const enabled = adminConfigEnabledForMode(mode);
+  const enabled = adminPageConfigEnabled(config);
   const subtitle = document.getElementById('config-mode-subtitle');
   if (subtitle) {
     subtitle.innerHTML =
-      `Controlled by ${envVar('SHUMA_CONFIG_MODE')}. Admin config is <strong>${enabled ? 'ENABLED' : 'DISABLED'}</strong> ` +
-      `(${mode === 'hybrid' ? 'HYBRID' : 'ENV_ONLY'}).`;
+      `Controlled by ${envVar('SHUMA_ADMIN_PAGE_CONFIG')}. Admin config is <strong>${enabled ? 'ENABLED' : 'DISABLED'}</strong>.`;
   }
 
   document.querySelectorAll('.config-edit-pane').forEach(el => {
@@ -75,8 +75,8 @@ const STATUS_DEFINITIONS = [
   {
     title: 'Fail Mode Policy',
     description: () => (
-      `Controlled by ${envVar('SHUMA_KV_STORE_FAIL_MODE')}. <strong>Open</strong> allows requests when KV is unavailable; ` +
-      '<strong>Closed</strong> blocks requests when KV is unavailable.'
+      `Controlled by ${envVar('SHUMA_KV_STORE_FAIL_OPEN')}. <strong>true</strong> uses fail-open (allow requests when KV is unavailable); ` +
+      '<strong>false</strong> uses fail-closed (block requests when KV is unavailable).'
     ),
     status: state => normalizeFailMode(state.failMode).toUpperCase()
   },
@@ -681,8 +681,7 @@ function updateMazeConfig(config) {
 }
 
 function updateGeoConfig(config) {
-  const configMode = normalizeConfigMode(config.config_mode);
-  const mutable = configMode !== 'env_only';
+  const mutable = adminPageConfigEnabled(config);
   const risk = formatCountryCodes(config.geo_risk);
   const allow = formatCountryCodes(config.geo_allow);
   const challenge = formatCountryCodes(config.geo_challenge);
@@ -1264,7 +1263,7 @@ document.getElementById('save-geo-config').onclick = async function() {
   const btn = this;
 
   if (!geoSavedState.mutable) {
-    msg.textContent = 'GEO settings are read-only while SHUMA_CONFIG_MODE=env_only.';
+    msg.textContent = 'GEO settings are read-only while SHUMA_ADMIN_PAGE_CONFIG=false.';
     msg.className = 'message warning';
     btn.disabled = true;
     return;

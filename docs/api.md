@@ -71,7 +71,7 @@ When `SHUMA_DEBUG_HEADERS=true`, the health response includes:
 - `GET /admin/events?hours=N` - Recent events + summary stats
 - `GET /admin/cdp/events?hours=N&limit=M` - CDP-only detections/auto-bans (time-windowed, limit configurable)
 - `GET /admin/config` - Read configuration
-- `POST /admin/config` - Update configuration (partial JSON, disabled when `SHUMA_CONFIG_MODE=env_only`)
+- `POST /admin/config` - Update configuration (partial JSON, disabled when `SHUMA_ADMIN_PAGE_CONFIG=false`)
 - `GET /admin/maze` - Link maze stats
 - `GET /admin/robots` - robots.txt config and preview
 - `GET /admin/cdp` - CDP detection config and stats

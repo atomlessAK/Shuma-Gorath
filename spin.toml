@@ -26,11 +26,11 @@ key_value_stores = ["default"]
 # Tight outbound policy: this component should not initiate external HTTP(S) calls.
 allowed_outbound_hosts = []
 ## NOTE: For production/CI, do NOT commit secrets here. Move `SHUMA_API_KEY`,
-## `SHUMA_JS_SECRET`, and `SHUMA_KV_STORE_FAIL_MODE` into your CI/deployment secret store and inject
+## `SHUMA_JS_SECRET`, and `SHUMA_KV_STORE_FAIL_OPEN` into your CI/deployment secret store and inject
 ## them at deploy/runtime. This inline placeholder is for local/dev only.
 ## `SHUMA_FORWARDED_IP_SECRET` should be set in every environment where X-Forwarded-For
 ## is trusted. Requests without a matching X-Shuma-Forwarded-Secret are ignored.
-environment = { SHUMA_JS_SECRET = "changeme-js-secret", SHUMA_EVENT_LOG_RETENTION_HOURS = "168", SHUMA_ADMIN_IP_ALLOWLIST = "", SHUMA_KV_STORE_FAIL_MODE = "open", SHUMA_POW_ENABLED = "true", SHUMA_POW_DIFFICULTY = "15", SHUMA_POW_TTL_SECONDS = "90", SHUMA_POW_CONFIG_MUTABLE = "false" }
+environment = { SHUMA_JS_SECRET = "changeme-js-secret", SHUMA_EVENT_LOG_RETENTION_HOURS = "168", SHUMA_ADMIN_IP_ALLOWLIST = "", SHUMA_KV_STORE_FAIL_OPEN = "true", SHUMA_POW_ENABLED = "true", SHUMA_POW_DIFFICULTY = "15", SHUMA_POW_TTL_SECONDS = "90", SHUMA_POW_CONFIG_MUTABLE = "false" }
 
 [component.bot-trap.build]
 command = "./scripts/set_crate_type.sh cdylib && cargo build --target wasm32-wasip1 --release && cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm && ./scripts/set_crate_type.sh rlib"

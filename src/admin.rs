@@ -269,23 +269,23 @@ mod admin_config_tests {
     }
 
     #[test]
-    fn admin_config_rejects_updates_in_env_only_mode() {
+    fn admin_config_rejects_updates_when_admin_page_config_disabled() {
         let _lock = ENV_MUTEX.lock().unwrap();
-        std::env::set_var("SHUMA_CONFIG_MODE", "env_only");
+        std::env::set_var("SHUMA_ADMIN_PAGE_CONFIG", "false");
         let body = br#"{"test_mode":true}"#.to_vec();
         let req = make_request(Method::Post, "/admin/config", body);
         let store = TestStore::default();
         let resp = handle_admin_config(&req, &store, "default");
         assert_eq!(*resp.status(), 403u16);
         let msg = String::from_utf8_lossy(resp.body());
-        assert!(msg.contains("SHUMA_CONFIG_MODE=env_only"));
-        std::env::remove_var("SHUMA_CONFIG_MODE");
+        assert!(msg.contains("SHUMA_ADMIN_PAGE_CONFIG=false"));
+        std::env::remove_var("SHUMA_ADMIN_PAGE_CONFIG");
     }
 
     #[test]
     fn admin_config_updates_geo_policy_lists() {
         let _lock = ENV_MUTEX.lock().unwrap();
-        std::env::set_var("SHUMA_CONFIG_MODE", "hybrid");
+        std::env::set_var("SHUMA_ADMIN_PAGE_CONFIG", "true");
         let store = TestStore::default();
 
         let body = br#"{
@@ -317,7 +317,7 @@ mod admin_config_tests {
         assert_eq!(get_json.get("geo_challenge").unwrap(), &serde_json::json!(["BR"]));
         assert_eq!(get_json.get("geo_maze").unwrap(), &serde_json::json!(["RU"]));
         assert_eq!(get_json.get("geo_block").unwrap(), &serde_json::json!(["KP"]));
-        std::env::remove_var("SHUMA_CONFIG_MODE");
+        std::env::remove_var("SHUMA_ADMIN_PAGE_CONFIG");
     }
 }
 
@@ -465,8 +465,11 @@ fn handle_admin_config(req: &Request, store: &impl crate::challenge::KeyValueSto
     // GET: Return current config
     // POST: Update config (supports {"test_mode": true/false})
     if *req.method() == spin_sdk::http::Method::Post {
-        if matches!(crate::config::config_mode(), crate::config::ConfigMode::EnvOnly) {
-            return Response::new(403, "Config updates are disabled when SHUMA_CONFIG_MODE=env_only");
+        if !crate::config::admin_page_config_enabled() {
+            return Response::new(
+                403,
+                "Config updates are disabled when SHUMA_ADMIN_PAGE_CONFIG=false",
+            );
         }
         let body_str = String::from_utf8_lossy(req.body());
         let parsed: Result<serde_json::Value, _> = serde_json::from_str(&body_str);
@@ -799,7 +802,7 @@ fn handle_admin_config(req: &Request, store: &impl crate::challenge::KeyValueSto
                     "pow_config_mutable": crate::config::pow_config_mutable(),
                     "pow_difficulty": cfg.pow_difficulty,
                     "pow_ttl_seconds": cfg.pow_ttl_seconds,
-                    "config_mode": crate::config::config_mode_label(),
+                    "admin_page_config_enabled": crate::config::admin_page_config_enabled(),
                     "challenge_risk_threshold": cfg.challenge_risk_threshold,
                     "challenge_config_mutable": crate::config::challenge_config_mutable(),
                     "challenge_risk_threshold_default": challenge_default,
@@ -867,7 +870,7 @@ fn handle_admin_config(req: &Request, store: &impl crate::challenge::KeyValueSto
         "pow_config_mutable": crate::config::pow_config_mutable(),
         "pow_difficulty": cfg.pow_difficulty,
         "pow_ttl_seconds": cfg.pow_ttl_seconds,
-        "config_mode": crate::config::config_mode_label(),
+        "admin_page_config_enabled": crate::config::admin_page_config_enabled(),
         "challenge_risk_threshold": cfg.challenge_risk_threshold,
         "challenge_config_mutable": crate::config::challenge_config_mutable(),
         "challenge_risk_threshold_default": challenge_default,
@@ -1114,7 +1117,7 @@ pub fn handle_admin(req: &Request) -> Response {
             // Return analytics: ban count and test_mode status
             let cfg = crate::config::Config::load(&store, site_id);
             let ban_count = crate::ban::list_active_bans_with_scan(&store, site_id).len();
-            let fail_mode = env::var("SHUMA_KV_STORE_FAIL_MODE").unwrap_or_else(|_| "open".to_string()).to_lowercase();
+            let fail_mode = if crate::config::kv_store_fail_open() { "open" } else { "closed" };
             // Log admin analytics view
             log_event(&store, &EventLogEntry {
                 ts: now_ts(),

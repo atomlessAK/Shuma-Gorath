@@ -156,28 +156,19 @@ const BOTNESS_WEIGHT_GEO_RISK_DEFAULT: u8 = 2;
 const BOTNESS_WEIGHT_RATE_MEDIUM_DEFAULT: u8 = 1;
 const BOTNESS_WEIGHT_RATE_HIGH_DEFAULT: u8 = 2;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ConfigMode {
-    Hybrid,
-    EnvOnly,
+pub(crate) fn parse_admin_page_config_enabled(value: Option<&str>) -> bool {
+    value.and_then(parse_bool_like).unwrap_or(false)
 }
 
-pub(crate) fn parse_config_mode(value: Option<&str>) -> ConfigMode {
-    match value.map(|v| v.trim().to_ascii_lowercase()).as_deref() {
-        Some("hybrid") => ConfigMode::Hybrid,
-        _ => ConfigMode::EnvOnly,
-    }
+pub fn admin_page_config_enabled() -> bool {
+    parse_admin_page_config_enabled(env::var("SHUMA_ADMIN_PAGE_CONFIG").ok().as_deref())
 }
 
-pub fn config_mode() -> ConfigMode {
-    parse_config_mode(env::var("SHUMA_CONFIG_MODE").ok().as_deref())
-}
-
-pub fn config_mode_label() -> &'static str {
-    match config_mode() {
-        ConfigMode::Hybrid => "hybrid",
-        ConfigMode::EnvOnly => "env_only",
-    }
+pub fn kv_store_fail_open() -> bool {
+    env::var("SHUMA_KV_STORE_FAIL_OPEN")
+        .ok()
+        .and_then(|v| parse_bool_like(v.as_str()))
+        .unwrap_or(true)
 }
 
 fn parse_bool_like(value: &str) -> Option<bool> {
@@ -567,20 +558,19 @@ fn apply_mutability_policy(cfg: &mut Config) {
 impl Config {
     /// Loads config for a site from the key-value store, or returns defaults if not set.
     pub fn load(store: &impl KeyValueStore, site_id: &str) -> Self {
-        let mut cfg = match config_mode() {
-            ConfigMode::EnvOnly => default_config(),
-            ConfigMode::Hybrid => {
-                let key = format!("config:{}", site_id);
-                if let Ok(Some(val)) = store.get(&key) {
-                    if let Ok(cfg) = serde_json::from_slice::<Config>(&val) {
-                        cfg
-                    } else {
-                        default_config()
-                    }
+        let mut cfg = if admin_page_config_enabled() {
+            let key = format!("config:{}", site_id);
+            if let Ok(Some(val)) = store.get(&key) {
+                if let Ok(cfg) = serde_json::from_slice::<Config>(&val) {
+                    cfg
                 } else {
                     default_config()
                 }
+            } else {
+                default_config()
             }
+        } else {
+            default_config()
         };
 
         apply_env_overrides(&mut cfg);
