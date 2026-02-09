@@ -62,8 +62,9 @@ function updateConfigModeUi(config) {
   const enabled = adminPageConfigEnabled(config);
   const subtitle = document.getElementById('config-mode-subtitle');
   if (subtitle) {
-    subtitle.innerHTML =
-      `Controlled by ${envVar('SHUMA_ADMIN_PAGE_CONFIG')}. Admin config is <strong>${enabled ? 'ENABLED' : 'DISABLED'}</strong>.`;
+    subtitle.textContent = enabled
+      ? 'Admin page configuration enabled. Set the SHUMA_ADMIN_PAGE_CONFIG ENV var to false to disable.'
+      : 'Admin page configuration disabled. Set the SHUMA_ADMIN_PAGE_CONFIG ENV var to true to enable.';
   }
 
   document.querySelectorAll('.config-edit-pane').forEach(el => {
