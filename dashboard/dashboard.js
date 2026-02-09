@@ -1204,28 +1204,27 @@ function setGeoConfigEditable(editable) {
 
 function sanitizeGeoTextareaValue(value) {
   return (value || '')
-    .replace(/[^a-zA-Z,\s]/g, '')
+    .replace(/[^a-zA-Z,]/g, '')
     .toUpperCase();
 }
 
 function parseCountryCodesStrict(raw) {
-  const values = (raw || '')
-    .split(',')
-    .map(value => value.trim())
-    .filter(value => value.length > 0);
+  const sanitized = sanitizeGeoTextareaValue(raw);
+  if (!sanitized) return [];
+  if (!/^[A-Z]{2}(,[A-Z]{2})*$/.test(sanitized)) {
+    throw new Error('Use comma-separated 2-letter country codes only (example: GB,US,RU).');
+  }
+
+  const values = sanitized.split(',');
   const seen = new Set();
   const parsed = [];
   for (const value of values) {
-    if (!/^[a-zA-Z]{2}$/.test(value)) {
-      throw new Error(`Invalid country code: ${value}. Use 2-letter ISO codes like US, GB, BR.`);
-    }
-    const code = value.toUpperCase();
-    if (!ISO_ALPHA2_CODES.has(code)) {
+    if (!ISO_ALPHA2_CODES.has(value)) {
       throw new Error(`Invalid country code: ${value}. Use valid ISO 3166-1 alpha-2 codes.`);
     }
-    if (!seen.has(code)) {
-      seen.add(code);
-      parsed.push(code);
+    if (!seen.has(value)) {
+      seen.add(value);
+      parsed.push(value);
     }
   }
   return parsed;
@@ -1242,7 +1241,7 @@ function normalizeCountryCodesForCompare(raw) {
 
 function formatCountryCodes(list) {
   if (!Array.isArray(list) || list.length === 0) return '';
-  return list.join(', ');
+  return list.join(',');
 }
 
 function updateRobotsConfig(config) {
