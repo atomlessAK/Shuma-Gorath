@@ -84,7 +84,9 @@ const STATUS_DEFINITIONS = [
       `Detects browser automation fingerprints. Primary controls: ${envVar('SHUMA_CDP_DETECTION_ENABLED')}, ` +
       `${envVar('SHUMA_CDP_AUTO_BAN')}, and ${envVar('SHUMA_CDP_DETECTION_THRESHOLD')}. ` +
       `Hard checks like <code>webdriver</code> or <code>automation_props</code> are classified as <strong>strong</strong> CDP detections. ` +
-      `If hard checks are absent, ${envVar('SHUMA_CDP_DETECTION_THRESHOLD')} is used to tier the score; strong-tier detections can trigger automatic bans when ${envVar('SHUMA_CDP_AUTO_BAN')} is enabled.`
+      `If hard checks are absent, reports are <strong>medium</strong> when score >= ${envVar('SHUMA_CDP_DETECTION_THRESHOLD')} (or when <code>cdp_timing</code> is present). ` +
+      `Without hard checks, <strong>strong</strong> requires score >= threshold + 0.4 and at least two soft checks (<code>cdp_timing</code>, <code>chrome_obj</code>, <code>plugins</code>). ` +
+      `Automatic ban applies only when ${envVar('SHUMA_CDP_AUTO_BAN')} is enabled and the final CDP tier is <strong>strong</strong>.`
     ),
     status: state => boolStatus(state.cdpEnabled)
   },

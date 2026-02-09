@@ -129,7 +129,9 @@ CDP auto-ban policy:
 
 - Auto-ban applies only to strong CDP detections.
 - Hard checks such as `webdriver` and `automation_props` are treated as strong signals.
-- If hard checks are absent, `SHUMA_CDP_DETECTION_THRESHOLD` is used to tier the score; strong-tier detections can trigger automatic bans when `SHUMA_CDP_AUTO_BAN=true`.
+- If hard checks are absent, a report is medium when `score >= SHUMA_CDP_DETECTION_THRESHOLD` (or when `cdp_timing` is present).
+- Without hard checks, strong requires `score >= SHUMA_CDP_DETECTION_THRESHOLD + 0.4` and at least two soft checks (`cdp_timing`, `chrome_obj`, `plugins`).
+- Automatic ban applies only when final CDP tier is strong and `SHUMA_CDP_AUTO_BAN=true`.
 
 Supporting control vars:
 
