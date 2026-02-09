@@ -6,7 +6,7 @@
 - Per-IP rate limiting
 - Browser version blocking
 - GEO scoring + policy routing (`allow/challenge/maze/block`) via trusted `X-Geo-Country`
-- JavaScript challenge with signed cookie
+- JS challenge with signed cookie
 - Puzzle challenge step-up with single-use seeds
 - Proof-of-work (PoW) step before JS verification (edge-served)
 - Optional browser whitelist to bypass JS challenge

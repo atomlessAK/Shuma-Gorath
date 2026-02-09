@@ -154,7 +154,7 @@ pub fn inject_js_challenge(ip: &str, pow_difficulty: u8, pow_ttl_seconds: u64) -
 
             runPow();
     </script>
-    <noscript>Please enable JavaScript to continue.</noscript>
+    <noscript>Please enable JS to continue.</noscript>
     </body></html>
     "#,
         seed = challenge.seed,
@@ -186,7 +186,7 @@ pub fn inject_js_challenge(ip: &str, pow_difficulty: u8, pow_ttl_seconds: u64) -
             document.cookie = 'js_verified={token}; path=/; SameSite=Strict; Max-Age=86400';
             window.location.reload();
     </script>
-    <noscript>Please enable JavaScript to continue.</noscript>
+    <noscript>Please enable JS to continue.</noscript>
     </body></html>
     "#);
     Response::new(200, html)

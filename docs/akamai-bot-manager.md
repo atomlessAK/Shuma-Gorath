@@ -82,7 +82,7 @@ Origin Application
 | ML/Behavioral Detection | Yes (managed) | No | Shuma-Gorath is rules + heuristics
 | Device Fingerprinting | Advanced | Basic (UA-based) | UA parsing only
 | Reputation Signals | Global | Manual lists | Use allow/deny lists in config
-| JavaScript Challenges | Yes | Yes | Shuma uses signed cookie challenge
+| JS Challenges | Yes | Yes | Shuma uses signed cookie challenge
 | Honeypots | Limited | Strong | App-specific trap paths
 | Rate Limiting | Policy-based | Per-IP windows | Highly configurable via code
 | Geo Controls | Yes | Yes | Uses trusted `X-Geo-Country` with tiered routing (`allow/challenge/maze/block`)

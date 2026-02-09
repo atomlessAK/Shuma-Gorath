@@ -224,7 +224,7 @@
             </div>
             <div class="control-group panel-soft pad-md config-edit-pane hidden">
               <h3>JS Required</h3>
-              <p class="control-desc text-muted">When enabled, requests without a valid <code>js_verified</code> cookie are served a JavaScript verification page. After a valid <code>js_verified</code> cookie is set, the originally requested page is reloaded and access is re-evaluated. If <code>SHUMA_POW_ENABLED</code> is true, this verification step includes PoW before <code>js_verified</code> is issued. Disable only if you must allow non-JS clients; doing so weakens bot defense and removes PoW from the normal request path.</p>
+              <p class="control-desc text-muted">When enabled, requests without a valid <code>js_verified</code> cookie are served a JS verification page. After a valid <code>js_verified</code> cookie is set, the originally requested page is reloaded and access is re-evaluated. If <code>SHUMA_POW_ENABLED</code> is true, this verification step includes PoW before <code>js_verified</code> is issued. Disable only if you must allow non-JS clients; doing so weakens bot defense and removes PoW from the normal request path.</p>
               <div class="admin-controls">
                 <div class="toggle-row">
                   <label class="control-label control-label--wide" for="js-required-enforced-toggle">Enforce JS Required</label>
