@@ -557,7 +557,8 @@ const STATUS_DEFINITIONS = [
     title: 'JS Required',
     description: state => (
       `Controlled by ${envVar('SHUMA_JS_REQUIRED_ENFORCED')}. ` +
-      `When enabled, requests without a valid JS verification cookie are treated as JS-required. ` +
+      `When enabled, visitors without a valid JS verification cookie are routed through JavaScript verification before normal access. ` +
+      `Disabling this can reduce friction for non-JS clients but weakens bot screening. ` +
       `Its botness contribution is weighted separately by ${envVar('SHUMA_BOTNESS_WEIGHT_JS_REQUIRED')} ` +
       `(current weight: <strong>${state.botnessWeights.js_required || 0}</strong>). ` +
       cumulativeBotnessRoutingText(state)
