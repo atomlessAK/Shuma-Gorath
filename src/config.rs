@@ -81,6 +81,14 @@ pub struct Config {
     pub browser_block: Vec<(String, u32)>,
     pub browser_whitelist: Vec<(String, u32)>,
     pub geo_risk: Vec<String>,
+    #[serde(default)]
+    pub geo_allow: Vec<String>,
+    #[serde(default)]
+    pub geo_challenge: Vec<String>,
+    #[serde(default)]
+    pub geo_maze: Vec<String>,
+    #[serde(default)]
+    pub geo_block: Vec<String>,
     pub whitelist: Vec<String>,
     pub path_whitelist: Vec<String>,
     pub test_mode: bool,
@@ -223,6 +231,13 @@ fn parse_string_list_value(raw: &str) -> Option<Vec<String>> {
 
 fn parse_string_list_env_var(name: &str) -> Option<Vec<String>> {
     env::var(name).ok().and_then(|v| parse_string_list_value(v.as_str()))
+}
+
+fn parse_country_list_env(name: &str) -> Option<Vec<String>> {
+    if let Some(values) = parse_string_list_env_var(name) {
+        return Some(crate::geo::normalize_country_list(&values));
+    }
+    None
 }
 
 fn parse_browser_rules_value(raw: &str) -> Option<Vec<(String, u32)>> {
@@ -387,6 +402,10 @@ fn default_config() -> Config {
         ],
         browser_whitelist: vec![],
         geo_risk: vec![],
+        geo_allow: vec![],
+        geo_challenge: vec![],
+        geo_maze: vec![],
+        geo_block: vec![],
         whitelist: vec![],
         path_whitelist: vec![],
         test_mode: false,
@@ -443,8 +462,20 @@ fn apply_env_overrides(cfg: &mut Config) {
     if let Some(v) = parse_browser_rules_env_var("SHUMA_BROWSER_WHITELIST") {
         cfg.browser_whitelist = v;
     }
-    if let Some(v) = parse_string_list_env_var("SHUMA_GEO_RISK") {
+    if let Some(v) = parse_country_list_env("SHUMA_GEO_RISK_COUNTRIES") {
         cfg.geo_risk = v;
+    }
+    if let Some(v) = parse_country_list_env("SHUMA_GEO_ALLOW_COUNTRIES") {
+        cfg.geo_allow = v;
+    }
+    if let Some(v) = parse_country_list_env("SHUMA_GEO_CHALLENGE_COUNTRIES") {
+        cfg.geo_challenge = v;
+    }
+    if let Some(v) = parse_country_list_env("SHUMA_GEO_MAZE_COUNTRIES") {
+        cfg.geo_maze = v;
+    }
+    if let Some(v) = parse_country_list_env("SHUMA_GEO_BLOCK_COUNTRIES") {
+        cfg.geo_block = v;
     }
     if let Some(v) = parse_string_list_env_var("SHUMA_WHITELIST") {
         cfg.whitelist = v;

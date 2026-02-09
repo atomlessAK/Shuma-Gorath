@@ -3,14 +3,81 @@
 // Checks for high-risk geographies using edge-provided headers (e.g., X-Geo-Country)
 
 use spin_sdk::http::Request;
+use std::collections::HashSet;
 
-/// Returns true if the request is from a high-risk country (case-insensitive match).
-/// Uses the geo_risk config list and the X-Geo-Country header set by the edge.
-pub fn is_high_risk_geo(req: &Request, geo_risk: &[String]) -> bool {
-    if let Some(header) = req.header("x-geo-country") {
-        let country = header.as_str().unwrap_or("");
-        geo_risk.iter().any(|c| c.eq_ignore_ascii_case(country))
-    } else {
-        false
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GeoPolicyRoute {
+    None,
+    Allow,
+    Challenge,
+    Maze,
+    Block,
+}
+
+/// Extract and normalize country code from trusted edge headers.
+/// Returns None when geo headers are not trusted for this request.
+pub fn extract_geo_country(req: &Request, headers_trusted: bool) -> Option<String> {
+    if !headers_trusted {
+        return None;
     }
+    req.header("x-geo-country")
+        .and_then(|header| header.as_str())
+        .map(str::trim)
+        .and_then(normalize_country_code)
+}
+
+/// Normalize a country code to two-letter uppercase ISO form.
+pub fn normalize_country_code(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.len() != 2 {
+        return None;
+    }
+    if !trimmed.chars().all(|c| c.is_ascii_alphabetic()) {
+        return None;
+    }
+    Some(trimmed.to_ascii_uppercase())
+}
+
+/// Normalize, deduplicate, and preserve order for configured country lists.
+pub fn normalize_country_list(values: &[String]) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut normalized = Vec::new();
+    for value in values {
+        if let Some(code) = normalize_country_code(value) {
+            if seen.insert(code.clone()) {
+                normalized.push(code);
+            }
+        }
+    }
+    normalized
+}
+
+/// Returns true when the given country appears in the provided country list.
+pub fn country_in_list(country: &str, list: &[String]) -> bool {
+    list.iter().any(|c| c.eq_ignore_ascii_case(country))
+}
+
+/// Evaluate configured GEO policy routing for a normalized country code.
+/// Precedence is most restrictive first: Block > Maze > Challenge > Allow.
+pub fn evaluate_geo_policy(country: Option<&str>, cfg: &crate::config::Config) -> GeoPolicyRoute {
+    let Some(country) = country else {
+        return GeoPolicyRoute::None;
+    };
+    let Some(normalized) = normalize_country_code(country) else {
+        return GeoPolicyRoute::None;
+    };
+
+    if country_in_list(normalized.as_str(), &cfg.geo_block) {
+        return GeoPolicyRoute::Block;
+    }
+    if country_in_list(normalized.as_str(), &cfg.geo_maze) {
+        return GeoPolicyRoute::Maze;
+    }
+    if country_in_list(normalized.as_str(), &cfg.geo_challenge) {
+        return GeoPolicyRoute::Challenge;
+    }
+    if country_in_list(normalized.as_str(), &cfg.geo_allow) {
+        return GeoPolicyRoute::Allow;
+    }
+    GeoPolicyRoute::None
 }

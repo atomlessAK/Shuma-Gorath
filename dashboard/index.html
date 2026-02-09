@@ -260,6 +260,33 @@
               <button id="save-maze-config" class="btn">Save Maze Settings</button>
             </div>
             <div class="control-group panel-soft pad-md">
+              <h3>GEO Policy</h3>
+              <p class="control-desc text-muted">Use 2-letter country codes (comma separated). Precedence: Block > Maze > Challenge > Allow.</p>
+              <div class="admin-controls">
+                <div class="input-row">
+                  <label class="control-label" for="geo-risk-list">Scoring Countries</label>
+                  <input class="input-field" type="text" id="geo-risk-list" placeholder="CN, RU, KP" aria-label="GEO scoring countries">
+                </div>
+                <div class="input-row">
+                  <label class="control-label" for="geo-allow-list">Allow Countries</label>
+                  <input class="input-field" type="text" id="geo-allow-list" placeholder="US, GB" aria-label="GEO allow countries">
+                </div>
+                <div class="input-row">
+                  <label class="control-label" for="geo-challenge-list">Challenge Countries</label>
+                  <input class="input-field" type="text" id="geo-challenge-list" placeholder="BR, IN" aria-label="GEO challenge countries">
+                </div>
+                <div class="input-row">
+                  <label class="control-label" for="geo-maze-list">Maze Countries</label>
+                  <input class="input-field" type="text" id="geo-maze-list" placeholder="RU, CN" aria-label="GEO maze countries">
+                </div>
+                <div class="input-row">
+                  <label class="control-label" for="geo-block-list">Block Countries</label>
+                  <input class="input-field" type="text" id="geo-block-list" placeholder="KP" aria-label="GEO block countries">
+                </div>
+              </div>
+              <button id="save-geo-config" class="btn" disabled>Save GEO Settings</button>
+            </div>
+            <div class="control-group panel-soft pad-md">
               <h3>CDP (Detect Browser Automation)</h3>
               <p class="control-desc text-muted">Detects bots controlling browsers on behalf of human users (Puppeteer, Playwright,
                 Selenium, etc.)</p>

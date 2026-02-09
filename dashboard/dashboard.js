@@ -29,6 +29,10 @@ const statusPanelState = {
   mazeThreshold: 6,
   rateLimit: 80,
   geoRiskCount: 0,
+  geoAllowCount: 0,
+  geoChallengeCount: 0,
+  geoMazeCount: 0,
+  geoBlockCount: 0,
   botnessMutable: false,
   botnessWeights: {
     js_required: 1,
@@ -63,7 +67,7 @@ const STATUS_DEFINITIONS = [
     title: 'Proof-of-Work (PoW)',
     description: state => (
       'PoW adds a lightweight computational puzzle before JS verification to increase bot cost. ' +
-      'For a human visitor the work happens invisibly, once, in a couple of milliseconds. For a scraper or botnet, having to repeatedly perform the work accumulates a prohibitive cost.' +
+      'For a human visitor the work happens invisibly, once, in a couple of milliseconds. For a scraper or botnet, having to repeatedly perform the work accumulates a prohibitive cost. ' +
       `Primary controls are ${envVar('SHUMA_POW_ENABLED')}, ${envVar('SHUMA_POW_DIFFICULTY')}, and ${envVar('SHUMA_POW_TTL_SECONDS')}. ` +
       `Runtime editability is controlled by ${envVar('SHUMA_POW_CONFIG_MUTABLE')} and is currently ${formatMutability(state.powMutable)}.`
     ),
@@ -112,9 +116,14 @@ const STATUS_DEFINITIONS = [
   {
     title: 'GEO Fencing',
     description: state => (
-      `Compares request <code>X-Geo-Country</code> header to configured high-risk countries in ${envVar('SHUMA_GEO_RISK')} ` +
-      `(current list size: <strong>${state.geoRiskCount}</strong>). ` +
-      `Matches contribute via ${envVar('SHUMA_BOTNESS_WEIGHT_GEO_RISK')} ` +
+      `Uses trusted edge GEO headers only (trusted when ${envVar('SHUMA_FORWARDED_IP_SECRET')} validation succeeds). ` +
+      `Scoring countries are set by ${envVar('SHUMA_GEO_RISK_COUNTRIES')} ` +
+      `(current count: <strong>${state.geoRiskCount}</strong>). ` +
+      `Policy tiers use ${envVar('SHUMA_GEO_ALLOW_COUNTRIES')} (<strong>${state.geoAllowCount}</strong>), ` +
+      `${envVar('SHUMA_GEO_CHALLENGE_COUNTRIES')} (<strong>${state.geoChallengeCount}</strong>), ` +
+      `${envVar('SHUMA_GEO_MAZE_COUNTRIES')} (<strong>${state.geoMazeCount}</strong>), and ` +
+      `${envVar('SHUMA_GEO_BLOCK_COUNTRIES')} (<strong>${state.geoBlockCount}</strong>). ` +
+      `Scoring matches contribute via ${envVar('SHUMA_BOTNESS_WEIGHT_GEO_RISK')} ` +
       `(current weight: <strong>${state.botnessWeights.geo_risk || 0}</strong>). ` +
       cumulativeBotnessRoutingText(state)
     ),
@@ -589,6 +598,39 @@ function updateMazeConfig(config) {
   renderStatusItems();
 }
 
+function updateGeoConfig(config) {
+  const risk = formatCountryCodes(config.geo_risk);
+  const allow = formatCountryCodes(config.geo_allow);
+  const challenge = formatCountryCodes(config.geo_challenge);
+  const maze = formatCountryCodes(config.geo_maze);
+  const block = formatCountryCodes(config.geo_block);
+
+  document.getElementById('geo-risk-list').value = risk;
+  document.getElementById('geo-allow-list').value = allow;
+  document.getElementById('geo-challenge-list').value = challenge;
+  document.getElementById('geo-maze-list').value = maze;
+  document.getElementById('geo-block-list').value = block;
+
+  geoSavedState = {
+    risk: normalizeCountryCodesForCompare(risk),
+    allow: normalizeCountryCodesForCompare(allow),
+    challenge: normalizeCountryCodesForCompare(challenge),
+    maze: normalizeCountryCodesForCompare(maze),
+    block: normalizeCountryCodesForCompare(block)
+  };
+
+  statusPanelState.geoRiskCount = Array.isArray(config.geo_risk) ? config.geo_risk.length : 0;
+  statusPanelState.geoAllowCount = Array.isArray(config.geo_allow) ? config.geo_allow.length : 0;
+  statusPanelState.geoChallengeCount = Array.isArray(config.geo_challenge) ? config.geo_challenge.length : 0;
+  statusPanelState.geoMazeCount = Array.isArray(config.geo_maze) ? config.geo_maze.length : 0;
+  statusPanelState.geoBlockCount = Array.isArray(config.geo_block) ? config.geo_block.length : 0;
+  renderStatusItems();
+
+  const btn = document.getElementById('save-geo-config');
+  btn.disabled = true;
+  btn.textContent = 'Save GEO Settings';
+}
+
 // Update robots.txt config controls from loaded config
 // Track saved state for change detection
 let robotsSavedState = {
@@ -623,6 +665,48 @@ let botnessSavedState = {
   weightRateHigh: 2,
   mutable: false
 };
+
+let geoSavedState = {
+  risk: '',
+  allow: '',
+  challenge: '',
+  maze: '',
+  block: ''
+};
+
+function parseCountryCodesStrict(raw) {
+  const values = (raw || '')
+    .split(',')
+    .map(value => value.trim())
+    .filter(value => value.length > 0);
+  const seen = new Set();
+  const parsed = [];
+  for (const value of values) {
+    if (!/^[a-zA-Z]{2}$/.test(value)) {
+      throw new Error(`Invalid country code: ${value}. Use 2-letter ISO codes like US, GB, BR.`);
+    }
+    const code = value.toUpperCase();
+    if (!seen.has(code)) {
+      seen.add(code);
+      parsed.push(code);
+    }
+  }
+  return parsed;
+}
+
+function normalizeCountryCodesForCompare(raw) {
+  return (raw || '')
+    .split(',')
+    .map(value => value.trim())
+    .filter(value => value.length > 0)
+    .map(value => value.toUpperCase())
+    .join(',');
+}
+
+function formatCountryCodes(list) {
+  if (!Array.isArray(list) || list.length === 0) return '';
+  return list.join(', ');
+}
 
 function updateRobotsConfig(config) {
   // Update toggles from server config
@@ -949,7 +1033,6 @@ function updateChallengeConfig(config) {
   statusPanelState.challengeThreshold = Number.isNaN(challengeThreshold) ? 3 : challengeThreshold;
   statusPanelState.mazeThreshold = Number.isNaN(mazeThreshold) ? 6 : mazeThreshold;
   statusPanelState.rateLimit = parseInt(config.rate_limit, 10) || 80;
-  statusPanelState.geoRiskCount = Array.isArray(config.geo_risk) ? config.geo_risk.length : 0;
   statusPanelState.challengeMutable = challengeMutable;
   statusPanelState.botnessMutable = mutable;
   statusPanelState.botnessWeights = {
@@ -1040,6 +1123,101 @@ function checkBotnessConfigChanged() {
 ].forEach(id => {
   document.getElementById(id).addEventListener('input', checkBotnessConfigChanged);
 });
+
+function checkGeoConfigChanged() {
+  const current = {
+    risk: normalizeCountryCodesForCompare(document.getElementById('geo-risk-list').value),
+    allow: normalizeCountryCodesForCompare(document.getElementById('geo-allow-list').value),
+    challenge: normalizeCountryCodesForCompare(document.getElementById('geo-challenge-list').value),
+    maze: normalizeCountryCodesForCompare(document.getElementById('geo-maze-list').value),
+    block: normalizeCountryCodesForCompare(document.getElementById('geo-block-list').value)
+  };
+  const changed =
+    current.risk !== geoSavedState.risk ||
+    current.allow !== geoSavedState.allow ||
+    current.challenge !== geoSavedState.challenge ||
+    current.maze !== geoSavedState.maze ||
+    current.block !== geoSavedState.block;
+  document.getElementById('save-geo-config').disabled = !changed;
+}
+
+[
+  'geo-risk-list',
+  'geo-allow-list',
+  'geo-challenge-list',
+  'geo-maze-list',
+  'geo-block-list'
+].forEach(id => {
+  document.getElementById(id).addEventListener('input', checkGeoConfigChanged);
+});
+
+document.getElementById('save-geo-config').onclick = async function() {
+  const endpoint = document.getElementById('endpoint').value.replace(/\/$/, '');
+  const apikey = document.getElementById('apikey').value;
+  const msg = document.getElementById('admin-msg');
+  const btn = this;
+
+  let geoRisk;
+  let geoAllow;
+  let geoChallenge;
+  let geoMaze;
+  let geoBlock;
+  try {
+    geoRisk = parseCountryCodesStrict(document.getElementById('geo-risk-list').value);
+    geoAllow = parseCountryCodesStrict(document.getElementById('geo-allow-list').value);
+    geoChallenge = parseCountryCodesStrict(document.getElementById('geo-challenge-list').value);
+    geoMaze = parseCountryCodesStrict(document.getElementById('geo-maze-list').value);
+    geoBlock = parseCountryCodesStrict(document.getElementById('geo-block-list').value);
+  } catch (e) {
+    msg.textContent = 'Error: ' + e.message;
+    msg.className = 'message error';
+    return;
+  }
+
+  btn.textContent = 'Saving...';
+  btn.disabled = true;
+  try {
+    const resp = await fetch(`${endpoint}/admin/config`, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + apikey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        geo_risk: geoRisk,
+        geo_allow: geoAllow,
+        geo_challenge: geoChallenge,
+        geo_maze: geoMaze,
+        geo_block: geoBlock
+      })
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(text || 'Failed to save GEO config');
+    }
+    const data = await resp.json();
+    if (data && data.config) {
+      updateGeoConfig(data.config);
+    } else {
+      geoSavedState = {
+        risk: geoRisk.join(','),
+        allow: geoAllow.join(','),
+        challenge: geoChallenge.join(','),
+        maze: geoMaze.join(','),
+        block: geoBlock.join(',')
+      };
+      btn.disabled = true;
+    }
+    msg.textContent = 'GEO settings saved';
+    msg.className = 'message success';
+    btn.textContent = 'Save GEO Settings';
+  } catch (e) {
+    msg.textContent = 'Error: ' + e.message;
+    msg.className = 'message error';
+    btn.textContent = 'Save GEO Settings';
+    btn.disabled = false;
+  }
+};
 
 // Save PoW configuration
 document.getElementById('save-pow-config').onclick = async function() {
@@ -1323,6 +1501,7 @@ document.getElementById('refresh').onclick = async function() {
         const config = await configResp.json();
         updateBanDurations(config);
         updateMazeConfig(config);
+        updateGeoConfig(config);
         updateRobotsConfig(config);
         updateCdpConfig(config);
         updatePowConfig(config);

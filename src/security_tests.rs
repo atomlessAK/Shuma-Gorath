@@ -63,3 +63,61 @@ fn forwarded_headers_are_trusted_with_matching_secret() {
     );
     assert!(forwarded_ip_trusted(&req));
 }
+
+#[test]
+fn geo_headers_are_ignored_when_forwarding_not_trusted() {
+    let _lock = ENV_MUTEX.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    std::env::remove_var("SHUMA_FORWARDED_IP_SECRET");
+    let req = request_with_headers("/health", &[("x-geo-country", "US")]);
+
+    let cfg = crate::config::Config::load(&MockStore::default(), "default");
+    let assessment = crate::assess_geo_request(&req, &cfg);
+    assert!(!assessment.headers_trusted);
+    assert_eq!(assessment.country, None);
+    assert!(!assessment.scored_risk);
+}
+
+#[derive(Default)]
+struct MockStore {
+    map: std::sync::Mutex<std::collections::HashMap<String, Vec<u8>>>,
+}
+
+impl crate::challenge::KeyValueStore for MockStore {
+    fn get(&self, key: &str) -> Result<Option<Vec<u8>>, ()> {
+        let map = self.map.lock().unwrap();
+        Ok(map.get(key).cloned())
+    }
+
+    fn set(&self, key: &str, value: &[u8]) -> Result<(), ()> {
+        let mut map = self.map.lock().unwrap();
+        map.insert(key.to_string(), value.to_vec());
+        Ok(())
+    }
+
+    fn delete(&self, key: &str) -> Result<(), ()> {
+        let mut map = self.map.lock().unwrap();
+        map.remove(key);
+        Ok(())
+    }
+}
+
+#[test]
+fn geo_headers_are_used_when_forwarding_is_trusted() {
+    let _lock = ENV_MUTEX.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    std::env::set_var("SHUMA_FORWARDED_IP_SECRET", "test-forwarded-secret");
+    let req = request_with_headers(
+        "/health",
+        &[
+            ("x-geo-country", " us "),
+            ("x-shuma-forwarded-secret", "test-forwarded-secret"),
+        ],
+    );
+
+    let mut cfg = crate::config::Config::load(&MockStore::default(), "default");
+    cfg.geo_risk = vec!["US".to_string()];
+    let assessment = crate::assess_geo_request(&req, &cfg);
+    assert!(assessment.headers_trusted);
+    assert_eq!(assessment.country.as_deref(), Some("US"));
+    assert!(assessment.scored_risk);
+    std::env::remove_var("SHUMA_FORWARDED_IP_SECRET");
+}

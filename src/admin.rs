@@ -266,6 +266,42 @@ mod admin_config_tests {
         assert!(msg.contains("SHUMA_CONFIG_MODE=env_only"));
         std::env::remove_var("SHUMA_CONFIG_MODE");
     }
+
+    #[test]
+    fn admin_config_updates_geo_policy_lists() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+        let store = TestStore::default();
+
+        let body = br#"{
+          "geo_risk": ["us", "CN", "us"],
+          "geo_allow": ["gb"],
+          "geo_challenge": ["br"],
+          "geo_maze": ["ru"],
+          "geo_block": ["kp"]
+        }"#
+        .to_vec();
+        let post_req = make_request(Method::Post, "/admin/config", body);
+        let post_resp = handle_admin_config(&post_req, &store, "default");
+        assert_eq!(*post_resp.status(), 200u16);
+        let post_json: serde_json::Value = serde_json::from_slice(post_resp.body()).unwrap();
+        let cfg = post_json.get("config").unwrap();
+
+        assert_eq!(cfg.get("geo_risk").unwrap(), &serde_json::json!(["US", "CN"]));
+        assert_eq!(cfg.get("geo_allow").unwrap(), &serde_json::json!(["GB"]));
+        assert_eq!(cfg.get("geo_challenge").unwrap(), &serde_json::json!(["BR"]));
+        assert_eq!(cfg.get("geo_maze").unwrap(), &serde_json::json!(["RU"]));
+        assert_eq!(cfg.get("geo_block").unwrap(), &serde_json::json!(["KP"]));
+
+        let get_req = make_request(Method::Get, "/admin/config", Vec::new());
+        let get_resp = handle_admin_config(&get_req, &store, "default");
+        assert_eq!(*get_resp.status(), 200u16);
+        let get_json: serde_json::Value = serde_json::from_slice(get_resp.body()).unwrap();
+        assert_eq!(get_json.get("geo_risk").unwrap(), &serde_json::json!(["US", "CN"]));
+        assert_eq!(get_json.get("geo_allow").unwrap(), &serde_json::json!(["GB"]));
+        assert_eq!(get_json.get("geo_challenge").unwrap(), &serde_json::json!(["BR"]));
+        assert_eq!(get_json.get("geo_maze").unwrap(), &serde_json::json!(["RU"]));
+        assert_eq!(get_json.get("geo_block").unwrap(), &serde_json::json!(["KP"]));
+    }
 }
 
 /// Utility to get current unix timestamp
@@ -328,6 +364,22 @@ fn botness_signal_definitions(cfg: &crate::config::Config) -> serde_json::Value 
     })
 }
 
+fn parse_country_list_json(field: &str, value: &serde_json::Value) -> Result<Vec<String>, String> {
+    let items = value
+        .as_array()
+        .ok_or_else(|| format!("{} must be an array of 2-letter country codes", field))?;
+    let mut parsed = Vec::with_capacity(items.len());
+    for item in items {
+        let raw = item
+            .as_str()
+            .ok_or_else(|| format!("{} must contain only strings", field))?;
+        let code = crate::geo::normalize_country_code(raw)
+            .ok_or_else(|| format!("{} contains invalid country code '{}'", field, raw))?;
+        parsed.push(code);
+    }
+    Ok(crate::geo::normalize_country_list(&parsed))
+}
+
 fn handle_admin_config(req: &Request, store: &impl crate::challenge::KeyValueStore, site_id: &str) -> Response {
     // GET: Return current config
     // POST: Update config (supports {"test_mode": true/false})
@@ -368,6 +420,53 @@ fn handle_admin_config(req: &Request, store: &impl crate::challenge::KeyValueSto
             if let Some(rate_limit) = json.get("rate_limit").and_then(|v| v.as_u64()) {
                 cfg.rate_limit = rate_limit as u32;
                 changed = true;
+            }
+
+            // Update GEO policy lists if provided.
+            if let Some(value) = json.get("geo_risk") {
+                match parse_country_list_json("geo_risk", value) {
+                    Ok(list) => {
+                        cfg.geo_risk = list;
+                        changed = true;
+                    }
+                    Err(msg) => return Response::new(400, msg),
+                }
+            }
+            if let Some(value) = json.get("geo_allow") {
+                match parse_country_list_json("geo_allow", value) {
+                    Ok(list) => {
+                        cfg.geo_allow = list;
+                        changed = true;
+                    }
+                    Err(msg) => return Response::new(400, msg),
+                }
+            }
+            if let Some(value) = json.get("geo_challenge") {
+                match parse_country_list_json("geo_challenge", value) {
+                    Ok(list) => {
+                        cfg.geo_challenge = list;
+                        changed = true;
+                    }
+                    Err(msg) => return Response::new(400, msg),
+                }
+            }
+            if let Some(value) = json.get("geo_maze") {
+                match parse_country_list_json("geo_maze", value) {
+                    Ok(list) => {
+                        cfg.geo_maze = list;
+                        changed = true;
+                    }
+                    Err(msg) => return Response::new(400, msg),
+                }
+            }
+            if let Some(value) = json.get("geo_block") {
+                match parse_country_list_json("geo_block", value) {
+                    Ok(list) => {
+                        cfg.geo_block = list;
+                        changed = true;
+                    }
+                    Err(msg) => return Response::new(400, msg),
+                }
             }
             
             // Update per-type ban durations if provided
@@ -600,6 +699,10 @@ fn handle_admin_config(req: &Request, store: &impl crate::challenge::KeyValueSto
                     "rate_limit": cfg.rate_limit,
                     "honeypots": cfg.honeypots,
                     "geo_risk": cfg.geo_risk,
+                    "geo_allow": cfg.geo_allow,
+                    "geo_challenge": cfg.geo_challenge,
+                    "geo_maze": cfg.geo_maze,
+                    "geo_block": cfg.geo_block,
                     "maze_enabled": cfg.maze_enabled,
                     "maze_auto_ban": cfg.maze_auto_ban,
                     "maze_auto_ban_threshold": cfg.maze_auto_ban_threshold,
@@ -662,6 +765,10 @@ fn handle_admin_config(req: &Request, store: &impl crate::challenge::KeyValueSto
         "browser_block": cfg.browser_block,
         "browser_whitelist": cfg.browser_whitelist,
         "geo_risk": cfg.geo_risk,
+        "geo_allow": cfg.geo_allow,
+        "geo_challenge": cfg.geo_challenge,
+        "geo_maze": cfg.geo_maze,
+        "geo_block": cfg.geo_block,
         "whitelist": cfg.whitelist,
         "path_whitelist": cfg.path_whitelist,
         "maze_enabled": cfg.maze_enabled,

@@ -17,6 +17,8 @@ mod cdp_tests;
 mod log_tests;
 #[cfg(test)]
 mod security_tests;
+#[cfg(test)]
+mod geo_tests;
 mod auth;
 // src/lib.rs
 // Entry point for the WASM Stealth Bot Trap Spin app
@@ -156,6 +158,34 @@ pub struct BotnessContribution {
 pub struct BotnessAssessment {
     pub score: u8,
     pub contributions: Vec<BotnessContribution>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GeoAssessment {
+    pub country: Option<String>,
+    pub headers_trusted: bool,
+    pub route: geo::GeoPolicyRoute,
+    pub scored_risk: bool,
+}
+
+pub(crate) fn assess_geo_request(req: &Request, cfg: &config::Config) -> GeoAssessment {
+    let headers_trusted = forwarded_ip_trusted(req);
+    let country = geo::extract_geo_country(req, headers_trusted);
+    let route = geo::evaluate_geo_policy(country.as_deref(), cfg);
+    let scored_risk = if route == geo::GeoPolicyRoute::Allow {
+        false
+    } else {
+        country
+            .as_deref()
+            .map(|value| geo::country_in_list(value, &cfg.geo_risk))
+            .unwrap_or(false)
+    };
+    GeoAssessment {
+        country,
+        headers_trusted,
+        route,
+        scored_risk,
+    }
 }
 
 pub(crate) fn compute_botness_assessment(
@@ -437,6 +467,7 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
     let store = store.as_ref().unwrap();
 
     let cfg = config::Config::load(store, site_id);
+    let geo_assessment = assess_geo_request(req, &cfg);
 
     // Link Maze Honeypot - trap bots in infinite loops (only if enabled)
     if maze::is_maze_path(path) {
@@ -529,18 +560,47 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
             });
             return Response::new(200, "TEST MODE: Would block (outdated browser)");
         }
-        if geo::is_high_risk_geo(req, &cfg.geo_risk) {
-            log_line(&format!("[TEST MODE] Would inject JS challenge for geo-risk IP {ip}"));
-            metrics::increment(store, metrics::MetricName::TestModeActions, None);
-            crate::admin::log_event(store, &crate::admin::EventLogEntry {
-                ts: crate::admin::now_ts(),
-                event: crate::admin::EventType::Challenge,
-                ip: Some(ip.clone()),
-                reason: Some("geo_risk [TEST MODE]".to_string()),
-                outcome: Some("would_challenge".to_string()),
-                admin: None,
-            });
-            return Response::new(200, "TEST MODE: Would inject JS challenge (geo-risk)");
+        match geo_assessment.route {
+            geo::GeoPolicyRoute::Block => {
+                log_line(&format!("[TEST MODE] Would block IP {ip} for GEO policy"));
+                metrics::increment(store, metrics::MetricName::TestModeActions, None);
+                crate::admin::log_event(store, &crate::admin::EventLogEntry {
+                    ts: crate::admin::now_ts(),
+                    event: crate::admin::EventType::Block,
+                    ip: Some(ip.clone()),
+                    reason: Some("geo_policy_block [TEST MODE]".to_string()),
+                    outcome: Some("would_block".to_string()),
+                    admin: None,
+                });
+                return Response::new(200, "TEST MODE: Would block (geo policy)");
+            }
+            geo::GeoPolicyRoute::Maze => {
+                log_line(&format!("[TEST MODE] Would route IP {ip} to maze for GEO policy"));
+                metrics::increment(store, metrics::MetricName::TestModeActions, None);
+                crate::admin::log_event(store, &crate::admin::EventLogEntry {
+                    ts: crate::admin::now_ts(),
+                    event: crate::admin::EventType::Challenge,
+                    ip: Some(ip.clone()),
+                    reason: Some("geo_policy_maze [TEST MODE]".to_string()),
+                    outcome: Some("would_route_maze".to_string()),
+                    admin: None,
+                });
+                return Response::new(200, "TEST MODE: Would route to maze (geo policy)");
+            }
+            geo::GeoPolicyRoute::Challenge => {
+                log_line(&format!("[TEST MODE] Would challenge IP {ip} for GEO policy"));
+                metrics::increment(store, metrics::MetricName::TestModeActions, None);
+                crate::admin::log_event(store, &crate::admin::EventLogEntry {
+                    ts: crate::admin::now_ts(),
+                    event: crate::admin::EventType::Challenge,
+                    ip: Some(ip.clone()),
+                    reason: Some("geo_policy_challenge [TEST MODE]".to_string()),
+                    outcome: Some("would_challenge".to_string()),
+                    admin: None,
+                });
+                return Response::new(200, "TEST MODE: Would serve challenge (geo policy)");
+            }
+            geo::GeoPolicyRoute::Allow | geo::GeoPolicyRoute::None => {}
         }
         return Response::new(200, "TEST MODE: Would allow (passed bot trap)");
     }
@@ -649,9 +709,69 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
         });
         return Response::new(403, block_page::render_block_page(block_page::BlockReason::OutdatedBrowser));
     }
+    match geo_assessment.route {
+        geo::GeoPolicyRoute::Block => {
+            metrics::increment(store, metrics::MetricName::BlocksTotal, None);
+            crate::admin::log_event(store, &crate::admin::EventLogEntry {
+                ts: crate::admin::now_ts(),
+                event: crate::admin::EventType::Block,
+                ip: Some(ip.clone()),
+                reason: Some("geo_policy_block".to_string()),
+                outcome: Some(format!(
+                    "country={}",
+                    geo_assessment.country.as_deref().unwrap_or("unknown")
+                )),
+                admin: None,
+            });
+            return Response::new(403, block_page::render_block_page(block_page::BlockReason::GeoPolicy));
+        }
+        geo::GeoPolicyRoute::Maze => {
+            if cfg.maze_enabled {
+                return serve_maze_with_tracking(
+                    store,
+                    &cfg,
+                    &ip,
+                    "/maze/geo-policy",
+                    "geo_policy_maze",
+                    &format!(
+                        "country={}",
+                        geo_assessment.country.as_deref().unwrap_or("unknown")
+                    ),
+                );
+            }
+            metrics::increment(store, metrics::MetricName::ChallengesTotal, None);
+            metrics::increment(store, metrics::MetricName::ChallengeServedTotal, None);
+            crate::admin::log_event(store, &crate::admin::EventLogEntry {
+                ts: crate::admin::now_ts(),
+                event: crate::admin::EventType::Challenge,
+                ip: Some(ip.clone()),
+                reason: Some("geo_policy_challenge_fallback".to_string()),
+                outcome: Some("maze_disabled".to_string()),
+                admin: None,
+            });
+            return challenge::render_challenge(req);
+        }
+        geo::GeoPolicyRoute::Challenge => {
+            metrics::increment(store, metrics::MetricName::ChallengesTotal, None);
+            metrics::increment(store, metrics::MetricName::ChallengeServedTotal, None);
+            crate::admin::log_event(store, &crate::admin::EventLogEntry {
+                ts: crate::admin::now_ts(),
+                event: crate::admin::EventType::Challenge,
+                ip: Some(ip.clone()),
+                reason: Some("geo_policy_challenge".to_string()),
+                outcome: Some(format!(
+                    "country={}",
+                    geo_assessment.country.as_deref().unwrap_or("unknown")
+                )),
+                admin: None,
+            });
+            return challenge::render_challenge(req);
+        }
+        geo::GeoPolicyRoute::Allow | geo::GeoPolicyRoute::None => {}
+    }
     // Compute unified botness score for challenge/maze step-up routing.
     let needs_js = path != "/health" && js::needs_js_verification_with_whitelist(req, store, site_id, &ip, &cfg.browser_whitelist);
-    let geo_risk = geo::is_high_risk_geo(req, &cfg.geo_risk);
+    let geo_risk = geo_assessment.scored_risk;
     let rate_usage = rate::current_rate_usage(store, site_id, &ip);
     let botness = compute_botness_assessment(needs_js, geo_risk, rate_usage, cfg.rate_limit, &cfg);
     let botness_summary = botness_signals_summary(&botness);
@@ -690,20 +810,6 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
             event: crate::admin::EventType::Challenge,
             ip: Some(ip.clone()),
             reason: Some("js_verification".to_string()),
-            outcome: Some("js challenge".to_string()),
-            admin: None,
-        });
-        return js::inject_js_challenge(&ip, cfg.pow_difficulty, cfg.pow_ttl_seconds);
-    }
-    // Geo-based escalation
-    if geo_risk {
-        metrics::increment(store, metrics::MetricName::ChallengesTotal, None);
-        // Log challenge event
-        crate::admin::log_event(store, &crate::admin::EventLogEntry {
-            ts: crate::admin::now_ts(),
-            event: crate::admin::EventType::Challenge,
-            ip: Some(ip.clone()),
-            reason: Some("geo_risk".to_string()),
             outcome: Some("js challenge".to_string()),
             admin: None,
         });
