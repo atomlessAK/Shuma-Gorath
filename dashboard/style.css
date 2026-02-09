@@ -50,6 +50,11 @@
   /* Foreground for buttons that use dark backgrounds in light mode
      and become light in dark mode (swap text color accordingly) */
   --btn-contrast-fg: var(--color-back);
+  --btn-submit-bg: var(--color-accent);
+  --btn-submit-hover-bg: var(--color-accent-hover);
+  --btn-submit-fg: var(--color-back);
+  --btn-submit-disabled-bg: var(--color-400);
+  --btn-submit-disabled-fg: var(--color-700);
 
   /* Typography scale */
   --text-xs: 0.8571rem;
@@ -167,6 +172,24 @@
   background: var(--color-400);
   cursor: not-allowed;
   opacity: 0.7;
+}
+
+/* Shared submit style for admin actions (save/ban/unban) */
+.btn-submit {
+  background: var(--btn-submit-bg);
+  color: var(--btn-submit-fg);
+}
+
+.btn-submit:hover {
+  background: var(--btn-submit-hover-bg);
+}
+
+.btn-submit:disabled,
+.btn-submit[disabled] {
+  background: var(--btn-submit-disabled-bg);
+  color: var(--btn-submit-disabled-fg);
+  cursor: not-allowed;
+  opacity: 1;
 }
 
 /* ===========================================
@@ -1124,6 +1147,11 @@ input:checked + .toggle-slider:before {
     --slider-track-bg: var(--color-500);
     --slider-track-border: var(--color-400);
     --btn-contrast-fg: var(--color-front);
+    --btn-submit-bg: var(--color-accent);
+    --btn-submit-hover-bg: var(--color-accent-hover);
+    --btn-submit-fg: var(--color-back);
+    --btn-submit-disabled-bg: var(--color-400);
+    --btn-submit-disabled-fg: var(--color-700);
     --color-env-var-bg: rgb(125, 75, 105);
   }
 
@@ -1185,6 +1213,21 @@ input:checked + .toggle-slider:before {
   .control-group .btn-subtle {
     background: var(--color-600);
     color: var(--color-back);
+  }
+
+  .control-group .btn-submit {
+    background: var(--btn-submit-bg);
+    color: var(--btn-submit-fg);
+  }
+
+  .control-group .btn-submit:hover {
+    background: var(--btn-submit-hover-bg);
+  }
+
+  .control-group .btn-submit:disabled,
+  .control-group .btn-submit[disabled] {
+    background: var(--btn-submit-disabled-bg);
+    color: var(--btn-submit-disabled-fg);
   }
 
 }

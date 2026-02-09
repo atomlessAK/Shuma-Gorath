@@ -141,12 +141,12 @@
               <input id="ban-ip" class="input-field" type="text" placeholder="IP address" aria-label="IP address to ban" />
               <input id="ban-reason" class="input-field" type="text" placeholder="Reason (optional)" value="manual_ban" aria-label="Ban reason" />
               <input id="ban-duration" class="input-field" type="number" placeholder="Duration (seconds)" value="3600" aria-label="Ban duration in seconds" />
-              <button id="ban-btn" class="btn btn-dark">Ban</button>
+              <button id="ban-btn" class="btn btn-submit">Ban</button>
             </div>
             <div class="control-group panel-soft pad-md">
               <h3>Unban IP</h3>
               <input id="unban-ip" class="input-field" type="text" placeholder="IP address" aria-label="IP address to unban" />
-              <button id="unban-btn" class="btn btn-subtle">Unban</button>
+              <button id="unban-btn" class="btn btn-submit">Unban</button>
             </div>
           </div>
         </section>
@@ -227,7 +227,7 @@
                   <input class="input-field" type="number" id="robots-crawl-delay" value="2" min="0" max="60" aria-label="Robots crawl delay in seconds">
                 </div>
               </div>
-              <button id="save-robots-config" class="btn" disabled>Update Policy</button>
+              <button id="save-robots-config" class="btn btn-submit" disabled>Update Policy</button>
               <button id="preview-robots" class="btn btn-subtle">Show robots.txt</button>
               <div id="robots-preview" class="robots-preview panel hidden pad-sm">
                 <h4>robots.txt Preview</h4>
@@ -257,11 +257,11 @@
                   <input class="input-field" type="number" id="maze-threshold" value="50" min="5" max="500" aria-label="Maze ban threshold in pages">
                 </div>
               </div>
-              <button id="save-maze-config" class="btn">Save Maze Settings</button>
+              <button id="save-maze-config" class="btn btn-submit">Save Maze Settings</button>
             </div>
             <div class="control-group panel-soft pad-md">
               <h3>GEO Policy</h3>
-              <p class="control-desc text-muted">Use 2-letter country codes (comma separated). Precedence: Block > Maze > Challenge > Allow.</p>
+              <p class="control-desc text-muted">Use <a href="https://www.iban.com/country-codes">2-letter country codes</a> (comma separated). Precedence: Block > Maze > Challenge > Allow.</p>
               <div class="admin-controls">
                 <div class="input-row">
                   <label class="control-label" for="geo-risk-list">Scoring Countries</label>
@@ -284,7 +284,7 @@
                   <input class="input-field" type="text" id="geo-block-list" placeholder="KP" aria-label="GEO block countries">
                 </div>
               </div>
-              <button id="save-geo-config" class="btn" disabled>Save GEO Settings</button>
+              <button id="save-geo-config" class="btn btn-submit" disabled>Save GEO Settings</button>
             </div>
             <div class="control-group panel-soft pad-md">
               <h3>CDP (Detect Browser Automation)</h3>
@@ -317,7 +317,7 @@
                   </div>
                 </div>
               </div>
-              <button id="save-cdp-config" class="btn" disabled>Save CDP Settings</button>
+              <button id="save-cdp-config" class="btn btn-submit" disabled>Save CDP Settings</button>
               <div id="cdp-stats" class="info-panel panel-muted pad-sm">
                 <h4>Detection Stats</h4>
                 <div class="info-row">
@@ -343,7 +343,7 @@
                   <input class="input-field" type="number" id="pow-ttl" min="30" max="300" value="90" aria-label="PoW seed TTL in seconds">
                 </div>
               </div>
-              <button id="save-pow-config" class="btn" disabled>Save PoW Settings</button>
+              <button id="save-pow-config" class="btn btn-submit" disabled>Save PoW Settings</button>
             </div>
             <div class="control-group panel-soft pad-md">
               <h3>Ban Durations</h3>
@@ -354,7 +354,7 @@
                 <label for="dur-browser">Browser:</label> <input id="dur-browser" class="input-field" type="number" value="21600" />
                 <label for="dur-admin">Admin:</label> <input id="dur-admin" class="input-field" type="number" value="21600" />
               </div>
-              <button id="save-durations-btn" class="btn btn-dark">Save Durations</button>
+              <button id="save-durations-btn" class="btn btn-submit">Save Durations</button>
             </div>
           </div>
         </section>
@@ -414,7 +414,7 @@
                   <div id="botness-terminal-list"></div>
                 </div>
               </div>
-              <button id="save-botness-config" class="btn" disabled>Save Botness Settings</button>
+              <button id="save-botness-config" class="btn btn-submit" disabled>Save Botness Settings</button>
             </div>
           </div>
         </section>
