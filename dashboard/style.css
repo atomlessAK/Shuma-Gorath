@@ -922,6 +922,48 @@ input:checked + .toggle-slider:before {
   border-color: var(--color-500);
 }
 
+/* GEO policy stacked country lists */
+.geo-controls {
+  gap: 10px;
+}
+
+.geo-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.geo-textarea {
+  width: 100%;
+  min-height: 0;
+  padding: 10px;
+  height: calc(1.4em + 22px);
+  resize: vertical;
+  font-size: var(--text-base);
+  line-height: 1.4;
+}
+
+.geo-textarea:focus {
+  outline: none;
+  border-color: var(--color-500);
+}
+
+.geo-textarea:disabled {
+  background: var(--color-100);
+  color: var(--muted-fg);
+  border-style: dashed;
+  cursor: not-allowed;
+  pointer-events: none;
+  opacity: 1;
+}
+
+.geo-divider {
+  width: 100%;
+  height: 1px;
+  background: var(--color-300);
+  margin: 4px 0;
+}
+
 /* Unit labels (e.g., "pages", "seconds") */
 .input-unit {
   font-size: var(--text-sm);

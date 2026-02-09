@@ -599,6 +599,8 @@ function updateMazeConfig(config) {
 }
 
 function updateGeoConfig(config) {
+  const configMode = String(config.config_mode || 'hybrid').toLowerCase();
+  const mutable = configMode !== 'env_only';
   const risk = formatCountryCodes(config.geo_risk);
   const allow = formatCountryCodes(config.geo_allow);
   const challenge = formatCountryCodes(config.geo_challenge);
@@ -616,7 +618,8 @@ function updateGeoConfig(config) {
     allow: normalizeCountryCodesForCompare(allow),
     challenge: normalizeCountryCodesForCompare(challenge),
     maze: normalizeCountryCodesForCompare(maze),
-    block: normalizeCountryCodesForCompare(block)
+    block: normalizeCountryCodesForCompare(block),
+    mutable
   };
 
   statusPanelState.geoRiskCount = Array.isArray(config.geo_risk) ? config.geo_risk.length : 0;
@@ -625,6 +628,8 @@ function updateGeoConfig(config) {
   statusPanelState.geoMazeCount = Array.isArray(config.geo_maze) ? config.geo_maze.length : 0;
   statusPanelState.geoBlockCount = Array.isArray(config.geo_block) ? config.geo_block.length : 0;
   renderStatusItems();
+
+  setGeoConfigEditable(mutable);
 
   const btn = document.getElementById('save-geo-config');
   btn.disabled = true;
@@ -671,8 +676,27 @@ let geoSavedState = {
   allow: '',
   challenge: '',
   maze: '',
-  block: ''
+  block: '',
+  mutable: false
 };
+
+const GEO_FIELD_IDS = [
+  'geo-risk-list',
+  'geo-allow-list',
+  'geo-challenge-list',
+  'geo-maze-list',
+  'geo-block-list'
+];
+
+function setGeoConfigEditable(editable) {
+  GEO_FIELD_IDS.forEach(id => {
+    const field = document.getElementById(id);
+    field.disabled = !editable;
+    if (!editable) {
+      field.blur();
+    }
+  });
+}
 
 function parseCountryCodesStrict(raw) {
   const values = (raw || '')
@@ -1125,6 +1149,12 @@ function checkBotnessConfigChanged() {
 });
 
 function checkGeoConfigChanged() {
+  const btn = document.getElementById('save-geo-config');
+  if (!geoSavedState.mutable) {
+    btn.disabled = true;
+    return;
+  }
+
   const current = {
     risk: normalizeCountryCodesForCompare(document.getElementById('geo-risk-list').value),
     allow: normalizeCountryCodesForCompare(document.getElementById('geo-allow-list').value),
@@ -1138,16 +1168,10 @@ function checkGeoConfigChanged() {
     current.challenge !== geoSavedState.challenge ||
     current.maze !== geoSavedState.maze ||
     current.block !== geoSavedState.block;
-  document.getElementById('save-geo-config').disabled = !changed;
+  btn.disabled = !changed;
 }
 
-[
-  'geo-risk-list',
-  'geo-allow-list',
-  'geo-challenge-list',
-  'geo-maze-list',
-  'geo-block-list'
-].forEach(id => {
+GEO_FIELD_IDS.forEach(id => {
   document.getElementById(id).addEventListener('input', checkGeoConfigChanged);
 });
 
@@ -1156,6 +1180,13 @@ document.getElementById('save-geo-config').onclick = async function() {
   const apikey = document.getElementById('apikey').value;
   const msg = document.getElementById('admin-msg');
   const btn = this;
+
+  if (!geoSavedState.mutable) {
+    msg.textContent = 'GEO settings are read-only while SHUMA_CONFIG_MODE=env_only.';
+    msg.className = 'message warning';
+    btn.disabled = true;
+    return;
+  }
 
   let geoRisk;
   let geoAllow;
@@ -1204,7 +1235,8 @@ document.getElementById('save-geo-config').onclick = async function() {
         allow: geoAllow.join(','),
         challenge: geoChallenge.join(','),
         maze: geoMaze.join(','),
-        block: geoBlock.join(',')
+        block: geoBlock.join(','),
+        mutable: true
       };
       btn.disabled = true;
     }

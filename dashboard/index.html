@@ -121,7 +121,7 @@
     <h2>Admin Controls</h2>
       <div class="admin-groups">
         <section class="admin-group admin-group--status">
-          <h3 class="admin-group-title">Banning</h3>
+          <h3 class="admin-group-title">IP Bans</h3>
           <table id="bans-table" class="panel panel-border bans-table-admin">
             <thead>
               <tr>
@@ -262,26 +262,27 @@
             <div class="control-group panel-soft pad-md">
               <h3>GEO Policy</h3>
               <p class="control-desc text-muted">Use <a href="https://www.iban.com/country-codes">2-letter country codes</a> (comma separated). Precedence: Block > Maze > Challenge > Allow.</p>
-              <div class="admin-controls">
-                <div class="input-row">
+              <div class="admin-controls geo-controls">
+                <div class="geo-field">
                   <label class="control-label" for="geo-risk-list">Scoring Countries</label>
-                  <input class="input-field" type="text" id="geo-risk-list" placeholder="CN, RU, KP" aria-label="GEO scoring countries">
+                  <textarea class="input-field geo-textarea" id="geo-risk-list" rows="1" aria-label="GEO scoring countries" spellcheck="false"></textarea>
                 </div>
-                <div class="input-row">
+                <div class="geo-divider" role="separator" aria-hidden="true"></div>
+                <div class="geo-field">
                   <label class="control-label" for="geo-allow-list">Allow Countries</label>
-                  <input class="input-field" type="text" id="geo-allow-list" placeholder="US, GB" aria-label="GEO allow countries">
+                  <textarea class="input-field geo-textarea" id="geo-allow-list" rows="1" aria-label="GEO allow countries" spellcheck="false"></textarea>
                 </div>
-                <div class="input-row">
+                <div class="geo-field">
                   <label class="control-label" for="geo-challenge-list">Challenge Countries</label>
-                  <input class="input-field" type="text" id="geo-challenge-list" placeholder="BR, IN" aria-label="GEO challenge countries">
+                  <textarea class="input-field geo-textarea" id="geo-challenge-list" rows="1" aria-label="GEO challenge countries" spellcheck="false"></textarea>
                 </div>
-                <div class="input-row">
+                <div class="geo-field">
                   <label class="control-label" for="geo-maze-list">Maze Countries</label>
-                  <input class="input-field" type="text" id="geo-maze-list" placeholder="RU, CN" aria-label="GEO maze countries">
+                  <textarea class="input-field geo-textarea" id="geo-maze-list" rows="1" aria-label="GEO maze countries" spellcheck="false"></textarea>
                 </div>
-                <div class="input-row">
+                <div class="geo-field">
                   <label class="control-label" for="geo-block-list">Block Countries</label>
-                  <input class="input-field" type="text" id="geo-block-list" placeholder="KP" aria-label="GEO block countries">
+                  <textarea class="input-field geo-textarea" id="geo-block-list" rows="1" aria-label="GEO block countries" spellcheck="false"></textarea>
                 </div>
               </div>
               <button id="save-geo-config" class="btn btn-submit" disabled>Save GEO Settings</button>
