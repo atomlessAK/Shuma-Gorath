@@ -435,6 +435,10 @@ th {
   text-align: left;
   font-size: var(--text-base);
   color: var(--color-700);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--color-100);
 }
 
 td {
@@ -466,6 +470,7 @@ code.env-var {
 }
 
 .table-wrapper {
+  position: relative;
   overflow-x: auto;
   max-height: 500px;
   overflow-y: auto;
