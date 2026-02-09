@@ -178,6 +178,21 @@ mod tests {
         let v: Vec<EventLogEntry> = serde_json::from_slice(&val).unwrap();
         assert_eq!(v.len(), 1);
     }
+
+    #[test]
+    fn query_u64_param_parses_multi_param_query() {
+        let query = "hours=24&limit=500";
+        assert_eq!(query_u64_param(query, "hours", 1), 24);
+        assert_eq!(query_u64_param(query, "limit", 10), 500);
+        assert_eq!(query_u64_param(query, "missing", 42), 42);
+    }
+
+    #[test]
+    fn is_cdp_event_reason_matches_detection_and_auto_ban() {
+        assert!(is_cdp_event_reason("cdp_detected:tier=medium score=0.7"));
+        assert!(is_cdp_event_reason("cdp_automation"));
+        assert!(!is_cdp_event_reason("maze_crawler"));
+    }
 }
 
 #[cfg(test)]
@@ -318,7 +333,71 @@ use serde_json::json;
 
 /// Returns true if the path is a valid admin endpoint (prevents path traversal/abuse).
 fn sanitize_path(path: &str) -> bool {
-    matches!(path, "/admin" | "/admin/ban" | "/admin/unban" | "/admin/analytics" | "/admin/events" | "/admin/config" | "/admin/maze" | "/admin/robots" | "/admin/cdp")
+    matches!(
+        path,
+        "/admin"
+            | "/admin/ban"
+            | "/admin/unban"
+            | "/admin/analytics"
+            | "/admin/events"
+            | "/admin/config"
+            | "/admin/maze"
+            | "/admin/robots"
+            | "/admin/cdp"
+            | "/admin/cdp/events"
+    )
+}
+
+fn query_u64_param(query: &str, key: &str, default: u64) -> u64 {
+    query
+        .split('&')
+        .find_map(|pair| {
+            let mut parts = pair.splitn(2, '=');
+            let k = parts.next()?;
+            let v = parts.next().unwrap_or("");
+            if k == key {
+                v.parse::<u64>().ok()
+            } else {
+                None
+            }
+        })
+        .unwrap_or(default)
+}
+
+fn load_recent_events<S: crate::challenge::KeyValueStore>(
+    store: &S,
+    now: u64,
+    hours: u64,
+) -> Vec<EventLogEntry> {
+    let mut events: Vec<EventLogEntry> = Vec::new();
+    let window_start = now.saturating_sub(hours.saturating_mul(3600));
+
+    for h in 0..hours {
+        let hour = (now / 3600).saturating_sub(h);
+        // Iterate eventlog pages for this hour
+        for page in 1..=EVENT_MAX_PAGES_PER_HOUR {
+            let key = format!("eventlog:{}:{}", hour, page);
+            if let Ok(Some(val)) = store.get(&key) {
+                if let Ok(log) = serde_json::from_slice::<Vec<EventLogEntry>>(&val) {
+                    for e in log {
+                        if e.ts >= window_start {
+                            events.push(e);
+                        }
+                    }
+                }
+            } else {
+                // No page present -> no further pages for this hour
+                break;
+            }
+        }
+    }
+
+    events
+}
+
+fn is_cdp_event_reason(reason: &str) -> bool {
+    let lowered = reason.to_lowercase();
+    lowered.starts_with("cdp_detected:") || lowered == "cdp_automation"
 }
 
 fn challenge_threshold_default() -> u8 {
@@ -811,6 +890,7 @@ fn handle_admin_config(req: &Request, store: &impl crate::challenge::KeyValueSto
 ///   - POST /admin/unban?ip=...: Remove a ban for an IP
 ///   - GET /admin/analytics: Return ban count and test_mode status
 ///   - GET /admin/events: Query event log
+///   - GET /admin/cdp/events: Query CDP-only events
 ///   - GET /admin/config: Get current config including test_mode status
 ///   - POST /admin/config: Update config (e.g., toggle test_mode)
 ///   - GET /admin: API help
@@ -839,36 +919,18 @@ pub fn handle_admin(req: &Request) -> Response {
     match path {
                 "/admin/events" => {
                     // Query event log for recent events, top IPs, and event statistics
-                    // Query params: ?hours=N (default 24)
-                    let hours: u64 = req.query().strip_prefix("hours=").and_then(|v| v.parse().ok()).unwrap_or(24);
+                    // Query params: ?hours=N (default 24, max 720)
+                    let hours = query_u64_param(req.query(), "hours", 24).clamp(1, 720);
                     let now = now_ts();
-                    let mut events: Vec<EventLogEntry> = Vec::new();
+                    let mut events = load_recent_events(&store, now, hours);
                     let mut ip_counts = std::collections::HashMap::new();
                     let mut event_counts = std::collections::HashMap::new();
-                    let store = &store;
-                    for h in 0..hours {
-                        let hour = (now / 3600).saturating_sub(h);
-                        // Iterate eventlog pages for this hour
-                        for page in 1..=EVENT_MAX_PAGES_PER_HOUR {
-                            let key = format!("eventlog:{}:{}", hour, page);
-                            if let Ok(Some(val)) = store.get(&key) {
-                                if let Ok(log) = serde_json::from_slice::<Vec<EventLogEntry>>(&val) {
-                                    for e in &log {
-                                        // Only include events within the time window
-                                        if e.ts >= now - hours * 3600 {
-                                            if let Some(ip) = &e.ip {
-                                                *ip_counts.entry(ip.clone()).or_insert(0u32) += 1;
-                                            }
-                                            *event_counts.entry(format!("{:?}", e.event)).or_insert(0u32) += 1;
-                                            events.push(e.clone());
-                                        }
-                                    }
-                                }
-                            } else {
-                                // No page present -> no further pages for this hour
-                                break;
-                            }
+
+                    for e in &events {
+                        if let Some(ip) = &e.ip {
+                            *ip_counts.entry(ip.clone()).or_insert(0u32) += 1;
                         }
+                        *event_counts.entry(format!("{:?}", e.event)).or_insert(0u32) += 1;
                     }
                     // Sort events by timestamp descending
                     events.sort_by(|a, b| b.ts.cmp(&a.ts));
@@ -885,7 +947,7 @@ pub fn handle_admin(req: &Request) -> Response {
                         "unique_ips": unique_ips,
                     })).unwrap();
                     // Log admin analytics view
-                    log_event(store, &EventLogEntry {
+                    log_event(&store, &EventLogEntry {
                         ts: now_ts(),
                         event: EventType::AdminAction,
                         ip: None,
@@ -895,6 +957,75 @@ pub fn handle_admin(req: &Request) -> Response {
                     });
                     Response::new(200, body)
                 }
+        "/admin/cdp/events" => {
+            // Query params: ?hours=N&limit=M
+            // hours default 24 (max 720), limit default 500 (max 5000)
+            let hours = query_u64_param(req.query(), "hours", 24).clamp(1, 720);
+            let limit = query_u64_param(req.query(), "limit", 500).clamp(1, 5000) as usize;
+            let now = now_ts();
+            let mut cdp_events: Vec<EventLogEntry> = load_recent_events(&store, now, hours)
+                .into_iter()
+                .filter(|entry| {
+                    entry
+                        .reason
+                        .as_deref()
+                        .map(is_cdp_event_reason)
+                        .unwrap_or(false)
+                })
+                .collect();
+
+            cdp_events.sort_by(|a, b| b.ts.cmp(&a.ts));
+
+            let total_matches = cdp_events.len();
+            let detections = cdp_events
+                .iter()
+                .filter(|entry| {
+                    entry
+                        .reason
+                        .as_deref()
+                        .map(|reason| reason.to_lowercase().starts_with("cdp_detected:"))
+                        .unwrap_or(false)
+                })
+                .count();
+            let auto_bans = cdp_events
+                .iter()
+                .filter(|entry| {
+                    entry
+                        .reason
+                        .as_deref()
+                        .map(|reason| reason.eq_ignore_ascii_case("cdp_automation"))
+                        .unwrap_or(false)
+                })
+                .count();
+
+            cdp_events.truncate(limit);
+
+            // Log admin view for CDP-focused telemetry
+            log_event(&store, &EventLogEntry {
+                ts: now_ts(),
+                event: EventType::AdminAction,
+                ip: None,
+                reason: Some("cdp_events_view".to_string()),
+                outcome: Some(format!(
+                    "{} cdp events (hours={}, limit={})",
+                    total_matches, hours, limit
+                )),
+                admin: Some(crate::auth::get_admin_id(req)),
+            });
+
+            let body = serde_json::to_string(&json!({
+                "events": cdp_events,
+                "hours": hours,
+                "limit": limit,
+                "total_matches": total_matches,
+                "counts": {
+                    "detections": detections,
+                    "auto_bans": auto_bans
+                }
+            }))
+            .unwrap();
+            Response::new(200, body)
+        }
         "/admin/ban" => {
             // POST: Manually ban an IP
             if *req.method() == spin_sdk::http::Method::Post {
@@ -1011,7 +1142,7 @@ pub fn handle_admin(req: &Request) -> Response {
                 outcome: None,
                 admin: Some(crate::auth::get_admin_id(req)),
             });
-            Response::new(200, "WASM Bot Trap Admin API. Endpoints: /admin/ban, /admin/unban?ip=IP, /admin/analytics, /admin/events, /admin/config, /admin/maze (GET for maze stats), /admin/robots (GET for robots.txt config & preview), /admin/cdp (GET for CDP detection config & stats).")
+            Response::new(200, "WASM Bot Trap Admin API. Endpoints: /admin/ban, /admin/unban?ip=IP, /admin/analytics, /admin/events, /admin/config, /admin/maze (GET for maze stats), /admin/robots (GET for robots.txt config & preview), /admin/cdp (GET for CDP detection config & stats), /admin/cdp/events (GET for CDP detection and auto-ban events).")
         }
         "/admin/maze" => {
             // Return maze honeypot statistics

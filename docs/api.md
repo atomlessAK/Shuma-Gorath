@@ -69,6 +69,7 @@ When `SHUMA_DEBUG_HEADERS=true`, the health response includes:
 - `POST /admin/unban?ip=x.x.x.x` - Unban an IP
 - `GET /admin/analytics` - Ban/event statistics
 - `GET /admin/events?hours=N` - Recent events + summary stats
+- `GET /admin/cdp/events?hours=N&limit=M` - CDP-only detections/auto-bans (time-windowed, limit configurable)
 - `GET /admin/config` - Read configuration
 - `POST /admin/config` - Update configuration (partial JSON, disabled when `SHUMA_CONFIG_MODE=env_only`)
 - `GET /admin/maze` - Link maze stats
@@ -89,6 +90,16 @@ When `SHUMA_DEBUG_HEADERS=true`, the health response includes:
 - `event_counts` (counts per event type)
 - `top_ips` (top 10 IPs by event count)
 - `unique_ips` (distinct IP count)
+
+For CDP-only operational views without the 100-row mixed-event cap, use:
+
+`GET /admin/cdp/events?hours=24&limit=500` returns:
+- `events` (CDP detection and CDP auto-ban events only, up to `limit`)
+- `hours` (effective query window)
+- `limit` (effective result cap)
+- `total_matches` (number of matched CDP events before truncation)
+- `counts.detections` (CDP detection event count in the window)
+- `counts.auto_bans` (CDP auto-ban event count in the window)
 
 ### 🐙 Example: List Bans
 

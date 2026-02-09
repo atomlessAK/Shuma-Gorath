@@ -563,10 +563,7 @@ function updateCdpEventsTable(events) {
   if (!tbody) return;
   tbody.innerHTML = '';
 
-  const cdpEvents = (events || []).filter(ev => {
-    const reason = (ev.reason || '').toLowerCase();
-    return reason.startsWith('cdp_detected:') || reason === 'cdp_automation';
-  });
+  const cdpEvents = events || [];
 
   if (cdpEvents.length === 0) {
     tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #6b7280;">No CDP detections or auto-bans in the selected window</td></tr>';
@@ -595,6 +592,21 @@ function updateCdpEventsTable(events) {
       <td>${details}</td>
     `;
     tbody.appendChild(tr);
+  }
+}
+
+function updateCdpTotals(cdpData) {
+  const detections = cdpData?.stats?.total_detections ?? 0;
+  const autoBans = cdpData?.stats?.auto_bans ?? 0;
+
+  const detectionsEl = document.getElementById('cdp-total-detections');
+  const autoBansEl = document.getElementById('cdp-total-auto-bans');
+
+  if (detectionsEl) {
+    detectionsEl.textContent = Number(detections).toLocaleString();
+  }
+  if (autoBansEl) {
+    autoBansEl.textContent = Number(autoBans).toLocaleString();
   }
 }
 
@@ -1501,16 +1513,22 @@ document.getElementById('save-cdp-config').onclick = async function() {
 document.getElementById('refresh').onclick = async function() {
   const endpoint = document.getElementById('endpoint').value.replace(/\/$/, '');
   const apikey = document.getElementById('apikey').value;
+  const cdpWindowHours = 24;
+  const cdpWindowLimit = 500;
   
   // Show loading state
   document.getElementById('total-bans').textContent = '...';
   document.getElementById('active-bans').textContent = '...';
   document.getElementById('total-events').textContent = '...';
   document.getElementById('unique-ips').textContent = '...';
+  const cdpTotalDetections = document.getElementById('cdp-total-detections');
+  const cdpTotalAutoBans = document.getElementById('cdp-total-auto-bans');
+  if (cdpTotalDetections) cdpTotalDetections.textContent = '...';
+  if (cdpTotalAutoBans) cdpTotalAutoBans.textContent = '...';
 
   try {
     // Fetch all data in parallel
-    const [analyticsResp, eventsResp, bansResp, mazeResp] = await Promise.all([
+    const [analyticsResp, eventsResp, bansResp, mazeResp, cdpResp, cdpEventsResp] = await Promise.all([
       fetch(endpoint + '/admin/analytics', {
         headers: { 'Authorization': 'Bearer ' + apikey }
       }),
@@ -1522,10 +1540,16 @@ document.getElementById('refresh').onclick = async function() {
       }),
       fetch(endpoint + '/admin/maze', {
         headers: { 'Authorization': 'Bearer ' + apikey }
+      }),
+      fetch(endpoint + '/admin/cdp', {
+        headers: { 'Authorization': 'Bearer ' + apikey }
+      }),
+      fetch(endpoint + `/admin/cdp/events?hours=${cdpWindowHours}&limit=${cdpWindowLimit}`, {
+        headers: { 'Authorization': 'Bearer ' + apikey }
       })
     ]);
 
-    if (!analyticsResp.ok || !eventsResp.ok || !bansResp.ok) {
+    if (!analyticsResp.ok || !eventsResp.ok || !bansResp.ok || !cdpResp.ok || !cdpEventsResp.ok) {
       throw new Error('Failed to fetch data. Check API key and endpoint.');
     }
 
@@ -1533,6 +1557,8 @@ document.getElementById('refresh').onclick = async function() {
     const events = await eventsResp.json();
     const bansData = await bansResp.json();
     const mazeData = mazeResp.ok ? await mazeResp.json() : null;
+    const cdpData = await cdpResp.json();
+    const cdpEventsData = await cdpEventsResp.json();
 
     // Update all sections
     updateStatCards(analytics, events, bansData.bans || []);
@@ -1541,7 +1567,8 @@ document.getElementById('refresh').onclick = async function() {
     updateTimeSeriesChart();
     updateBansTable(bansData.bans || []);
     updateEventsTable(events.recent_events || []);
-    updateCdpEventsTable(events.recent_events || []);
+    updateCdpTotals(cdpData);
+    updateCdpEventsTable(cdpEventsData.events || []);
     
     // Update maze stats
     if (mazeData) {

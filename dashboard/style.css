@@ -307,6 +307,10 @@ h1 {
   margin-bottom: 30px;
 }
 
+.stats-cards--compact {
+  margin-bottom: 16px;
+}
+
 .card {
 }
 
@@ -319,6 +323,10 @@ h1 {
 .stat-value {
   font-size: var(--text-5xl);
   font-weight: 700;
+}
+
+.stat-value-sm {
+  font-size: var(--text-4xl);
 }
 
 /* ===========================================

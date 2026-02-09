@@ -22,6 +22,8 @@ Charts:
 Tables:
 - Current bans (IP, reason, timestamps, signal badges, expandable fingerprint details, quick unban)
 - Recent events (type, IP, timestamp, reason)
+- CDP detections & bans table (time-windowed CDP-only feed)
+- CDP cumulative totals (all-time detections + auto-bans)
 
 Controls:
 - Test mode toggle
@@ -62,6 +64,7 @@ Event log retention is controlled by `SHUMA_EVENT_LOG_RETENTION_HOURS` (default:
 
 - `GET  /admin/analytics`
 - `GET  /admin/events?hours=24`
+- `GET  /admin/cdp/events?hours=24&limit=500`
 - `GET  /admin/config`
 - `POST /admin/config`
 - `POST /admin/ban`
