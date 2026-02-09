@@ -170,7 +170,7 @@ Supporting control vars:
 ## 🐙 Mutability Notes
 
 - `SHUMA_POW_DIFFICULTY` and `SHUMA_POW_TTL_SECONDS` are always env-controlled unless `SHUMA_POW_CONFIG_MUTABLE=1`.
-- `SHUMA_CHALLENGE_RISK_THRESHOLD`, `SHUMA_BOTNESS_MAZE_THRESHOLD`, and `BOTNESS_WEIGHT_*` are env-controlled unless `SHUMA_BOTNESS_CONFIG_MUTABLE=true` (or legacy fallback `SHUMA_CHALLENGE_CONFIG_MUTABLE=true`).
+- `SHUMA_CHALLENGE_RISK_THRESHOLD`, `SHUMA_BOTNESS_MAZE_THRESHOLD`, and `SHUMA_BOTNESS_WEIGHT_*` are env-controlled unless `SHUMA_BOTNESS_CONFIG_MUTABLE=true` (or legacy fallback `SHUMA_CHALLENGE_CONFIG_MUTABLE=true`).
 - In `env_only`, admin writes are blocked regardless of mutability flags.
 
 ## 🐙 Example Config (Partial)

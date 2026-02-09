@@ -85,7 +85,7 @@ Origin Application
 | JavaScript Challenges | Yes | Yes | Shuma uses signed cookie challenge
 | Honeypots | Limited | Strong | App-specific trap paths
 | Rate Limiting | Policy-based | Per-IP windows | Highly configurable via code
-| Geo Controls | Yes | Yes | Uses `X-Geo-Country`
+| Geo Controls | Yes | Yes | Uses trusted `X-Geo-Country` with tiered routing (`allow/challenge/maze/block`)
 | Admin UI | Enterprise console | Dashboard + API | Self-managed
 | Auditability | No | Yes | Fully open source
 | Cost Model | Per-request licensing | Open source + hosting | Depends on platform

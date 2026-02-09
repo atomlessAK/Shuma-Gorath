@@ -8,10 +8,7 @@ Single source of truth for active project work.
 - [ ] Define platform scope boundaries to avoid overreach by leaning on upstream bot managers (for example Akamai) for features better handled there. (product architecture)
 
 ## GEO Defense Maturity
-- [ ] Implement trusted GEO header boundary rules so only edge-trusted GEO data is used. (src/geo.rs, src/lib.rs, docs)
 - [ ] Add ASN/network dimensions in GEO policy logic (not just country list). (src/geo.rs, src/config.rs, src/admin.rs)
-- [ ] Add endpoint-aware GEO policy tiers (allow, challenge, maze, block) with clear precedence. (src/lib.rs, src/config.rs)
-- [ ] Expose editable GEO policy controls in admin and config API (not only weight/status visibility). (dashboard, src/admin.rs, docs/api.md)
 - [ ] Add GEO/ASN observability and alerting (metrics + dashboard panels + docs). (src/metrics.rs, dashboard, docs)
 
 ## Config and Naming Clarity
