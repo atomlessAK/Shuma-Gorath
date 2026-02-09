@@ -75,10 +75,6 @@ function sanitizeEndpointText(value) {
   return (value || '').replace(/\s+/g, '').trim();
 }
 
-function clampInteger(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-
 function parseIntegerLoose(id) {
   const input = document.getElementById(id);
   const rules = INTEGER_FIELD_RULES[id];
@@ -88,7 +84,7 @@ function parseIntegerLoose(id) {
   if (sanitized.length === 0) return null;
   const parsed = Number.parseInt(sanitized, 10);
   if (!Number.isInteger(parsed)) return null;
-  return clampInteger(parsed, rules.min, rules.max);
+  return parsed;
 }
 
 function showValidationMessage(target, message) {
@@ -152,86 +148,197 @@ function parseEndpointUrl(value) {
   }
 }
 
+function validateIntegerFieldById(id) {
+  const input = document.getElementById(id);
+  const rules = INTEGER_FIELD_RULES[id];
+  if (!input || !rules) return false;
+  const parsed = parseIntegerLoose(id);
+  if (parsed === null) {
+    input.setCustomValidity(`${rules.label} is required.`);
+    return false;
+  }
+  if (parsed < rules.min || parsed > rules.max) {
+    input.setCustomValidity(`${rules.label} must be between ${rules.min} and ${rules.max}.`);
+    return false;
+  }
+  input.setCustomValidity('');
+  return true;
+}
+
 function readIntegerFieldValue(id, messageTarget) {
   const input = document.getElementById(id);
   const rules = INTEGER_FIELD_RULES[id];
   if (!input || !rules) return null;
-
-  const parsed = parseIntegerLoose(id);
-  if (parsed === null) {
-    input.setCustomValidity(`${rules.label} is required.`);
-    if (messageTarget) showValidationMessage(messageTarget, `${rules.label} is required.`);
+  if (!validateIntegerFieldById(id)) {
+    const parsed = parseIntegerLoose(id);
+    const message = parsed === null
+      ? `${rules.label} is required.`
+      : `${rules.label} must be between ${rules.min} and ${rules.max}.`;
+    if (messageTarget) showValidationMessage(messageTarget, message);
     input.reportValidity();
     input.focus();
     return null;
   }
-  if (parsed < rules.min || parsed > rules.max) {
-    input.setCustomValidity(`${rules.label} must be between ${rules.min} and ${rules.max}.`);
-    if (messageTarget) showValidationMessage(messageTarget, `${rules.label} must be between ${rules.min} and ${rules.max}.`);
-    input.reportValidity();
-    input.focus();
-    return null;
-  }
-
-  input.value = String(parsed);
+  const value = parseIntegerLoose(id);
+  input.value = String(value);
   input.setCustomValidity('');
-  return parsed;
+  return value;
 }
 
-function readIpFieldValue(id, required, messageTarget, label) {
+function validateIpFieldById(id, required, label) {
   const input = document.getElementById(id);
-  if (!input) return null;
+  if (!input) return false;
   const sanitized = sanitizeIpText(input.value.trim());
   if (input.value !== sanitized) input.value = sanitized;
 
   if (!sanitized) {
     if (!required) {
       input.setCustomValidity('');
-      return '';
+      return true;
     }
     input.setCustomValidity(`${label} is required.`);
-    if (messageTarget) showValidationMessage(messageTarget, `${label} is required.`);
-    input.reportValidity();
-    input.focus();
-    return null;
+    return false;
   }
 
   if (!isValidIpAddress(sanitized)) {
     input.setCustomValidity(`${label} must be a valid IPv4 or IPv6 address.`);
-    if (messageTarget) showValidationMessage(messageTarget, `${label} must be a valid IPv4 or IPv6 address.`);
+    return false;
+  }
+  input.setCustomValidity('');
+  return true;
+}
+
+function readIpFieldValue(id, required, messageTarget, label) {
+  const input = document.getElementById(id);
+  if (!input) return null;
+  if (!validateIpFieldById(id, required, label)) {
+    const sanitized = sanitizeIpText(input.value.trim());
+    const message = sanitized.length === 0
+      ? `${label} is required.`
+      : `${label} must be a valid IPv4 or IPv6 address.`;
+    if (messageTarget) showValidationMessage(messageTarget, message);
     input.reportValidity();
     input.focus();
     return null;
   }
-
+  const sanitized = sanitizeIpText(input.value.trim());
+  input.value = sanitized;
   input.setCustomValidity('');
   return sanitized;
+}
+
+function validateEndpointInput() {
+  const endpointInput = document.getElementById('endpoint');
+  if (!endpointInput) return null;
+  const sanitized = sanitizeEndpointText(endpointInput.value);
+  if (endpointInput.value !== sanitized) endpointInput.value = sanitized;
+  const endpoint = parseEndpointUrl(sanitized);
+  endpointInput.setCustomValidity(endpoint ? '' : 'Enter a valid http(s) API endpoint URL.');
+  return endpoint;
+}
+
+function validateApiKeyInput() {
+  const apikeyInput = document.getElementById('apikey');
+  if (!apikeyInput) return false;
+  const apikey = (apikeyInput.value || '').trim();
+  apikeyInput.setCustomValidity(apikey ? '' : 'API key is required.');
+  return Boolean(apikey);
+}
+
+function hasValidApiContext() {
+  const endpoint = validateEndpointInput();
+  const hasKey = validateApiKeyInput();
+  return Boolean(endpoint && hasKey);
+}
+
+function validateGeoFieldById(id) {
+  const field = document.getElementById(id);
+  if (!field) return false;
+  try {
+    parseCountryCodesStrict(field.value);
+    field.setCustomValidity('');
+    return true;
+  } catch (e) {
+    field.setCustomValidity(e.message || 'Invalid country list.');
+    return false;
+  }
+}
+
+function refreshCoreActionButtonsState() {
+  const apiValid = hasValidApiContext();
+  const refreshBtn = document.getElementById('refresh');
+  if (refreshBtn) {
+    refreshBtn.disabled = !apiValid;
+  }
+
+  const banBtn = document.getElementById('ban-btn');
+  if (banBtn) {
+    banBtn.disabled = !(apiValid && validateIpFieldById('ban-ip', true, 'Ban IP') && validateIntegerFieldById('ban-duration'));
+  }
+
+  const unbanBtn = document.getElementById('unban-btn');
+  if (unbanBtn) {
+    unbanBtn.disabled = !(apiValid && validateIpFieldById('unban-ip', true, 'Unban IP'));
+  }
+
+  const saveDurationsBtn = document.getElementById('save-durations-btn');
+  if (saveDurationsBtn) {
+    const durationValid =
+      validateIntegerFieldById('dur-honeypot') &&
+      validateIntegerFieldById('dur-rate-limit') &&
+      validateIntegerFieldById('dur-browser') &&
+      validateIntegerFieldById('dur-admin');
+    saveDurationsBtn.disabled = !(apiValid && durationValid);
+  }
+
+  const saveMazeBtn = document.getElementById('save-maze-config');
+  if (saveMazeBtn && !saveMazeBtn.textContent.includes('Saving')) {
+    saveMazeBtn.disabled = !(apiValid && validateIntegerFieldById('maze-threshold'));
+  }
+
+  if (typeof checkRobotsConfigChanged === 'function') {
+    checkRobotsConfigChanged();
+  }
+  if (typeof checkGeoConfigChanged === 'function') {
+    checkGeoConfigChanged();
+  }
+  if (typeof checkPowConfigChanged === 'function') {
+    checkPowConfigChanged();
+  }
+  if (typeof checkBotnessConfigChanged === 'function') {
+    checkBotnessConfigChanged();
+  }
+  if (typeof checkCdpConfigChanged === 'function') {
+    checkCdpConfigChanged();
+  }
 }
 
 function getAdminContext(messageTarget) {
   const endpointInput = document.getElementById('endpoint');
   const apikeyInput = document.getElementById('apikey');
-  const endpoint = parseEndpointUrl(endpointInput.value);
+  const endpoint = validateEndpointInput();
   if (!endpoint) {
-    endpointInput.setCustomValidity('Enter a valid http(s) API endpoint URL.');
     if (messageTarget) showValidationMessage(messageTarget, 'Enter a valid http(s) API endpoint URL.');
     endpointInput.reportValidity();
     endpointInput.focus();
+    refreshCoreActionButtonsState();
     return null;
   }
-  endpointInput.value = endpoint;
-  endpointInput.setCustomValidity('');
 
   const apikey = (apikeyInput.value || '').trim();
-  if (!apikey) {
-    apikeyInput.setCustomValidity('API key is required.');
+  if (!validateApiKeyInput()) {
     if (messageTarget) showValidationMessage(messageTarget, 'API key is required.');
     apikeyInput.reportValidity();
     apikeyInput.focus();
+    refreshCoreActionButtonsState();
     return null;
   }
+
+  endpointInput.value = endpoint;
+  endpointInput.setCustomValidity('');
   apikeyInput.setCustomValidity('');
   if (messageTarget) clearValidationMessage(messageTarget);
+  refreshCoreActionButtonsState();
   return { endpoint, apikey };
 }
 
@@ -259,14 +366,19 @@ function bindIntegerFieldValidation(id) {
     input.setCustomValidity('');
   };
 
-  input.addEventListener('input', apply);
+  input.addEventListener('input', () => {
+    apply();
+    refreshCoreActionButtonsState();
+  });
   input.addEventListener('blur', () => {
     if (!input.value) {
       input.value = String(rules.fallback);
     }
     const parsed = parseIntegerLoose(id);
-    if (parsed !== null) input.value = String(parsed);
+    if (parsed !== null && parsed < rules.min) input.value = String(rules.min);
+    if (parsed !== null && parsed > rules.max) input.value = String(rules.max);
     apply();
+    refreshCoreActionButtonsState();
   });
   apply();
 }
@@ -275,34 +387,46 @@ function bindIpFieldValidation(id, required, label) {
   const input = document.getElementById(id);
   if (!input) return;
   const apply = () => {
-    const sanitized = sanitizeIpText(input.value);
-    if (input.value !== sanitized) input.value = sanitized;
-    const value = sanitized.trim();
-    if (!value) {
-      input.setCustomValidity(required ? `${label} is required.` : '');
-      return;
-    }
-    input.setCustomValidity(isValidIpAddress(value) ? '' : `${label} must be a valid IPv4 or IPv6 address.`);
+    validateIpFieldById(id, required, label);
   };
-  input.addEventListener('input', apply);
-  input.addEventListener('blur', apply);
+  input.addEventListener('input', () => {
+    apply();
+    refreshCoreActionButtonsState();
+  });
+  input.addEventListener('blur', () => {
+    apply();
+    refreshCoreActionButtonsState();
+  });
   apply();
 }
 
 function bindEndpointFieldValidation() {
   const input = document.getElementById('endpoint');
   if (!input) return;
-  const apply = () => {
-    const sanitized = sanitizeEndpointText(input.value);
-    if (input.value !== sanitized) input.value = sanitized;
-    const endpoint = parseEndpointUrl(sanitized);
-    input.setCustomValidity(endpoint ? '' : 'Enter a valid http(s) API endpoint URL.');
-  };
-  input.addEventListener('input', apply);
-  input.addEventListener('blur', () => {
-    const endpoint = parseEndpointUrl(input.value);
-    if (endpoint) input.value = endpoint;
+  const apply = () => validateEndpointInput();
+  input.addEventListener('input', () => {
     apply();
+    refreshCoreActionButtonsState();
+  });
+  input.addEventListener('blur', () => {
+    const endpoint = validateEndpointInput();
+    if (endpoint) input.value = endpoint;
+    refreshCoreActionButtonsState();
+  });
+  apply();
+}
+
+function bindApiKeyFieldValidation() {
+  const input = document.getElementById('apikey');
+  if (!input) return;
+  const apply = () => validateApiKeyInput();
+  input.addEventListener('input', () => {
+    apply();
+    refreshCoreActionButtonsState();
+  });
+  input.addEventListener('blur', () => {
+    apply();
+    refreshCoreActionButtonsState();
   });
   apply();
 }
@@ -312,6 +436,8 @@ function initInputValidation() {
   bindIpFieldValidation('ban-ip', true, 'Ban IP');
   bindIpFieldValidation('unban-ip', true, 'Unban IP');
   bindEndpointFieldValidation();
+  bindApiKeyFieldValidation();
+  refreshCoreActionButtonsState();
 }
 
 function envVar(name) {
@@ -1135,6 +1261,8 @@ function updateRobotsConfig(config) {
 
 // Check if robots config has changed from saved state
 function checkRobotsConfigChanged() {
+  const apiValid = hasValidApiContext();
+  const delayValid = validateIntegerFieldById('robots-crawl-delay');
   const current = {
     enabled: document.getElementById('robots-enabled-toggle').checked,
     blockTraining: document.getElementById('robots-block-training-toggle').checked,
@@ -1150,7 +1278,7 @@ function checkRobotsConfigChanged() {
     current.crawlDelay !== robotsSavedState.crawlDelay
   );
   const btn = document.getElementById('save-robots-config');
-  btn.disabled = !changed;
+  btn.disabled = !changed || !apiValid || !delayValid;
   if (changed) {
     btn.textContent = 'Update Policy';
   }
@@ -1474,6 +1602,8 @@ function updateChallengeConfig(config) {
 
 function checkPowConfigChanged() {
   const btn = document.getElementById('save-pow-config');
+  const apiValid = hasValidApiContext();
+  const powFieldsValid = validateIntegerFieldById('pow-difficulty') && validateIntegerFieldById('pow-ttl');
   if (!powSavedState.mutable) {
     btn.disabled = true;
     return;
@@ -1483,7 +1613,7 @@ function checkPowConfigChanged() {
     ttl: parseInt(document.getElementById('pow-ttl').value, 10) || 90
   };
   const changed = current.difficulty !== powSavedState.difficulty || current.ttl !== powSavedState.ttl;
-  btn.disabled = !changed;
+  btn.disabled = !changed || !apiValid || !powFieldsValid;
 }
 
 document.getElementById('pow-difficulty').addEventListener('input', checkPowConfigChanged);
@@ -1491,6 +1621,14 @@ document.getElementById('pow-ttl').addEventListener('input', checkPowConfigChang
 
 function checkBotnessConfigChanged() {
   const btn = document.getElementById('save-botness-config');
+  const apiValid = hasValidApiContext();
+  const fieldsValid =
+    validateIntegerFieldById('challenge-threshold') &&
+    validateIntegerFieldById('maze-threshold-score') &&
+    validateIntegerFieldById('weight-js-required') &&
+    validateIntegerFieldById('weight-geo-risk') &&
+    validateIntegerFieldById('weight-rate-medium') &&
+    validateIntegerFieldById('weight-rate-high');
   if (!botnessSavedState.mutable) {
     btn.disabled = true;
     return;
@@ -1510,7 +1648,7 @@ function checkBotnessConfigChanged() {
     current.weightGeoRisk !== botnessSavedState.weightGeoRisk ||
     current.weightRateMedium !== botnessSavedState.weightRateMedium ||
     current.weightRateHigh !== botnessSavedState.weightRateHigh;
-  btn.disabled = !changed;
+  btn.disabled = !changed || !apiValid || !fieldsValid;
 }
 
 [
@@ -1526,6 +1664,8 @@ function checkBotnessConfigChanged() {
 
 function checkGeoConfigChanged() {
   const btn = document.getElementById('save-geo-config');
+  const apiValid = hasValidApiContext();
+  const geoValid = GEO_FIELD_IDS.every(validateGeoFieldById);
   if (!geoSavedState.mutable) {
     btn.disabled = true;
     return;
@@ -1544,7 +1684,7 @@ function checkGeoConfigChanged() {
     current.challenge !== geoSavedState.challenge ||
     current.maze !== geoSavedState.maze ||
     current.block !== geoSavedState.block;
-  btn.disabled = !changed;
+  btn.disabled = !changed || !apiValid || !geoValid;
 }
 
 GEO_FIELD_IDS.forEach(id => {
@@ -1560,7 +1700,14 @@ GEO_FIELD_IDS.forEach(id => {
         field.setSelectionRange(next, next);
       }
     }
+    validateGeoFieldById(id);
     checkGeoConfigChanged();
+    refreshCoreActionButtonsState();
+  });
+  field.addEventListener('blur', () => {
+    validateGeoFieldById(id);
+    checkGeoConfigChanged();
+    refreshCoreActionButtonsState();
   });
 });
 
@@ -1767,6 +1914,7 @@ document.getElementById('save-botness-config').onclick = async function() {
 
 // Check if CDP config has changed from saved state
 function checkCdpConfigChanged() {
+  const apiValid = hasValidApiContext();
   const current = {
     enabled: document.getElementById('cdp-enabled-toggle').checked,
     autoBan: document.getElementById('cdp-auto-ban-toggle').checked,
@@ -1778,7 +1926,7 @@ function checkCdpConfigChanged() {
     current.threshold !== cdpSavedState.threshold
   );
   const btn = document.getElementById('save-cdp-config');
-  btn.disabled = !changed;
+  btn.disabled = !changed || !apiValid;
 }
 
 // Update threshold display when slider moves
@@ -1930,6 +2078,8 @@ document.getElementById('refresh').onclick = async function() {
     } catch (e) {
       console.error('Failed to load config:', e);
     }
+
+    refreshCoreActionButtonsState();
     
     // Update last updated time
     document.getElementById('last-updated').textContent = 
