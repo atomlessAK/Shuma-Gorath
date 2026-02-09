@@ -989,7 +989,7 @@ fn handle_admin_config(
 /// Handles all /admin API endpoints. Requires valid API key in Authorization header.
 /// Supports:
 ///   - GET /admin/ban: List all bans for the site
-///   - POST /admin/ban: Manually ban an IP (expects JSON body: {"ip": "1.2.3.4", "reason": "...", "duration": 3600})
+///   - POST /admin/ban: Manually ban an IP (expects JSON body: {"ip": "1.2.3.4", "duration": 3600}; reason is fixed to "manual_ban")
 ///   - POST /admin/unban?ip=...: Remove a ban for an IP
 ///   - GET /admin/analytics: Return ban count and test_mode status
 ///   - GET /admin/events: Query event log
@@ -1158,14 +1158,8 @@ pub fn handle_admin(req: &Request) -> Response {
                     Some(v) => v,
                     None => return Response::new(400, "Invalid IP address"),
                 };
-                let reason = match crate::input_validation::sanitize_admin_reason(
-                    json.get("reason")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("admin_ban"),
-                ) {
-                    Ok(v) => v,
-                    Err(e) => return Response::new(400, e),
-                };
+                // Manual bans are always tagged with a fixed reason to prevent client-side tampering.
+                let reason = "manual_ban".to_string();
                 let duration = json
                     .get("duration")
                     .and_then(|v| v.as_u64())

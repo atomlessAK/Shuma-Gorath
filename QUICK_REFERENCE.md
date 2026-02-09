@@ -50,7 +50,7 @@ make test-integration      # In terminal 2
 
 ### 🐙 Admin API (requires `Authorization: Bearer <SHUMA_API_KEY>`)
 - `GET /admin/ban` - List all bans
-- `POST /admin/ban` - Manually ban IP (JSON: `{"ip":"x.x.x.x","reason":"...","duration":3600}`)
+- `POST /admin/ban` - Manually ban IP (JSON: `{"ip":"x.x.x.x","duration":3600}`; reason is always `manual_ban`)
 - `POST /admin/unban?ip=x.x.x.x` - Unban an IP
 - `GET /admin/analytics` - Get ban statistics
 - `GET /admin/events?hours=24` - Get recent events

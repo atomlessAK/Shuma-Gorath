@@ -42,6 +42,278 @@ const statusPanelState = {
   }
 };
 
+const INTEGER_FIELD_RULES = {
+  'ban-duration': { min: 60, max: 31536000, fallback: 3600, label: 'Ban duration' },
+  'robots-crawl-delay': { min: 0, max: 60, fallback: 2, label: 'Crawl delay' },
+  'maze-threshold': { min: 5, max: 500, fallback: 50, label: 'Maze threshold' },
+  'pow-difficulty': { min: 12, max: 20, fallback: 15, label: 'PoW difficulty' },
+  'pow-ttl': { min: 30, max: 300, fallback: 90, label: 'PoW seed TTL' },
+  'dur-honeypot': { min: 60, max: 31536000, fallback: 86400, label: 'Honeypot duration' },
+  'dur-rate-limit': { min: 60, max: 31536000, fallback: 3600, label: 'Rate limit duration' },
+  'dur-browser': { min: 60, max: 31536000, fallback: 21600, label: 'Browser duration' },
+  'dur-admin': { min: 60, max: 31536000, fallback: 21600, label: 'Admin duration' },
+  'challenge-threshold': { min: 1, max: 10, fallback: 3, label: 'Challenge threshold' },
+  'maze-threshold-score': { min: 1, max: 10, fallback: 6, label: 'Maze threshold' },
+  'weight-js-required': { min: 0, max: 10, fallback: 1, label: 'JS weight' },
+  'weight-geo-risk': { min: 0, max: 10, fallback: 2, label: 'GEO weight' },
+  'weight-rate-medium': { min: 0, max: 10, fallback: 1, label: 'Rate 50% weight' },
+  'weight-rate-high': { min: 0, max: 10, fallback: 2, label: 'Rate 80% weight' }
+};
+
+const IPV4_SEGMENT_PATTERN = /^\d{1,3}$/;
+const IPV6_INPUT_PATTERN = /^[0-9a-fA-F:.]+$/;
+
+function sanitizeIntegerText(value) {
+  return (value || '').replace(/[^\d]/g, '');
+}
+
+function sanitizeIpText(value) {
+  return (value || '').replace(/[^0-9a-fA-F:.]/g, '');
+}
+
+function sanitizeEndpointText(value) {
+  return (value || '').replace(/\s+/g, '').trim();
+}
+
+function clampInteger(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function parseIntegerLoose(id) {
+  const input = document.getElementById(id);
+  const rules = INTEGER_FIELD_RULES[id];
+  if (!input || !rules) return null;
+  const sanitized = sanitizeIntegerText(input.value);
+  if (input.value !== sanitized) input.value = sanitized;
+  if (sanitized.length === 0) return null;
+  const parsed = Number.parseInt(sanitized, 10);
+  if (!Number.isInteger(parsed)) return null;
+  return clampInteger(parsed, rules.min, rules.max);
+}
+
+function showValidationMessage(target, message) {
+  if (!target) return;
+  if (target.id === 'last-updated') {
+    target.textContent = message;
+    target.style.color = '#ef4444';
+    return;
+  }
+  target.textContent = message;
+  target.className = 'message error';
+}
+
+function clearValidationMessage(target) {
+  if (!target || target.id === 'last-updated') return;
+  if (target.className && target.className.includes('error')) {
+    target.textContent = '';
+    target.className = 'message';
+  }
+}
+
+function isValidIpv4(value) {
+  const parts = value.split('.');
+  if (parts.length !== 4) return false;
+  return parts.every(part => {
+    if (!IPV4_SEGMENT_PATTERN.test(part)) return false;
+    if (part.length > 1 && part.startsWith('0')) return false;
+    const num = Number.parseInt(part, 10);
+    return num >= 0 && num <= 255;
+  });
+}
+
+function isValidIpv6(value) {
+  if (!IPV6_INPUT_PATTERN.test(value)) return false;
+  try {
+    new URL(`http://[${value}]/`);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function isValidIpAddress(value) {
+  if (!value) return false;
+  if (value.includes(':')) return isValidIpv6(value);
+  if (value.includes('.')) return isValidIpv4(value);
+  return false;
+}
+
+function parseEndpointUrl(value) {
+  const sanitized = sanitizeEndpointText(value);
+  if (!sanitized) return null;
+  try {
+    const url = new URL(sanitized);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    if (!url.hostname) return null;
+    const pathname = url.pathname === '/' ? '' : url.pathname.replace(/\/+$/, '');
+    return `${url.protocol}//${url.host}${pathname}`;
+  } catch (e) {
+    return null;
+  }
+}
+
+function readIntegerFieldValue(id, messageTarget) {
+  const input = document.getElementById(id);
+  const rules = INTEGER_FIELD_RULES[id];
+  if (!input || !rules) return null;
+
+  const parsed = parseIntegerLoose(id);
+  if (parsed === null) {
+    input.setCustomValidity(`${rules.label} is required.`);
+    if (messageTarget) showValidationMessage(messageTarget, `${rules.label} is required.`);
+    input.reportValidity();
+    input.focus();
+    return null;
+  }
+  if (parsed < rules.min || parsed > rules.max) {
+    input.setCustomValidity(`${rules.label} must be between ${rules.min} and ${rules.max}.`);
+    if (messageTarget) showValidationMessage(messageTarget, `${rules.label} must be between ${rules.min} and ${rules.max}.`);
+    input.reportValidity();
+    input.focus();
+    return null;
+  }
+
+  input.value = String(parsed);
+  input.setCustomValidity('');
+  return parsed;
+}
+
+function readIpFieldValue(id, required, messageTarget, label) {
+  const input = document.getElementById(id);
+  if (!input) return null;
+  const sanitized = sanitizeIpText(input.value.trim());
+  if (input.value !== sanitized) input.value = sanitized;
+
+  if (!sanitized) {
+    if (!required) {
+      input.setCustomValidity('');
+      return '';
+    }
+    input.setCustomValidity(`${label} is required.`);
+    if (messageTarget) showValidationMessage(messageTarget, `${label} is required.`);
+    input.reportValidity();
+    input.focus();
+    return null;
+  }
+
+  if (!isValidIpAddress(sanitized)) {
+    input.setCustomValidity(`${label} must be a valid IPv4 or IPv6 address.`);
+    if (messageTarget) showValidationMessage(messageTarget, `${label} must be a valid IPv4 or IPv6 address.`);
+    input.reportValidity();
+    input.focus();
+    return null;
+  }
+
+  input.setCustomValidity('');
+  return sanitized;
+}
+
+function getAdminContext(messageTarget) {
+  const endpointInput = document.getElementById('endpoint');
+  const apikeyInput = document.getElementById('apikey');
+  const endpoint = parseEndpointUrl(endpointInput.value);
+  if (!endpoint) {
+    endpointInput.setCustomValidity('Enter a valid http(s) API endpoint URL.');
+    if (messageTarget) showValidationMessage(messageTarget, 'Enter a valid http(s) API endpoint URL.');
+    endpointInput.reportValidity();
+    endpointInput.focus();
+    return null;
+  }
+  endpointInput.value = endpoint;
+  endpointInput.setCustomValidity('');
+
+  const apikey = (apikeyInput.value || '').trim();
+  if (!apikey) {
+    apikeyInput.setCustomValidity('API key is required.');
+    if (messageTarget) showValidationMessage(messageTarget, 'API key is required.');
+    apikeyInput.reportValidity();
+    apikeyInput.focus();
+    return null;
+  }
+  apikeyInput.setCustomValidity('');
+  if (messageTarget) clearValidationMessage(messageTarget);
+  return { endpoint, apikey };
+}
+
+function bindIntegerFieldValidation(id) {
+  const input = document.getElementById(id);
+  const rules = INTEGER_FIELD_RULES[id];
+  if (!input || !rules) return;
+
+  const apply = () => {
+    const sanitized = sanitizeIntegerText(input.value);
+    if (input.value !== sanitized) input.value = sanitized;
+    if (!sanitized) {
+      input.setCustomValidity(`${rules.label} is required.`);
+      return;
+    }
+    const parsed = Number.parseInt(sanitized, 10);
+    if (!Number.isInteger(parsed)) {
+      input.setCustomValidity(`${rules.label} must be a whole number.`);
+      return;
+    }
+    if (parsed < rules.min || parsed > rules.max) {
+      input.setCustomValidity(`${rules.label} must be between ${rules.min} and ${rules.max}.`);
+      return;
+    }
+    input.setCustomValidity('');
+  };
+
+  input.addEventListener('input', apply);
+  input.addEventListener('blur', () => {
+    if (!input.value) {
+      input.value = String(rules.fallback);
+    }
+    const parsed = parseIntegerLoose(id);
+    if (parsed !== null) input.value = String(parsed);
+    apply();
+  });
+  apply();
+}
+
+function bindIpFieldValidation(id, required, label) {
+  const input = document.getElementById(id);
+  if (!input) return;
+  const apply = () => {
+    const sanitized = sanitizeIpText(input.value);
+    if (input.value !== sanitized) input.value = sanitized;
+    const value = sanitized.trim();
+    if (!value) {
+      input.setCustomValidity(required ? `${label} is required.` : '');
+      return;
+    }
+    input.setCustomValidity(isValidIpAddress(value) ? '' : `${label} must be a valid IPv4 or IPv6 address.`);
+  };
+  input.addEventListener('input', apply);
+  input.addEventListener('blur', apply);
+  apply();
+}
+
+function bindEndpointFieldValidation() {
+  const input = document.getElementById('endpoint');
+  if (!input) return;
+  const apply = () => {
+    const sanitized = sanitizeEndpointText(input.value);
+    if (input.value !== sanitized) input.value = sanitized;
+    const endpoint = parseEndpointUrl(sanitized);
+    input.setCustomValidity(endpoint ? '' : 'Enter a valid http(s) API endpoint URL.');
+  };
+  input.addEventListener('input', apply);
+  input.addEventListener('blur', () => {
+    const endpoint = parseEndpointUrl(input.value);
+    if (endpoint) input.value = endpoint;
+    apply();
+  });
+  apply();
+}
+
+function initInputValidation() {
+  Object.keys(INTEGER_FIELD_RULES).forEach(bindIntegerFieldValidation);
+  bindIpFieldValidation('ban-ip', true, 'Ban IP');
+  bindIpFieldValidation('unban-ip', true, 'Unban IP');
+  bindEndpointFieldValidation();
+}
+
 function envVar(name) {
   return `<code class="env-var">${name}</code>`;
 }
@@ -374,8 +646,9 @@ function updateTopIpsChart(topIps) {
 
 // Update time series chart
 function updateTimeSeriesChart() {
-  const endpoint = document.getElementById('endpoint').value;
-  const apikey = document.getElementById('apikey').value;
+  const ctx = getAdminContext(document.getElementById('last-updated'));
+  if (!ctx) return;
+  const { endpoint, apikey } = ctx;
 
   const hours = currentTimeRange === 'hour' ? 1 :
                 currentTimeRange === 'day' ? 24 :
@@ -534,9 +807,10 @@ function updateBansTable(bans) {
   document.querySelectorAll('.unban-quick').forEach(btn => {
     btn.onclick = async function() {
       const ip = this.dataset.ip;
-      const endpoint = document.getElementById('endpoint').value.replace(/\/$/, '');
-      const apikey = document.getElementById('apikey').value;
       const msg = document.getElementById('admin-msg');
+      const ctx = getAdminContext(msg);
+      if (!ctx) return;
+      const { endpoint, apikey } = ctx;
       
       msg.textContent = `Unbanning ${ip}...`;
       msg.className = 'message info';
@@ -890,13 +1164,16 @@ document.getElementById('robots-crawl-delay').addEventListener('input', checkRob
 
 // Save maze configuration
 document.getElementById('save-maze-config').onclick = async function() {
-  const endpoint = document.getElementById('endpoint').value.replace(/\/$/, '');
-  const apikey = document.getElementById('apikey').value;
+  const msg = document.getElementById('admin-msg');
+  const ctx = getAdminContext(msg);
+  if (!ctx) return;
+  const { endpoint, apikey } = ctx;
   const btn = this;
   
   const mazeEnabled = document.getElementById('maze-enabled-toggle').checked;
   const mazeAutoBan = document.getElementById('maze-auto-ban-toggle').checked;
-  const mazeThreshold = parseInt(document.getElementById('maze-threshold').value) || 50;
+  const mazeThreshold = readIntegerFieldValue('maze-threshold', msg);
+  if (mazeThreshold === null) return;
   
   btn.textContent = 'Saving...';
   btn.disabled = true;
@@ -934,8 +1211,10 @@ document.getElementById('save-maze-config').onclick = async function() {
 
 // Save robots.txt configuration
 document.getElementById('save-robots-config').onclick = async function() {
-  const endpoint = document.getElementById('endpoint').value.replace(/\/$/, '');
-  const apikey = document.getElementById('apikey').value;
+  const msg = document.getElementById('admin-msg');
+  const ctx = getAdminContext(msg);
+  if (!ctx) return;
+  const { endpoint, apikey } = ctx;
   const btn = this;
   
   const robotsEnabled = document.getElementById('robots-enabled-toggle').checked;
@@ -943,7 +1222,8 @@ document.getElementById('save-robots-config').onclick = async function() {
   const blockSearch = document.getElementById('robots-block-search-toggle').checked;
   // Invert: toggle ON = restrict (allow=false), toggle OFF = allow (allow=true)
   const allowSearchEngines = !document.getElementById('robots-allow-search-toggle').checked;
-  const crawlDelay = parseInt(document.getElementById('robots-crawl-delay').value) || 2;
+  const crawlDelay = readIntegerFieldValue('robots-crawl-delay', msg);
+  if (crawlDelay === null) return;
   
   btn.textContent = 'Saving...';
   btn.disabled = true;
@@ -996,8 +1276,9 @@ document.getElementById('save-robots-config').onclick = async function() {
 
 // Fetch and update robots.txt preview content
 async function refreshRobotsPreview() {
-  const endpoint = document.getElementById('endpoint').value.replace(/\/$/, '');
-  const apikey = document.getElementById('apikey').value;
+  const ctx = getAdminContext(document.getElementById('admin-msg'));
+  if (!ctx) return;
+  const { endpoint, apikey } = ctx;
   const previewContent = document.getElementById('robots-preview-content');
   
   try {
@@ -1284,9 +1565,10 @@ GEO_FIELD_IDS.forEach(id => {
 });
 
 document.getElementById('save-geo-config').onclick = async function() {
-  const endpoint = document.getElementById('endpoint').value.replace(/\/$/, '');
-  const apikey = document.getElementById('apikey').value;
   const msg = document.getElementById('admin-msg');
+  const ctx = getAdminContext(msg);
+  if (!ctx) return;
+  const { endpoint, apikey } = ctx;
   const btn = this;
 
   if (!geoSavedState.mutable) {
@@ -1361,13 +1643,15 @@ document.getElementById('save-geo-config').onclick = async function() {
 
 // Save PoW configuration
 document.getElementById('save-pow-config').onclick = async function() {
-  const endpoint = document.getElementById('endpoint').value.replace(/\/$/, '');
-  const apikey = document.getElementById('apikey').value;
   const btn = this;
   const msg = document.getElementById('admin-msg');
+  const ctx = getAdminContext(msg);
+  if (!ctx) return;
+  const { endpoint, apikey } = ctx;
 
-  const powDifficulty = parseInt(document.getElementById('pow-difficulty').value, 10);
-  const powTtl = parseInt(document.getElementById('pow-ttl').value, 10);
+  const powDifficulty = readIntegerFieldValue('pow-difficulty', msg);
+  const powTtl = readIntegerFieldValue('pow-ttl', msg);
+  if (powDifficulty === null || powTtl === null) return;
 
   btn.textContent = 'Saving...';
   btn.disabled = true;
@@ -1409,28 +1693,27 @@ document.getElementById('save-pow-config').onclick = async function() {
 
 // Save botness scoring configuration
 document.getElementById('save-botness-config').onclick = async function() {
-  const endpoint = document.getElementById('endpoint').value.replace(/\/$/, '');
-  const apikey = document.getElementById('apikey').value;
   const btn = this;
   const msg = document.getElementById('admin-msg');
+  const ctx = getAdminContext(msg);
+  if (!ctx) return;
+  const { endpoint, apikey } = ctx;
 
-  const challengeThreshold = parseInt(document.getElementById('challenge-threshold').value, 10);
-  const mazeThreshold = parseInt(document.getElementById('maze-threshold-score').value, 10);
-  const weightJsRequired = parseInt(document.getElementById('weight-js-required').value, 10);
-  const weightGeoRisk = parseInt(document.getElementById('weight-geo-risk').value, 10);
-  const weightRateMedium = parseInt(document.getElementById('weight-rate-medium').value, 10);
-  const weightRateHigh = parseInt(document.getElementById('weight-rate-high').value, 10);
+  const challengeThreshold = readIntegerFieldValue('challenge-threshold', msg);
+  const mazeThreshold = readIntegerFieldValue('maze-threshold-score', msg);
+  const weightJsRequired = readIntegerFieldValue('weight-js-required', msg);
+  const weightGeoRisk = readIntegerFieldValue('weight-geo-risk', msg);
+  const weightRateMedium = readIntegerFieldValue('weight-rate-medium', msg);
+  const weightRateHigh = readIntegerFieldValue('weight-rate-high', msg);
 
   if (
-    Number.isNaN(challengeThreshold) ||
-    Number.isNaN(mazeThreshold) ||
-    Number.isNaN(weightJsRequired) ||
-    Number.isNaN(weightGeoRisk) ||
-    Number.isNaN(weightRateMedium) ||
-    Number.isNaN(weightRateHigh)
+    challengeThreshold === null ||
+    mazeThreshold === null ||
+    weightJsRequired === null ||
+    weightGeoRisk === null ||
+    weightRateMedium === null ||
+    weightRateHigh === null
   ) {
-    msg.textContent = 'Error: Invalid botness settings';
-    msg.className = 'message error';
     return;
   }
 
@@ -1512,8 +1795,9 @@ document.getElementById('cdp-threshold-slider').addEventListener('input', functi
 
 // Save CDP detection configuration
 document.getElementById('save-cdp-config').onclick = async function() {
-  const endpoint = document.getElementById('endpoint').value.replace(/\/$/, '');
-  const apikey = document.getElementById('apikey').value;
+  const ctx = getAdminContext(document.getElementById('admin-msg'));
+  if (!ctx) return;
+  const { endpoint, apikey } = ctx;
   const btn = this;
   
   const cdpEnabled = document.getElementById('cdp-enabled-toggle').checked;
@@ -1562,8 +1846,9 @@ document.getElementById('save-cdp-config').onclick = async function() {
 
 // Main refresh function
 document.getElementById('refresh').onclick = async function() {
-  const endpoint = document.getElementById('endpoint').value.replace(/\/$/, '');
-  const apikey = document.getElementById('apikey').value;
+  const ctx = getAdminContext(document.getElementById('last-updated'));
+  if (!ctx) return;
+  const { endpoint, apikey } = ctx;
   const cdpWindowHours = 24;
   const cdpWindowLimit = 500;
   
@@ -1660,24 +1945,21 @@ document.getElementById('refresh').onclick = async function() {
 
 // Admin controls - Ban IP
 document.getElementById('ban-btn').onclick = async function() {
-  const endpoint = document.getElementById('endpoint').value.replace(/\/$/, '');
-  const apikey = document.getElementById('apikey').value;
-  const ip = document.getElementById('ban-ip').value.trim();
-  const reason = document.getElementById('ban-reason').value.trim() || 'manual_ban';
-  const duration = parseInt(document.getElementById('ban-duration').value) || 3600;
   const msg = document.getElementById('admin-msg');
-  
-  if (!ip) { 
-    msg.textContent = '⚠ Enter an IP to ban.';
-    msg.className = 'message warning';
-    return;
-  }
+  const ctx = getAdminContext(msg);
+  if (!ctx) return;
+  const { endpoint, apikey } = ctx;
+  const ip = readIpFieldValue('ban-ip', true, msg, 'Ban IP');
+  if (ip === null) return;
+  const reason = 'manual_ban';
+  const duration = readIntegerFieldValue('ban-duration', msg);
+  if (duration === null) return;
   
   msg.textContent = `Banning ${ip}...`;
   msg.className = 'message info';
   
   try {
-    await window.banIp(endpoint, apikey, ip, reason, duration);
+    await window.banIp(endpoint, apikey, ip, duration);
     msg.textContent = `Banned ${ip} for ${duration}s`;
     msg.className = 'message success';
     document.getElementById('ban-ip').value = '';
@@ -1690,16 +1972,12 @@ document.getElementById('ban-btn').onclick = async function() {
 
 // Admin controls - Unban IP
 document.getElementById('unban-btn').onclick = async function() {
-  const endpoint = document.getElementById('endpoint').value.replace(/\/$/, '');
-  const apikey = document.getElementById('apikey').value;
-  const ip = document.getElementById('unban-ip').value.trim();
   const msg = document.getElementById('admin-msg');
-  
-  if (!ip) {
-    msg.textContent = '⚠ Enter an IP to unban.';
-    msg.className = 'message warning';
-    return;
-  }
+  const ctx = getAdminContext(msg);
+  if (!ctx) return;
+  const { endpoint, apikey } = ctx;
+  const ip = readIpFieldValue('unban-ip', true, msg, 'Unban IP');
+  if (ip === null) return;
   
   msg.textContent = `Unbanning ${ip}...`;
   msg.className = 'message info';
@@ -1718,16 +1996,26 @@ document.getElementById('unban-btn').onclick = async function() {
 
 // Save Ban Durations Handler
 document.getElementById('save-durations-btn').onclick = async function() {
-  const endpoint = document.getElementById('endpoint').value.replace(/\/$/, '');
-  const apikey = document.getElementById('apikey').value;
   const msg = document.getElementById('admin-msg');
+  const ctx = getAdminContext(msg);
+  if (!ctx) return;
+  const { endpoint, apikey } = ctx;
   
   const ban_durations = {
-    honeypot: parseInt(document.getElementById('dur-honeypot').value) || 86400,
-    rate_limit: parseInt(document.getElementById('dur-rate-limit').value) || 3600,
-    browser: parseInt(document.getElementById('dur-browser').value) || 21600,
-    admin: parseInt(document.getElementById('dur-admin').value) || 21600
+    honeypot: readIntegerFieldValue('dur-honeypot', msg),
+    rate_limit: readIntegerFieldValue('dur-rate-limit', msg),
+    browser: readIntegerFieldValue('dur-browser', msg),
+    admin: readIntegerFieldValue('dur-admin', msg)
   };
+
+  if (
+    ban_durations.honeypot === null ||
+    ban_durations.rate_limit === null ||
+    ban_durations.browser === null ||
+    ban_durations.admin === null
+  ) {
+    return;
+  }
   
   msg.textContent = 'Saving ban durations...';
   msg.className = 'message info';
@@ -1756,15 +2044,20 @@ document.getElementById('save-durations-btn').onclick = async function() {
 };
 
 // Initialize charts and load data on page load
+initInputValidation();
 initCharts();
 renderStatusItems();
 document.getElementById('refresh').click();
 
 // Test Mode Toggle Handler
 document.getElementById('test-mode-toggle').addEventListener('change', async function() {
-  const endpoint = document.getElementById('endpoint').value.replace(/\/$/, '');
-  const apikey = document.getElementById('apikey').value;
   const msg = document.getElementById('admin-msg');
+  const ctx = getAdminContext(msg);
+  if (!ctx) {
+    this.checked = !this.checked;
+    return;
+  }
+  const { endpoint, apikey } = ctx;
   const testMode = this.checked;
   
   msg.textContent = `${testMode ? 'Enabling' : 'Disabling'} test mode...`;

@@ -115,7 +115,7 @@ Expected: "Access Blocked" for the banned IP.
 ```bash
 curl -X POST -H "Authorization: Bearer $SHUMA_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"ip":"10.20.30.40","reason":"test","duration":3600}' \
+  -d '{"ip":"10.20.30.40","duration":3600}' \
   http://127.0.0.1:3000/admin/ban
 ```
 Expected: a JSON response containing the new ban entry.

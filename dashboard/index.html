@@ -170,14 +170,14 @@
           <div class="controls-grid controls-grid--manual">
             <div class="control-group panel-soft pad-md">
               <h3>Ban IP</h3>
-              <input id="ban-ip" class="input-field" type="text" placeholder="IP address" aria-label="IP address to ban" />
-              <input id="ban-reason" class="input-field" type="text" placeholder="Reason (optional)" value="manual_ban" aria-label="Ban reason" />
-              <input id="ban-duration" class="input-field" type="number" placeholder="Duration (seconds)" value="3600" aria-label="Ban duration in seconds" />
+              <input id="ban-ip" class="input-field" type="text" placeholder="IP address" aria-label="IP address to ban" maxlength="45" spellcheck="false" autocomplete="off" />
+              <input id="ban-reason" class="input-field" type="text" value="manual_ban" aria-label="Ban reason (fixed)" readonly disabled />
+              <input id="ban-duration" class="input-field" type="number" min="60" max="31536000" step="1" inputmode="numeric" placeholder="Duration (seconds)" value="3600" aria-label="Ban duration in seconds" />
               <button id="ban-btn" class="btn btn-submit">Ban</button>
             </div>
             <div class="control-group panel-soft pad-md">
               <h3>Unban IP</h3>
-              <input id="unban-ip" class="input-field" type="text" placeholder="IP address" aria-label="IP address to unban" />
+              <input id="unban-ip" class="input-field" type="text" placeholder="IP address" aria-label="IP address to unban" maxlength="45" spellcheck="false" autocomplete="off" />
               <button id="unban-btn" class="btn btn-submit">Unban</button>
             </div>
           </div>
@@ -202,9 +202,9 @@
               <h3>API Access</h3>
               <div class="config">
                 <label for="endpoint">API Endpoint:</label>
-                <input id="endpoint" class="input-field input-field--mono" value="http://127.0.0.1:3000" size="30" aria-label="API endpoint">
+                <input id="endpoint" class="input-field input-field--mono" type="url" value="http://127.0.0.1:3000" size="30" maxlength="2048" inputmode="url" spellcheck="false" autocomplete="off" aria-label="API endpoint">
                 <label for="apikey">API Key:</label>
-                <input id="apikey" class="input-field input-field--mono" value="changeme-dev-only-api-key" size="30" type="password" aria-label="API key">
+                <input id="apikey" class="input-field input-field--mono" value="changeme-dev-only-api-key" size="30" type="password" spellcheck="false" autocomplete="off" aria-label="API key">
                 <button id="refresh" class="btn" aria-label="Refresh dashboard">Refresh</button>
               </div>
             </div>
@@ -259,7 +259,7 @@
                 </div>
                 <div class="input-row">
                   <label class="control-label control-label--wide" for="robots-crawl-delay">Crawl Delay (seconds)</label>
-                  <input class="input-field" type="number" id="robots-crawl-delay" value="2" min="0" max="60" aria-label="Robots crawl delay in seconds">
+                  <input class="input-field" type="number" id="robots-crawl-delay" value="2" min="0" max="60" step="1" inputmode="numeric" aria-label="Robots crawl delay in seconds">
                 </div>
               </div>
               <button id="save-robots-config" class="btn btn-submit" disabled>Update Policy</button>
@@ -289,7 +289,7 @@
                 </div>
                 <div class="input-row">
                   <label class="control-label" for="maze-threshold">Ban Threshold (pages)</label>
-                  <input class="input-field" type="number" id="maze-threshold" value="50" min="5" max="500" aria-label="Maze ban threshold in pages">
+                  <input class="input-field" type="number" id="maze-threshold" value="50" min="5" max="500" step="1" inputmode="numeric" aria-label="Maze ban threshold in pages">
                 </div>
               </div>
               <button id="save-maze-config" class="btn btn-submit">Save Maze Settings</button>
@@ -364,11 +364,11 @@
               <div class="admin-controls">
                 <div class="input-row">
                   <label class="control-label" for="pow-difficulty">Difficulty (bits)</label>
-                  <input class="input-field" type="number" id="pow-difficulty" min="12" max="20" value="15" aria-label="PoW difficulty in leading zero bits">
+                  <input class="input-field" type="number" id="pow-difficulty" min="12" max="20" step="1" inputmode="numeric" value="15" aria-label="PoW difficulty in leading zero bits">
                 </div>
                 <div class="input-row">
                   <label class="control-label" for="pow-ttl">Seed TTL (seconds)</label>
-                  <input class="input-field" type="number" id="pow-ttl" min="30" max="300" value="90" aria-label="PoW seed TTL in seconds">
+                  <input class="input-field" type="number" id="pow-ttl" min="30" max="300" step="1" inputmode="numeric" value="90" aria-label="PoW seed TTL in seconds">
                 </div>
               </div>
               <button id="save-pow-config" class="btn btn-submit" disabled>Save PoW Settings</button>
@@ -377,10 +377,10 @@
               <h3>Ban Durations</h3>
               <p class="control-desc text-muted">Configure ban duration per offense type (seconds)</p>
               <div class="duration-grid">
-                <label for="dur-honeypot">Honeypot:</label> <input id="dur-honeypot" class="input-field" type="number" value="86400" />
-                <label for="dur-rate-limit">Rate Limit:</label> <input id="dur-rate-limit" class="input-field" type="number" value="3600" />
-                <label for="dur-browser">Browser:</label> <input id="dur-browser" class="input-field" type="number" value="21600" />
-                <label for="dur-admin">Admin:</label> <input id="dur-admin" class="input-field" type="number" value="21600" />
+                <label for="dur-honeypot">Honeypot:</label> <input id="dur-honeypot" class="input-field" type="number" min="60" max="31536000" step="1" inputmode="numeric" value="86400" />
+                <label for="dur-rate-limit">Rate Limit:</label> <input id="dur-rate-limit" class="input-field" type="number" min="60" max="31536000" step="1" inputmode="numeric" value="3600" />
+                <label for="dur-browser">Browser:</label> <input id="dur-browser" class="input-field" type="number" min="60" max="31536000" step="1" inputmode="numeric" value="21600" />
+                <label for="dur-admin">Admin:</label> <input id="dur-admin" class="input-field" type="number" min="60" max="31536000" step="1" inputmode="numeric" value="21600" />
               </div>
               <button id="save-durations-btn" class="btn btn-submit">Save Durations</button>
             </div>
@@ -396,27 +396,27 @@
               <div class="admin-controls">
                 <div class="input-row">
                   <label class="control-label" for="challenge-threshold">Challenge (score)</label>
-                  <input class="input-field" type="number" id="challenge-threshold" min="1" max="10" value="3" aria-label="Challenge risk threshold">
+                  <input class="input-field" type="number" id="challenge-threshold" min="1" max="10" step="1" inputmode="numeric" value="3" aria-label="Challenge risk threshold">
                 </div>
                 <div class="input-row">
                   <label class="control-label" for="maze-threshold-score">Maze (score)</label>
-                  <input class="input-field" type="number" id="maze-threshold-score" min="1" max="10" value="6" aria-label="Maze risk threshold">
+                  <input class="input-field" type="number" id="maze-threshold-score" min="1" max="10" step="1" inputmode="numeric" value="6" aria-label="Maze risk threshold">
                 </div>
                 <div class="input-row">
                   <label class="control-label" for="weight-js-required">Weight: JS (points)</label>
-                  <input class="input-field" type="number" id="weight-js-required" min="0" max="10" value="1" aria-label="Weight for JS verification required">
+                  <input class="input-field" type="number" id="weight-js-required" min="0" max="10" step="1" inputmode="numeric" value="1" aria-label="Weight for JS verification required">
                 </div>
                 <div class="input-row">
                   <label class="control-label" for="weight-geo-risk">Weight: Geo (points)</label>
-                  <input class="input-field" type="number" id="weight-geo-risk" min="0" max="10" value="2" aria-label="Weight for high-risk geography">
+                  <input class="input-field" type="number" id="weight-geo-risk" min="0" max="10" step="1" inputmode="numeric" value="2" aria-label="Weight for high-risk geography">
                 </div>
                 <div class="input-row">
                   <label class="control-label" for="weight-rate-medium">Weight: Rate 50% (points)</label>
-                  <input class="input-field" type="number" id="weight-rate-medium" min="0" max="10" value="1" aria-label="Weight for medium rate pressure">
+                  <input class="input-field" type="number" id="weight-rate-medium" min="0" max="10" step="1" inputmode="numeric" value="1" aria-label="Weight for medium rate pressure">
                 </div>
                 <div class="input-row">
                   <label class="control-label" for="weight-rate-high">Weight: Rate 80% (points)</label>
-                  <input class="input-field" type="number" id="weight-rate-high" min="0" max="10" value="2" aria-label="Weight for high rate pressure">
+                  <input class="input-field" type="number" id="weight-rate-high" min="0" max="10" step="1" inputmode="numeric" value="2" aria-label="Weight for high rate pressure">
                 </div>
                 <div class="info-panel panel-muted pad-sm">
                   <h4>Status</h4>

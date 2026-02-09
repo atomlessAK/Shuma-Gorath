@@ -65,7 +65,7 @@ When `SHUMA_DEBUG_HEADERS=true`, the health response includes:
 
 - `GET /admin` - API help
 - `GET /admin/ban` - List active bans
-- `POST /admin/ban` - Ban an IP (JSON body: `{"ip":"x.x.x.x","reason":"...","duration":3600}`)
+- `POST /admin/ban` - Ban an IP (JSON body: `{"ip":"x.x.x.x","duration":3600}`; reason is always `manual_ban`)
 - `POST /admin/unban?ip=x.x.x.x` - Unban an IP
 - `GET /admin/analytics` - Ban/event statistics
 - `GET /admin/events?hours=N` - Recent events + summary stats
@@ -123,7 +123,7 @@ Each ban entry includes:
 ```bash
 curl -X POST -H "Authorization: Bearer $SHUMA_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"ip":"1.2.3.4","reason":"admin_ban","duration":3600}' \
+  -d '{"ip":"1.2.3.4","duration":3600}' \
   http://127.0.0.1:3000/admin/ban
 ```
 
