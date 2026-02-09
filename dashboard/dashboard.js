@@ -769,6 +769,10 @@ const GEO_FIELD_IDS = [
   'geo-block-list'
 ];
 
+const ISO_ALPHA2_CODES = new Set([
+  'AD', 'AE', 'AF', 'AG', 'AI', 'AL', 'AM', 'AO', 'AQ', 'AR', 'AS', 'AT', 'AU', 'AW', 'AX', 'AZ', 'BA', 'BB', 'BD', 'BE', 'BF', 'BG', 'BH', 'BI', 'BJ', 'BL', 'BM', 'BN', 'BO', 'BQ', 'BR', 'BS', 'BT', 'BV', 'BW', 'BY', 'BZ', 'CA', 'CC', 'CD', 'CF', 'CG', 'CH', 'CI', 'CK', 'CL', 'CM', 'CN', 'CO', 'CR', 'CU', 'CV', 'CW', 'CX', 'CY', 'CZ', 'DE', 'DJ', 'DK', 'DM', 'DO', 'DZ', 'EC', 'EE', 'EG', 'EH', 'ER', 'ES', 'ET', 'FI', 'FJ', 'FK', 'FM', 'FO', 'FR', 'GA', 'GB', 'GD', 'GE', 'GF', 'GG', 'GH', 'GI', 'GL', 'GM', 'GN', 'GP', 'GQ', 'GR', 'GS', 'GT', 'GU', 'GW', 'GY', 'HK', 'HM', 'HN', 'HR', 'HT', 'HU', 'ID', 'IE', 'IL', 'IM', 'IN', 'IO', 'IQ', 'IR', 'IS', 'IT', 'JE', 'JM', 'JO', 'JP', 'KE', 'KG', 'KH', 'KI', 'KM', 'KN', 'KP', 'KR', 'KW', 'KY', 'KZ', 'LA', 'LB', 'LC', 'LI', 'LK', 'LR', 'LS', 'LT', 'LU', 'LV', 'LY', 'MA', 'MC', 'MD', 'ME', 'MF', 'MG', 'MH', 'MK', 'ML', 'MM', 'MN', 'MO', 'MP', 'MQ', 'MR', 'MS', 'MT', 'MU', 'MV', 'MW', 'MX', 'MY', 'MZ', 'NA', 'NC', 'NE', 'NF', 'NG', 'NI', 'NL', 'NO', 'NP', 'NR', 'NU', 'NZ', 'OM', 'PA', 'PE', 'PF', 'PG', 'PH', 'PK', 'PL', 'PM', 'PN', 'PR', 'PS', 'PT', 'PW', 'PY', 'QA', 'RE', 'RO', 'RS', 'RU', 'RW', 'SA', 'SB', 'SC', 'SD', 'SE', 'SG', 'SH', 'SI', 'SJ', 'SK', 'SL', 'SM', 'SN', 'SO', 'SR', 'SS', 'ST', 'SV', 'SX', 'SY', 'SZ', 'TC', 'TD', 'TF', 'TG', 'TH', 'TJ', 'TK', 'TL', 'TM', 'TN', 'TO', 'TR', 'TT', 'TV', 'TW', 'TZ', 'UA', 'UG', 'UM', 'US', 'UY', 'UZ', 'VA', 'VC', 'VE', 'VG', 'VI', 'VN', 'VU', 'WF', 'WS', 'YE', 'YT', 'ZA', 'ZM', 'ZW'
+]);
+
 function setGeoConfigEditable(editable) {
   GEO_FIELD_IDS.forEach(id => {
     const field = document.getElementById(id);
@@ -777,6 +781,12 @@ function setGeoConfigEditable(editable) {
       field.blur();
     }
   });
+}
+
+function sanitizeGeoTextareaValue(value) {
+  return (value || '')
+    .replace(/[^a-zA-Z,\s]/g, '')
+    .toUpperCase();
 }
 
 function parseCountryCodesStrict(raw) {
@@ -791,6 +801,9 @@ function parseCountryCodesStrict(raw) {
       throw new Error(`Invalid country code: ${value}. Use 2-letter ISO codes like US, GB, BR.`);
     }
     const code = value.toUpperCase();
+    if (!ISO_ALPHA2_CODES.has(code)) {
+      throw new Error(`Invalid country code: ${value}. Use valid ISO 3166-1 alpha-2 codes.`);
+    }
     if (!seen.has(code)) {
       seen.add(code);
       parsed.push(code);
@@ -1253,7 +1266,20 @@ function checkGeoConfigChanged() {
 }
 
 GEO_FIELD_IDS.forEach(id => {
-  document.getElementById(id).addEventListener('input', checkGeoConfigChanged);
+  const field = document.getElementById(id);
+  field.addEventListener('input', () => {
+    const sanitized = sanitizeGeoTextareaValue(field.value);
+    if (field.value !== sanitized) {
+      const cursor = field.selectionStart;
+      const delta = field.value.length - sanitized.length;
+      field.value = sanitized;
+      if (typeof cursor === 'number') {
+        const next = Math.max(0, cursor - Math.max(0, delta));
+        field.setSelectionRange(next, next);
+      }
+    }
+    checkGeoConfigChanged();
+  });
 });
 
 document.getElementById('save-geo-config').onclick = async function() {

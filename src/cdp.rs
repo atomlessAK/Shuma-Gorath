@@ -1,7 +1,7 @@
 // src/cdp.rs
 // CDP (Chrome DevTools Protocol) Detection for WASM Bot Trap
 // Detects automated browsers using Puppeteer, Playwright, Selenium, etc.
-// 
+//
 // This module provides JavaScript-based detection that identifies when a browser
 // is being controlled via CDP (Chrome DevTools Protocol). This is the most reliable
 // modern technique for detecting browser automation as it targets the fundamental
@@ -12,9 +12,11 @@
 // - https://rebrowser.net/blog/how-to-fix-runtime-enable-cdp-detection-of-puppeteer-playwright-and-other-automation-libraries
 // - https://kaliiiiiiiiii.github.io/brotector/
 
+use serde::{Deserialize, Serialize};
 use spin_sdk::http::{Request, Response};
 use spin_sdk::key_value::Store;
-use serde::{Deserialize, Serialize};
+
+const MAX_CDP_CHECKS: usize = 32;
 
 /// CDP detection report from client-side JavaScript
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,7 +34,9 @@ pub enum CdpTier {
 }
 
 fn has_check(checks: &[String], needle: &str) -> bool {
-    checks.iter().any(|check| check.eq_ignore_ascii_case(needle))
+    checks
+        .iter()
+        .any(|check| check.eq_ignore_ascii_case(needle))
 }
 
 fn soft_signal_count(checks: &[String]) -> usize {
@@ -47,8 +51,8 @@ fn soft_signal_count(checks: &[String]) -> usize {
 /// Tiering intentionally treats hard automation checks as strongest evidence and
 /// only uses thresholded score as supporting evidence when hard checks are absent.
 pub fn classify_cdp_tier(report: &CdpReport, threshold: f32) -> CdpTier {
-    let has_hard_signal = has_check(&report.checks, "webdriver")
-        || has_check(&report.checks, "automation_props");
+    let has_hard_signal =
+        has_check(&report.checks, "webdriver") || has_check(&report.checks, "automation_props");
     if has_hard_signal {
         return CdpTier::Strong;
     }
@@ -60,7 +64,8 @@ pub fn classify_cdp_tier(report: &CdpReport, threshold: f32) -> CdpTier {
         return CdpTier::Strong;
     }
 
-    let medium_without_hard = report.score >= threshold_clamped || has_check(&report.checks, "cdp_timing");
+    let medium_without_hard =
+        report.score >= threshold_clamped || has_check(&report.checks, "cdp_timing");
     if medium_without_hard {
         return CdpTier::Medium;
     }
@@ -92,36 +97,64 @@ fn increment_kv_counter(store: &Store, key: &str) {
 pub fn handle_cdp_report(store: &Store, req: &Request) -> Response {
     let ip = crate::extract_client_ip(req);
     let cfg = crate::config::Config::load(store, "default");
-    
+
     // Only process if CDP detection is enabled
     if !cfg.cdp_detection_enabled {
         return Response::new(200, "CDP detection disabled");
     }
-    
-    // Parse the report body
+
+    // Parse and validate the report body.
     let body = req.body();
-    let report: CdpReport = match serde_json::from_slice(body) {
+    if let Err(e) = crate::input_validation::enforce_body_size(
+        body,
+        crate::input_validation::MAX_CDP_REPORT_BYTES,
+    ) {
+        return Response::new(400, e);
+    }
+    let mut report: CdpReport = match serde_json::from_slice(body) {
         Ok(r) => r,
         Err(_) => return Response::new(400, "Invalid CDP report format"),
     };
-    
+    if !report.score.is_finite() || report.score < 0.0 || report.score > 5.0 {
+        return Response::new(400, "Invalid CDP score");
+    }
+    if report.checks.len() > MAX_CDP_CHECKS {
+        return Response::new(400, "Too many CDP checks");
+    }
+    let mut sanitized_checks = Vec::new();
+    for check in report.checks {
+        let Some(clean) = crate::input_validation::sanitize_check_name(check.as_str()) else {
+            return Response::new(400, "Invalid CDP check name");
+        };
+        if !sanitized_checks.contains(&clean) {
+            sanitized_checks.push(clean);
+        }
+    }
+    report.checks = sanitized_checks;
+
     let cdp_tier = classify_cdp_tier(&report, cfg.cdp_detection_threshold);
     let tier_label = cdp_tier_label(cdp_tier);
 
     // Log the CDP detection event
-    crate::admin::log_event(store, &crate::admin::EventLogEntry {
-        ts: crate::admin::now_ts(),
-        event: crate::admin::EventType::Challenge,
-        ip: Some(ip.clone()),
-        reason: Some(format!("cdp_detected:tier={} score={:.2}", tier_label, report.score)),
-        outcome: Some(format!("checks:{}", report.checks.join(","))),
-        admin: None,
-    });
-    
+    crate::admin::log_event(
+        store,
+        &crate::admin::EventLogEntry {
+            ts: crate::admin::now_ts(),
+            event: crate::admin::EventType::Challenge,
+            ip: Some(ip.clone()),
+            reason: Some(format!(
+                "cdp_detected:tier={} score={:.2}",
+                tier_label, report.score
+            )),
+            outcome: Some(format!("checks:{}", report.checks.join(","))),
+            admin: None,
+        },
+    );
+
     // Increment metrics
     crate::metrics::increment(store, crate::metrics::MetricName::CdpDetections, None);
     increment_kv_counter(store, "cdp:detections");
-    
+
     // Auto-ban only for strong-tier detections when enabled.
     if cfg.cdp_auto_ban && cdp_tier == CdpTier::Strong {
         crate::ban::ban_ip_with_fingerprint(
@@ -142,21 +175,31 @@ pub fn handle_cdp_report(store: &Store, req: &Request) -> Response {
                 )),
             }),
         );
-        crate::metrics::increment(store, crate::metrics::MetricName::BansTotal, Some("cdp_automation"));
+        crate::metrics::increment(
+            store,
+            crate::metrics::MetricName::BansTotal,
+            Some("cdp_automation"),
+        );
         increment_kv_counter(store, "cdp:auto_bans");
-        
-        crate::admin::log_event(store, &crate::admin::EventLogEntry {
-            ts: crate::admin::now_ts(),
-            event: crate::admin::EventType::Ban,
-            ip: Some(ip.clone()),
-            reason: Some("cdp_automation".to_string()),
-            outcome: Some(format!("banned:tier={} score={:.2}", tier_label, report.score)),
-            admin: None,
-        });
-        
+
+        crate::admin::log_event(
+            store,
+            &crate::admin::EventLogEntry {
+                ts: crate::admin::now_ts(),
+                event: crate::admin::EventType::Ban,
+                ip: Some(ip.clone()),
+                reason: Some("cdp_automation".to_string()),
+                outcome: Some(format!(
+                    "banned:tier={} score={:.2}",
+                    tier_label, report.score
+                )),
+                admin: None,
+            },
+        );
+
         return Response::new(200, "Automation detected - banned");
     }
-    
+
     Response::new(200, "Report received")
 }
 
@@ -395,7 +438,8 @@ pub fn get_cdp_detection_script() -> &'static str {
 /// Used by inject_cdp_detection() and available for custom injection scenarios.
 #[allow(dead_code)]
 pub fn get_cdp_report_script(report_endpoint: &str) -> String {
-    format!(r#"
+    format!(
+        r#"
 <script>
 (function() {{
     window._checkCDPAutomation().then(function(result) {{
@@ -414,7 +458,9 @@ pub fn get_cdp_report_script(report_endpoint: &str) -> String {
     }});
 }})();
 </script>
-"#, report_endpoint)
+"#,
+        report_endpoint
+    )
 }
 
 /// Injects CDP detection into an HTML page.
@@ -423,18 +469,24 @@ pub fn get_cdp_report_script(report_endpoint: &str) -> String {
 #[allow(dead_code)]
 pub fn inject_cdp_detection(html: &str, report_endpoint: Option<&str>) -> String {
     let detection_script = format!("<script>{}</script>", CDP_DETECTION_JS);
-    
+
     let report_script = if let Some(endpoint) = report_endpoint {
         get_cdp_report_script(endpoint)
     } else {
         String::new()
     };
-    
+
     // Inject before </head> if present, otherwise before </body>
     if html.contains("</head>") {
-        html.replace("</head>", &format!("{}{}</head>", detection_script, report_script))
+        html.replace(
+            "</head>",
+            &format!("{}{}</head>", detection_script, report_script),
+        )
     } else if html.contains("</body>") {
-        html.replace("</body>", &format!("{}{}</body>", detection_script, report_script))
+        html.replace(
+            "</body>",
+            &format!("{}{}</body>", detection_script, report_script),
+        )
     } else {
         format!("{}{}{}", html, detection_script, report_script)
     }

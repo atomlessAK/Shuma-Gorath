@@ -1,56 +1,55 @@
+mod auth;
+#[cfg(test)]
+mod ban_tests;
 mod block_page;
+#[cfg(test)]
+mod cdp_tests;
 #[cfg(test)]
 mod challenge_tests;
 #[cfg(test)]
 mod config_tests;
 #[cfg(test)]
-mod risk_tests;
-#[cfg(test)]
-mod ban_tests;
-#[cfg(test)]
-mod whitelist_tests;
-#[cfg(test)]
-mod whitelist_path_tests;
-#[cfg(test)]
-mod cdp_tests;
+mod geo_tests;
 #[cfg(test)]
 mod log_tests;
 #[cfg(test)]
+mod risk_tests;
+#[cfg(test)]
 mod security_tests;
 #[cfg(test)]
-mod geo_tests;
-mod auth;
+mod whitelist_path_tests;
+#[cfg(test)]
+mod whitelist_tests;
 // src/lib.rs
 // Entry point for the WASM Stealth Bot Trap Spin app
 
+use serde::Serialize;
 use spin_sdk::http::{Request, Response};
 use spin_sdk::http_component;
 use spin_sdk::key_value::Store;
-use serde::Serialize;
 use std::env;
 use std::io::Write;
 
-mod ban;         // Ban logic (IP, expiry, reason)
-mod config;      // Config loading and defaults
-mod rate;        // Rate limiting
-mod ip;          // IP bucketing helpers
-mod js;          // JS challenge/verification
-mod browser;     // Browser version checks
-mod geo;         // Geo-based risk
-mod whitelist;   // Whitelist logic
-mod honeypot;    // Honeypot endpoint logic
-mod admin;       // Admin API endpoints
-mod challenge;   // Interactive math challenge for banned users
-mod metrics;     // Prometheus metrics
-mod maze;        // Link maze honeypot
-mod robots;      // robots.txt generation
-mod cdp;         // CDP (Chrome DevTools Protocol) automation detection
-mod pow;         // Proof-of-work verification
+mod admin; // Admin API endpoints
+mod ban; // Ban logic (IP, expiry, reason)
+mod browser; // Browser version checks
+mod cdp; // CDP (Chrome DevTools Protocol) automation detection
+mod challenge; // Interactive math challenge for banned users
+mod config; // Config loading and defaults
+mod geo; // Geo-based risk
+mod honeypot; // Honeypot endpoint logic
+mod input_validation;
+mod ip; // IP bucketing helpers
+mod js; // JS challenge/verification
+mod maze; // Link maze honeypot
+mod metrics; // Prometheus metrics
+mod pow; // Proof-of-work verification
+mod rate; // Rate limiting
+mod robots; // robots.txt generation
+mod whitelist; // Whitelist logic // Shared request/input validation helpers
 
 /// Main HTTP handler for the bot trap. This function is invoked for every HTTP request.
 /// It applies a series of anti-bot checks in order of cost and effectiveness, returning early on block/allow.
-
-
 
 /// Returns true if forwarded IP headers should be trusted for this request.
 /// If SHUMA_FORWARDED_IP_SECRET is set, require a matching X-Shuma-Forwarded-Secret header.
@@ -100,7 +99,11 @@ fn shuma_fail_open() -> bool {
 }
 
 fn fail_mode_label(fail_open: bool) -> &'static str {
-    if fail_open { "open" } else { "closed" }
+    if fail_open {
+        "open"
+    } else {
+        "closed"
+    }
 }
 
 fn debug_headers_enabled() -> bool {
@@ -109,7 +112,12 @@ fn debug_headers_enabled() -> bool {
         .unwrap_or(false)
 }
 
-fn response_with_optional_debug_headers(status: u16, body: &str, kv_status: &str, fail_mode: &str) -> Response {
+fn response_with_optional_debug_headers(
+    status: u16,
+    body: &str,
+    kv_status: &str,
+    fail_mode: &str,
+) -> Response {
     let mut response_builder = Response::builder();
     let builder = response_builder.status(status);
     if debug_headers_enabled() {
@@ -138,7 +146,12 @@ fn rate_proximity_score(rate_count: u32, rate_limit: u32) -> u8 {
 }
 
 #[allow(dead_code)]
-pub(crate) fn compute_risk_score(js_needed: bool, geo_risk: bool, rate_count: u32, rate_limit: u32) -> u8 {
+pub(crate) fn compute_risk_score(
+    js_needed: bool,
+    geo_risk: bool,
+    rate_count: u32,
+    rate_limit: u32,
+) -> u8 {
     let mut score = 0u8;
     if js_needed {
         score += 1;
@@ -205,7 +218,11 @@ pub(crate) fn compute_botness_assessment(
     let mut score = 0u8;
     let mut contributions = Vec::with_capacity(4);
 
-    let js_contribution = if js_needed { cfg.botness_weights.js_required } else { 0 };
+    let js_contribution = if js_needed {
+        cfg.botness_weights.js_required
+    } else {
+        0
+    };
     score = score.saturating_add(js_contribution);
     contributions.push(BotnessContribution {
         key: "js_verification_required",
@@ -214,7 +231,11 @@ pub(crate) fn compute_botness_assessment(
         contribution: js_contribution,
     });
 
-    let geo_contribution = if geo_risk { cfg.botness_weights.geo_risk } else { 0 };
+    let geo_contribution = if geo_risk {
+        cfg.botness_weights.geo_risk
+    } else {
+        0
+    };
     score = score.saturating_add(geo_contribution);
     contributions.push(BotnessContribution {
         key: "geo_risk",
@@ -223,7 +244,11 @@ pub(crate) fn compute_botness_assessment(
         contribution: geo_contribution,
     });
 
-    let rate_medium_contribution = if rate_medium_active { cfg.botness_weights.rate_medium } else { 0 };
+    let rate_medium_contribution = if rate_medium_active {
+        cfg.botness_weights.rate_medium
+    } else {
+        0
+    };
     score = score.saturating_add(rate_medium_contribution);
     contributions.push(BotnessContribution {
         key: "rate_pressure_medium",
@@ -232,7 +257,11 @@ pub(crate) fn compute_botness_assessment(
         contribution: rate_medium_contribution,
     });
 
-    let rate_high_contribution = if rate_high_active { cfg.botness_weights.rate_high } else { 0 };
+    let rate_high_contribution = if rate_high_active {
+        cfg.botness_weights.rate_high
+    } else {
+        0
+    };
     score = score.saturating_add(rate_high_contribution);
     contributions.push(BotnessContribution {
         key: "rate_pressure_high",
@@ -280,19 +309,23 @@ fn serve_maze_with_tracking(
 ) -> Response {
     metrics::increment(store, metrics::MetricName::MazeHits, None);
 
-    crate::admin::log_event(store, &crate::admin::EventLogEntry {
-        ts: crate::admin::now_ts(),
-        event: crate::admin::EventType::Challenge,
-        ip: Some(ip.to_string()),
-        reason: Some(event_reason.to_string()),
-        outcome: Some(event_outcome.to_string()),
-        admin: None,
-    });
+    crate::admin::log_event(
+        store,
+        &crate::admin::EventLogEntry {
+            ts: crate::admin::now_ts(),
+            event: crate::admin::EventType::Challenge,
+            ip: Some(ip.to_string()),
+            reason: Some(event_reason.to_string()),
+            outcome: Some(event_outcome.to_string()),
+            admin: None,
+        },
+    );
 
     // Bucket the IP to reduce KV cardinality and avoid per-IP explosion.
     let maze_bucket = crate::ip::bucket_ip(ip);
     let maze_key = format!("maze_hits:{}", maze_bucket);
-    let hits: u32 = store.get(&maze_key)
+    let hits: u32 = store
+        .get(&maze_key)
         .ok()
         .flatten()
         .and_then(|v| String::from_utf8(v).ok())
@@ -311,18 +344,28 @@ fn serve_maze_with_tracking(
             Some(crate::ban::BanFingerprint {
                 score: None,
                 signals: vec!["maze_crawler_threshold".to_string()],
-                summary: Some(format!("maze_hits={} threshold={}", hits + 1, cfg.maze_auto_ban_threshold)),
+                summary: Some(format!(
+                    "maze_hits={} threshold={}",
+                    hits + 1,
+                    cfg.maze_auto_ban_threshold
+                )),
             }),
         );
         metrics::increment(store, metrics::MetricName::BansTotal, Some("maze_crawler"));
-        crate::admin::log_event(store, &crate::admin::EventLogEntry {
-            ts: crate::admin::now_ts(),
-            event: crate::admin::EventType::Ban,
-            ip: Some(ip.to_string()),
-            reason: Some("maze_crawler".to_string()),
-            outcome: Some(format!("banned_after_{}_maze_pages", cfg.maze_auto_ban_threshold)),
-            admin: None,
-        });
+        crate::admin::log_event(
+            store,
+            &crate::admin::EventLogEntry {
+                ts: crate::admin::now_ts(),
+                event: crate::admin::EventType::Ban,
+                ip: Some(ip.to_string()),
+                reason: Some("maze_crawler".to_string()),
+                outcome: Some(format!(
+                    "banned_after_{}_maze_pages",
+                    cfg.maze_auto_ban_threshold
+                )),
+                admin: None,
+            },
+        );
     }
 
     maze::handle_maze_request(path)
@@ -424,7 +467,11 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
         if let Ok(store) = Store::open_default() {
             let cfg = config::Config::load(&store, "default");
             if cfg.robots_enabled {
-                metrics::increment(&store, metrics::MetricName::RequestsTotal, Some("robots_txt"));
+                metrics::increment(
+                    &store,
+                    metrics::MetricName::RequestsTotal,
+                    Some("robots_txt"),
+                );
                 let content = robots::generate_robots_txt(&cfg);
                 let content_signal = robots::get_content_signal_header(&cfg);
                 return Response::builder()
@@ -442,7 +489,10 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
 
     let site_id = "default";
     let ip = extract_client_ip(req);
-    let ua = req.header("user-agent").map(|v| v.as_str().unwrap_or("")).unwrap_or("");
+    let ua = req
+        .header("user-agent")
+        .map(|v| v.as_str().unwrap_or(""))
+        .unwrap_or("");
 
     // Admin API
     if path.starts_with("/admin") {
@@ -504,106 +554,140 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
         if honeypot::is_honeypot(path, &cfg.honeypots) {
             log_line(&format!("[TEST MODE] Would ban IP {ip} for honeypot"));
             metrics::increment(store, metrics::MetricName::TestModeActions, None);
-            crate::admin::log_event(store, &crate::admin::EventLogEntry {
-                ts: crate::admin::now_ts(),
-                event: crate::admin::EventType::Block,
-                ip: Some(ip.clone()),
-                reason: Some("honeypot [TEST MODE]".to_string()),
-                outcome: Some("would_block".to_string()),
-                admin: None,
-            });
+            crate::admin::log_event(
+                store,
+                &crate::admin::EventLogEntry {
+                    ts: crate::admin::now_ts(),
+                    event: crate::admin::EventType::Block,
+                    ip: Some(ip.clone()),
+                    reason: Some("honeypot [TEST MODE]".to_string()),
+                    outcome: Some("would_block".to_string()),
+                    admin: None,
+                },
+            );
             return Response::new(200, "TEST MODE: Would block (honeypot)");
         }
         if !rate::check_rate_limit(store, site_id, &ip, cfg.rate_limit) {
             log_line(&format!("[TEST MODE] Would ban IP {ip} for rate limit"));
             metrics::increment(store, metrics::MetricName::TestModeActions, None);
-            crate::admin::log_event(store, &crate::admin::EventLogEntry {
-                ts: crate::admin::now_ts(),
-                event: crate::admin::EventType::Block,
-                ip: Some(ip.clone()),
-                reason: Some("rate_limit [TEST MODE]".to_string()),
-                outcome: Some("would_block".to_string()),
-                admin: None,
-            });
+            crate::admin::log_event(
+                store,
+                &crate::admin::EventLogEntry {
+                    ts: crate::admin::now_ts(),
+                    event: crate::admin::EventType::Block,
+                    ip: Some(ip.clone()),
+                    reason: Some("rate_limit [TEST MODE]".to_string()),
+                    outcome: Some("would_block".to_string()),
+                    admin: None,
+                },
+            );
             return Response::new(200, "TEST MODE: Would block (rate limit)");
         }
         if ban::is_banned(store, site_id, &ip) {
-            log_line(&format!("[TEST MODE] Would serve challenge to banned IP {ip}"));
+            log_line(&format!(
+                "[TEST MODE] Would serve challenge to banned IP {ip}"
+            ));
             metrics::increment(store, metrics::MetricName::TestModeActions, None);
-            crate::admin::log_event(store, &crate::admin::EventLogEntry {
-                ts: crate::admin::now_ts(),
-                event: crate::admin::EventType::Block,
-                ip: Some(ip.clone()),
-                reason: Some("banned [TEST MODE]".to_string()),
-                outcome: Some("would_serve_challenge".to_string()),
-                admin: None,
-            });
+            crate::admin::log_event(
+                store,
+                &crate::admin::EventLogEntry {
+                    ts: crate::admin::now_ts(),
+                    event: crate::admin::EventType::Block,
+                    ip: Some(ip.clone()),
+                    reason: Some("banned [TEST MODE]".to_string()),
+                    outcome: Some("would_serve_challenge".to_string()),
+                    admin: None,
+                },
+            );
             return Response::new(200, "TEST MODE: Would serve challenge");
         }
         if path != "/health" && js::needs_js_verification(req, store, site_id, &ip) {
-            log_line(&format!("[TEST MODE] Would inject JS challenge for IP {ip}"));
+            log_line(&format!(
+                "[TEST MODE] Would inject JS challenge for IP {ip}"
+            ));
             metrics::increment(store, metrics::MetricName::TestModeActions, None);
-            crate::admin::log_event(store, &crate::admin::EventLogEntry {
-                ts: crate::admin::now_ts(),
-                event: crate::admin::EventType::Challenge,
-                ip: Some(ip.clone()),
-                reason: Some("js_verification [TEST MODE]".to_string()),
-                outcome: Some("would_challenge".to_string()),
-                admin: None,
-            });
+            crate::admin::log_event(
+                store,
+                &crate::admin::EventLogEntry {
+                    ts: crate::admin::now_ts(),
+                    event: crate::admin::EventType::Challenge,
+                    ip: Some(ip.clone()),
+                    reason: Some("js_verification [TEST MODE]".to_string()),
+                    outcome: Some("would_challenge".to_string()),
+                    admin: None,
+                },
+            );
             return Response::new(200, "TEST MODE: Would inject JS challenge");
         }
         if browser::is_outdated_browser(ua, &cfg.browser_block) {
-            log_line(&format!("[TEST MODE] Would ban IP {ip} for outdated browser"));
+            log_line(&format!(
+                "[TEST MODE] Would ban IP {ip} for outdated browser"
+            ));
             metrics::increment(store, metrics::MetricName::TestModeActions, None);
-            crate::admin::log_event(store, &crate::admin::EventLogEntry {
-                ts: crate::admin::now_ts(),
-                event: crate::admin::EventType::Block,
-                ip: Some(ip.clone()),
-                reason: Some("browser [TEST MODE]".to_string()),
-                outcome: Some("would_block".to_string()),
-                admin: None,
-            });
+            crate::admin::log_event(
+                store,
+                &crate::admin::EventLogEntry {
+                    ts: crate::admin::now_ts(),
+                    event: crate::admin::EventType::Block,
+                    ip: Some(ip.clone()),
+                    reason: Some("browser [TEST MODE]".to_string()),
+                    outcome: Some("would_block".to_string()),
+                    admin: None,
+                },
+            );
             return Response::new(200, "TEST MODE: Would block (outdated browser)");
         }
         match geo_assessment.route {
             geo::GeoPolicyRoute::Block => {
                 log_line(&format!("[TEST MODE] Would block IP {ip} for GEO policy"));
                 metrics::increment(store, metrics::MetricName::TestModeActions, None);
-                crate::admin::log_event(store, &crate::admin::EventLogEntry {
-                    ts: crate::admin::now_ts(),
-                    event: crate::admin::EventType::Block,
-                    ip: Some(ip.clone()),
-                    reason: Some("geo_policy_block [TEST MODE]".to_string()),
-                    outcome: Some("would_block".to_string()),
-                    admin: None,
-                });
+                crate::admin::log_event(
+                    store,
+                    &crate::admin::EventLogEntry {
+                        ts: crate::admin::now_ts(),
+                        event: crate::admin::EventType::Block,
+                        ip: Some(ip.clone()),
+                        reason: Some("geo_policy_block [TEST MODE]".to_string()),
+                        outcome: Some("would_block".to_string()),
+                        admin: None,
+                    },
+                );
                 return Response::new(200, "TEST MODE: Would block (geo policy)");
             }
             geo::GeoPolicyRoute::Maze => {
-                log_line(&format!("[TEST MODE] Would route IP {ip} to maze for GEO policy"));
+                log_line(&format!(
+                    "[TEST MODE] Would route IP {ip} to maze for GEO policy"
+                ));
                 metrics::increment(store, metrics::MetricName::TestModeActions, None);
-                crate::admin::log_event(store, &crate::admin::EventLogEntry {
-                    ts: crate::admin::now_ts(),
-                    event: crate::admin::EventType::Challenge,
-                    ip: Some(ip.clone()),
-                    reason: Some("geo_policy_maze [TEST MODE]".to_string()),
-                    outcome: Some("would_route_maze".to_string()),
-                    admin: None,
-                });
+                crate::admin::log_event(
+                    store,
+                    &crate::admin::EventLogEntry {
+                        ts: crate::admin::now_ts(),
+                        event: crate::admin::EventType::Challenge,
+                        ip: Some(ip.clone()),
+                        reason: Some("geo_policy_maze [TEST MODE]".to_string()),
+                        outcome: Some("would_route_maze".to_string()),
+                        admin: None,
+                    },
+                );
                 return Response::new(200, "TEST MODE: Would route to maze (geo policy)");
             }
             geo::GeoPolicyRoute::Challenge => {
-                log_line(&format!("[TEST MODE] Would challenge IP {ip} for GEO policy"));
+                log_line(&format!(
+                    "[TEST MODE] Would challenge IP {ip} for GEO policy"
+                ));
                 metrics::increment(store, metrics::MetricName::TestModeActions, None);
-                crate::admin::log_event(store, &crate::admin::EventLogEntry {
-                    ts: crate::admin::now_ts(),
-                    event: crate::admin::EventType::Challenge,
-                    ip: Some(ip.clone()),
-                    reason: Some("geo_policy_challenge [TEST MODE]".to_string()),
-                    outcome: Some("would_challenge".to_string()),
-                    admin: None,
-                });
+                crate::admin::log_event(
+                    store,
+                    &crate::admin::EventLogEntry {
+                        ts: crate::admin::now_ts(),
+                        event: crate::admin::EventType::Challenge,
+                        ip: Some(ip.clone()),
+                        reason: Some("geo_policy_challenge [TEST MODE]".to_string()),
+                        outcome: Some("would_challenge".to_string()),
+                        admin: None,
+                    },
+                );
                 return Response::new(200, "TEST MODE: Would serve challenge (geo policy)");
             }
             geo::GeoPolicyRoute::Allow | geo::GeoPolicyRoute::None => {}
@@ -627,15 +711,21 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
         metrics::increment(store, metrics::MetricName::BansTotal, Some("honeypot"));
         metrics::increment(store, metrics::MetricName::BlocksTotal, None);
         // Log ban event
-        crate::admin::log_event(store, &crate::admin::EventLogEntry {
-            ts: crate::admin::now_ts(),
-            event: crate::admin::EventType::Ban,
-            ip: Some(ip.clone()),
-            reason: Some("honeypot".to_string()),
-            outcome: Some("banned".to_string()),
-            admin: None,
-        });
-        return Response::new(403, block_page::render_block_page(block_page::BlockReason::Honeypot));
+        crate::admin::log_event(
+            store,
+            &crate::admin::EventLogEntry {
+                ts: crate::admin::now_ts(),
+                event: crate::admin::EventType::Ban,
+                ip: Some(ip.clone()),
+                reason: Some("honeypot".to_string()),
+                outcome: Some("banned".to_string()),
+                admin: None,
+            },
+        );
+        return Response::new(
+            403,
+            block_page::render_block_page(block_page::BlockReason::Honeypot),
+        );
     }
     // Rate limit: ban and hard block
     if !rate::check_rate_limit(store, site_id, &ip, cfg.rate_limit) {
@@ -654,29 +744,41 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
         metrics::increment(store, metrics::MetricName::BansTotal, Some("rate_limit"));
         metrics::increment(store, metrics::MetricName::BlocksTotal, None);
         // Log ban event
-        crate::admin::log_event(store, &crate::admin::EventLogEntry {
-            ts: crate::admin::now_ts(),
-            event: crate::admin::EventType::Ban,
-            ip: Some(ip.clone()),
-            reason: Some("rate".to_string()),
-            outcome: Some("banned".to_string()),
-            admin: None,
-        });
-        return Response::new(429, block_page::render_block_page(block_page::BlockReason::RateLimit));
+        crate::admin::log_event(
+            store,
+            &crate::admin::EventLogEntry {
+                ts: crate::admin::now_ts(),
+                event: crate::admin::EventType::Ban,
+                ip: Some(ip.clone()),
+                reason: Some("rate".to_string()),
+                outcome: Some("banned".to_string()),
+                admin: None,
+            },
+        );
+        return Response::new(
+            429,
+            block_page::render_block_page(block_page::BlockReason::RateLimit),
+        );
     }
     // Ban: always show block page if banned (no challenge)
     if ban::is_banned(store, site_id, &ip) {
         metrics::increment(store, metrics::MetricName::BlocksTotal, None);
         // Log block event
-        crate::admin::log_event(store, &crate::admin::EventLogEntry {
-            ts: crate::admin::now_ts(),
-            event: crate::admin::EventType::Ban,
-            ip: Some(ip.clone()),
-            reason: Some("banned".to_string()),
-            outcome: Some("block page".to_string()),
-            admin: None,
-        });
-        return Response::new(403, block_page::render_block_page(block_page::BlockReason::Honeypot));
+        crate::admin::log_event(
+            store,
+            &crate::admin::EventLogEntry {
+                ts: crate::admin::now_ts(),
+                event: crate::admin::EventType::Ban,
+                ip: Some(ip.clone()),
+                reason: Some("banned".to_string()),
+                outcome: Some("block page".to_string()),
+                admin: None,
+            },
+        );
+        return Response::new(
+            403,
+            block_page::render_block_page(block_page::BlockReason::Honeypot),
+        );
     }
     // PoW endpoints (public, before JS verification)
     if path == "/pow" {
@@ -705,31 +807,43 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
         metrics::increment(store, metrics::MetricName::BansTotal, Some("browser"));
         metrics::increment(store, metrics::MetricName::BlocksTotal, None);
         // Log ban event
-        crate::admin::log_event(store, &crate::admin::EventLogEntry {
-            ts: crate::admin::now_ts(),
-            event: crate::admin::EventType::Ban,
-            ip: Some(ip.clone()),
-            reason: Some("browser".to_string()),
-            outcome: Some("banned".to_string()),
-            admin: None,
-        });
-        return Response::new(403, block_page::render_block_page(block_page::BlockReason::OutdatedBrowser));
+        crate::admin::log_event(
+            store,
+            &crate::admin::EventLogEntry {
+                ts: crate::admin::now_ts(),
+                event: crate::admin::EventType::Ban,
+                ip: Some(ip.clone()),
+                reason: Some("browser".to_string()),
+                outcome: Some("banned".to_string()),
+                admin: None,
+            },
+        );
+        return Response::new(
+            403,
+            block_page::render_block_page(block_page::BlockReason::OutdatedBrowser),
+        );
     }
     match geo_assessment.route {
         geo::GeoPolicyRoute::Block => {
             metrics::increment(store, metrics::MetricName::BlocksTotal, None);
-            crate::admin::log_event(store, &crate::admin::EventLogEntry {
-                ts: crate::admin::now_ts(),
-                event: crate::admin::EventType::Block,
-                ip: Some(ip.clone()),
-                reason: Some("geo_policy_block".to_string()),
-                outcome: Some(format!(
-                    "country={}",
-                    geo_assessment.country.as_deref().unwrap_or("unknown")
-                )),
-                admin: None,
-            });
-            return Response::new(403, block_page::render_block_page(block_page::BlockReason::GeoPolicy));
+            crate::admin::log_event(
+                store,
+                &crate::admin::EventLogEntry {
+                    ts: crate::admin::now_ts(),
+                    event: crate::admin::EventType::Block,
+                    ip: Some(ip.clone()),
+                    reason: Some("geo_policy_block".to_string()),
+                    outcome: Some(format!(
+                        "country={}",
+                        geo_assessment.country.as_deref().unwrap_or("unknown")
+                    )),
+                    admin: None,
+                },
+            );
+            return Response::new(
+                403,
+                block_page::render_block_page(block_page::BlockReason::GeoPolicy),
+            );
         }
         geo::GeoPolicyRoute::Maze => {
             if cfg.maze_enabled {
@@ -747,36 +861,49 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
             }
             metrics::increment(store, metrics::MetricName::ChallengesTotal, None);
             metrics::increment(store, metrics::MetricName::ChallengeServedTotal, None);
-            crate::admin::log_event(store, &crate::admin::EventLogEntry {
-                ts: crate::admin::now_ts(),
-                event: crate::admin::EventType::Challenge,
-                ip: Some(ip.clone()),
-                reason: Some("geo_policy_challenge_fallback".to_string()),
-                outcome: Some("maze_disabled".to_string()),
-                admin: None,
-            });
+            crate::admin::log_event(
+                store,
+                &crate::admin::EventLogEntry {
+                    ts: crate::admin::now_ts(),
+                    event: crate::admin::EventType::Challenge,
+                    ip: Some(ip.clone()),
+                    reason: Some("geo_policy_challenge_fallback".to_string()),
+                    outcome: Some("maze_disabled".to_string()),
+                    admin: None,
+                },
+            );
             return challenge::render_challenge(req);
         }
         geo::GeoPolicyRoute::Challenge => {
             metrics::increment(store, metrics::MetricName::ChallengesTotal, None);
             metrics::increment(store, metrics::MetricName::ChallengeServedTotal, None);
-            crate::admin::log_event(store, &crate::admin::EventLogEntry {
-                ts: crate::admin::now_ts(),
-                event: crate::admin::EventType::Challenge,
-                ip: Some(ip.clone()),
-                reason: Some("geo_policy_challenge".to_string()),
-                outcome: Some(format!(
-                    "country={}",
-                    geo_assessment.country.as_deref().unwrap_or("unknown")
-                )),
-                admin: None,
-            });
+            crate::admin::log_event(
+                store,
+                &crate::admin::EventLogEntry {
+                    ts: crate::admin::now_ts(),
+                    event: crate::admin::EventType::Challenge,
+                    ip: Some(ip.clone()),
+                    reason: Some("geo_policy_challenge".to_string()),
+                    outcome: Some(format!(
+                        "country={}",
+                        geo_assessment.country.as_deref().unwrap_or("unknown")
+                    )),
+                    admin: None,
+                },
+            );
             return challenge::render_challenge(req);
         }
         geo::GeoPolicyRoute::Allow | geo::GeoPolicyRoute::None => {}
     }
     // Compute unified botness score for challenge/maze step-up routing.
-    let needs_js = path != "/health" && js::needs_js_verification_with_whitelist(req, store, site_id, &ip, &cfg.browser_whitelist);
+    let needs_js = path != "/health"
+        && js::needs_js_verification_with_whitelist(
+            req,
+            store,
+            site_id,
+            &ip,
+            &cfg.browser_whitelist,
+        );
     let geo_risk = geo_assessment.scored_risk;
     let rate_usage = rate::current_rate_usage(store, site_id, &ip);
     let botness = compute_botness_assessment(needs_js, geo_risk, rate_usage, cfg.rate_limit, &cfg);
@@ -796,14 +923,20 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
     if botness.score >= cfg.challenge_risk_threshold {
         metrics::increment(store, metrics::MetricName::ChallengesTotal, None);
         metrics::increment(store, metrics::MetricName::ChallengeServedTotal, None);
-        crate::admin::log_event(store, &crate::admin::EventLogEntry {
-            ts: crate::admin::now_ts(),
-            event: crate::admin::EventType::Challenge,
-            ip: Some(ip.clone()),
-            reason: Some("botness_gate_challenge".to_string()),
-            outcome: Some(format!("score={} signals={}", botness.score, botness_summary)),
-            admin: None,
-        });
+        crate::admin::log_event(
+            store,
+            &crate::admin::EventLogEntry {
+                ts: crate::admin::now_ts(),
+                event: crate::admin::EventType::Challenge,
+                ip: Some(ip.clone()),
+                reason: Some("botness_gate_challenge".to_string()),
+                outcome: Some(format!(
+                    "score={} signals={}",
+                    botness.score, botness_summary
+                )),
+                admin: None,
+            },
+        );
         return challenge::render_challenge(req);
     }
 
@@ -811,14 +944,17 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
     if needs_js {
         metrics::increment(store, metrics::MetricName::ChallengesTotal, None);
         // Log challenge event
-        crate::admin::log_event(store, &crate::admin::EventLogEntry {
-            ts: crate::admin::now_ts(),
-            event: crate::admin::EventType::Challenge,
-            ip: Some(ip.clone()),
-            reason: Some("js_verification".to_string()),
-            outcome: Some("js challenge".to_string()),
-            admin: None,
-        });
+        crate::admin::log_event(
+            store,
+            &crate::admin::EventLogEntry {
+                ts: crate::admin::now_ts(),
+                event: crate::admin::EventType::Challenge,
+                ip: Some(ip.clone()),
+                reason: Some("js_verification".to_string()),
+                outcome: Some("js challenge".to_string()),
+                admin: None,
+            },
+        );
         return js::inject_js_challenge(&ip, cfg.pow_difficulty, cfg.pow_ttl_seconds);
     }
     Response::new(200, "OK (passed bot trap)")

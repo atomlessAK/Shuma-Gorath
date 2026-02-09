@@ -151,20 +151,27 @@ pub fn handle_pow_verify(req: &Request, ip: &str) -> Response {
         return Response::new(405, "Method Not Allowed");
     }
 
-    let body = req.body();
-    let parsed: Result<serde_json::Value, _> = serde_json::from_slice(body);
-    let json = match parsed {
-        Ok(j) => j,
-        Err(_) => return Response::new(400, "Invalid JSON"),
+    let json = match crate::input_validation::parse_json_body(
+        req.body(),
+        crate::input_validation::MAX_POW_VERIFY_BYTES,
+    ) {
+        Ok(v) => v,
+        Err(e) => return Response::new(400, e),
     };
     let seed = match json.get("seed").and_then(|v| v.as_str()) {
         Some(v) => v,
         None => return Response::new(400, "Missing seed"),
     };
+    if !crate::input_validation::validate_seed_token(seed) {
+        return Response::new(400, "Invalid seed");
+    }
     let nonce = match json.get("nonce").and_then(|v| v.as_str()) {
         Some(v) => v,
         None => return Response::new(400, "Missing nonce"),
     };
+    if !crate::input_validation::validate_nonce(nonce) {
+        return Response::new(400, "Invalid nonce");
+    }
 
     let payload = match parse_seed_token(seed) {
         Ok(p) => p,

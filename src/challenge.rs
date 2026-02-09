@@ -25,9 +25,9 @@ impl KeyValueStore for Store {
 use base64::{engine::general_purpose, Engine as _};
 use hmac::{Hmac, Mac};
 use percent_encoding;
+use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
-use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
@@ -198,7 +198,11 @@ pub(crate) fn parse_transform_count(value: Option<&str>) -> usize {
 }
 
 fn configured_transform_count() -> usize {
-    parse_transform_count(std::env::var("SHUMA_CHALLENGE_TRANSFORM_COUNT").ok().as_deref())
+    parse_transform_count(
+        std::env::var("SHUMA_CHALLENGE_TRANSFORM_COUNT")
+            .ok()
+            .as_deref(),
+    )
 }
 
 pub(crate) fn transforms_for_count(count: usize) -> Vec<Transform> {
@@ -364,8 +368,7 @@ fn render_grid(grid: &[u8], size: usize, class_name: &str, clickable: bool) -> S
     let mut html = String::new();
     html.push_str(&format!(
         "<div class=\"grid {}\" style=\"grid-template-columns: repeat({}, var(--puzzle-cell));\">",
-        class_name,
-        size
+        class_name, size
     ));
     for (idx, val) in grid.iter().enumerate() {
         let mut classes = String::from("cell");
@@ -377,7 +380,10 @@ fn render_grid(grid: &[u8], size: usize, class_name: &str, clickable: bool) -> S
         if clickable {
             classes.push_str(" clickable");
         }
-        html.push_str(&format!("<div class=\"{}\" data-idx=\"{}\"></div>", classes, idx));
+        html.push_str(&format!(
+            "<div class=\"{}\" data-idx=\"{}\"></div>",
+            classes, idx
+        ));
     }
     html.push_str("</div>");
     html
@@ -431,7 +437,8 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
 
     let legend_transforms = enabled_transforms();
     let legend_html = render_transform_legend(&legend_transforms);
-    let html = format!(r#"
+    let html = format!(
+        r#"
         <html>
         <head>
           <style>
@@ -672,14 +679,14 @@ pub(crate) fn render_challenge(req: &Request) -> Response {
         </body>
         </html>
     "#,
-    legend_html = legend_html,
-    training_html = training_html,
-    test_input = render_grid(&puzzle.test_input, puzzle.grid_size, "grid-static", false),
-    test_output = render_grid(&empty_output, puzzle.grid_size, "grid-output", false),
-    test_input_json = test_input_json,
-    seed_token = seed_token,
-    grid_size = grid_size,
-    empty_tritstring = grid_to_tritstring(&empty_output),
+        legend_html = legend_html,
+        training_html = training_html,
+        test_input = render_grid(&puzzle.test_input, puzzle.grid_size, "grid-static", false),
+        test_output = render_grid(&empty_output, puzzle.grid_size, "grid-output", false),
+        test_input_json = test_input_json,
+        seed_token = seed_token,
+        grid_size = grid_size,
+        empty_tritstring = grid_to_tritstring(&empty_output),
     );
     challenge_response(200, &html)
 }
@@ -742,8 +749,13 @@ fn transform_legend_label(transform: &Transform) -> &'static str {
     match transform {
         Transform::RotateCw90 | Transform::RotateCcw90 => "90&#176;",
         Transform::MirrorHorizontal | Transform::MirrorVertical => "mirror",
-        Transform::ShiftUp | Transform::ShiftDown | Transform::ShiftLeft | Transform::ShiftRight => "shift",
-        Transform::DropTop | Transform::DropBottom | Transform::DropLeft | Transform::DropRight => "shift",
+        Transform::ShiftUp
+        | Transform::ShiftDown
+        | Transform::ShiftLeft
+        | Transform::ShiftRight => "shift",
+        Transform::DropTop | Transform::DropBottom | Transform::DropLeft | Transform::DropRight => {
+            "shift"
+        }
     }
 }
 
@@ -826,11 +838,41 @@ pub(crate) fn handle_challenge_submit_with_outcome<S: KeyValueStore>(
     store: &S,
     req: &Request,
 ) -> (Response, ChallengeSubmitOutcome) {
-    let form = String::from_utf8_lossy(req.body()).to_string();
+    if crate::input_validation::enforce_body_size(
+        req.body(),
+        crate::input_validation::MAX_CHALLENGE_FORM_BYTES,
+    )
+    .is_err()
+    {
+        return (
+            challenge_forbidden_response(),
+            ChallengeSubmitOutcome::Forbidden,
+        );
+    }
+    let form = match std::str::from_utf8(req.body()) {
+        Ok(v) => v.to_string(),
+        Err(_) => {
+            return (
+                challenge_forbidden_response(),
+                ChallengeSubmitOutcome::Forbidden,
+            )
+        }
+    };
     let seed_token = match get_form_field(&form, "seed") {
         Some(v) => v,
-        None => return (challenge_forbidden_response(), ChallengeSubmitOutcome::Forbidden),
+        None => {
+            return (
+                challenge_forbidden_response(),
+                ChallengeSubmitOutcome::Forbidden,
+            )
+        }
     };
+    if !crate::input_validation::validate_seed_token(seed_token.as_str()) {
+        return (
+            challenge_forbidden_response(),
+            ChallengeSubmitOutcome::Forbidden,
+        );
+    }
     let output_raw = match get_form_field(&form, "output") {
         Some(v) => v,
         None => {
@@ -840,25 +882,45 @@ pub(crate) fn handle_challenge_submit_with_outcome<S: KeyValueStore>(
             )
         }
     };
+    if output_raw.len() > 128 {
+        return (
+            challenge_response(400, "Invalid output"),
+            ChallengeSubmitOutcome::InvalidOutput,
+        );
+    }
     let seed = match parse_seed_token(&seed_token) {
         Ok(s) => s,
-        Err(_) => return (challenge_forbidden_response(), ChallengeSubmitOutcome::Forbidden),
+        Err(_) => {
+            return (
+                challenge_forbidden_response(),
+                ChallengeSubmitOutcome::Forbidden,
+            )
+        }
     };
     let now = crate::admin::now_ts();
     if now > seed.expires_at {
-        return (challenge_expired_response(), ChallengeSubmitOutcome::ExpiredReplay);
+        return (
+            challenge_expired_response(),
+            ChallengeSubmitOutcome::ExpiredReplay,
+        );
     }
     let ip = crate::extract_client_ip(req);
     let ip_bucket = crate::ip::bucket_ip(&ip);
     if seed.ip_bucket != ip_bucket {
-        return (challenge_forbidden_response(), ChallengeSubmitOutcome::Forbidden);
+        return (
+            challenge_forbidden_response(),
+            ChallengeSubmitOutcome::Forbidden,
+        );
     }
     let used_key = format!("challenge_used:{}", seed.seed_id);
     if let Ok(Some(val)) = store.get(&used_key) {
         if let Ok(stored) = String::from_utf8(val) {
             if let Ok(exp) = stored.parse::<u64>() {
                 if now <= exp {
-                    return (challenge_expired_response(), ChallengeSubmitOutcome::ExpiredReplay);
+                    return (
+                        challenge_expired_response(),
+                        ChallengeSubmitOutcome::ExpiredReplay,
+                    );
                 }
             }
         }
@@ -877,11 +939,17 @@ pub(crate) fn handle_challenge_submit_with_outcome<S: KeyValueStore>(
     let puzzle = build_puzzle(&seed);
     if output == puzzle.test_output {
         return (
-            challenge_response(200, "<html><body><h2>Thank you! Challenge complete.</h2></body></html>"),
+            challenge_response(
+                200,
+                "<html><body><h2>Thank you! Challenge complete.</h2></body></html>",
+            ),
             ChallengeSubmitOutcome::Solved,
         );
     }
-    (challenge_incorrect_response(), ChallengeSubmitOutcome::Incorrect)
+    (
+        challenge_incorrect_response(),
+        ChallengeSubmitOutcome::Incorrect,
+    )
 }
 
 #[cfg(test)]
@@ -902,5 +970,7 @@ fn get_form_field(form: &str, name: &str) -> Option<String> {
 }
 
 fn url_decode(s: &str) -> String {
-    percent_encoding::percent_decode_str(s).decode_utf8_lossy().to_string()
+    percent_encoding::percent_decode_str(s)
+        .decode_utf8_lossy()
+        .to_string()
 }

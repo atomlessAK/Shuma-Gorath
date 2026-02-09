@@ -52,6 +52,13 @@ mod tests {
     }
 
     #[test]
+    fn extract_geo_country_rejects_non_iso_code() {
+        let req = build_request(&[("x-geo-country", "zz")]);
+        let country = crate::geo::extract_geo_country(&req, true);
+        assert_eq!(country, None);
+    }
+
+    #[test]
     fn geo_policy_uses_most_restrictive_match_precedence() {
         let store = TestStore::default();
         let mut cfg = crate::config::Config::load(&store, "default");

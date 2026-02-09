@@ -4,19 +4,9 @@
 #[cfg(test)]
 mod tests {
     use super::super::challenge::{
-        apply_transform,
-        build_puzzle,
-        generate_pair,
-        handle_challenge_submit,
-        make_seed_token,
-        parse_submission,
-        parse_transform_count,
-        render_challenge,
-        select_transform_pair,
-        serve_challenge_page,
-        transforms_for_count,
-        ChallengeSeed,
-        Transform,
+        apply_transform, build_puzzle, generate_pair, handle_challenge_submit, make_seed_token,
+        parse_submission, parse_transform_count, render_challenge, select_transform_pair,
+        serve_challenge_page, transforms_for_count, ChallengeSeed, Transform,
     };
     use rand::rngs::StdRng;
     use rand::SeedableRng;
@@ -48,7 +38,9 @@ mod tests {
             Ok(self.map.borrow().get(key).cloned())
         }
         fn set(&self, key: &str, value: &[u8]) -> Result<(), ()> {
-            self.map.borrow_mut().insert(key.to_string(), value.to_vec());
+            self.map
+                .borrow_mut()
+                .insert(key.to_string(), value.to_vec());
             Ok(())
         }
         fn delete(&self, key: &str) -> Result<(), ()> {
@@ -201,12 +193,7 @@ mod tests {
     fn transform_rotate_cw_works() {
         let grid = grid_4x4();
         let out = apply_transform(&grid, 4, Transform::RotateCw90);
-        let expected = vec![
-            13, 9, 5, 1,
-            14, 10, 6, 2,
-            15, 11, 7, 3,
-            16, 12, 8, 4,
-        ];
+        let expected = vec![13, 9, 5, 1, 14, 10, 6, 2, 15, 11, 7, 3, 16, 12, 8, 4];
         assert_eq!(out, expected);
     }
 
@@ -214,12 +201,7 @@ mod tests {
     fn transform_mirror_horizontal_works() {
         let grid = grid_4x4();
         let out = apply_transform(&grid, 4, Transform::MirrorHorizontal);
-        let expected = vec![
-            13, 14, 15, 16,
-            9, 10, 11, 12,
-            5, 6, 7, 8,
-            1, 2, 3, 4,
-        ];
+        let expected = vec![13, 14, 15, 16, 9, 10, 11, 12, 5, 6, 7, 8, 1, 2, 3, 4];
         assert_eq!(out, expected);
     }
 
@@ -227,12 +209,7 @@ mod tests {
     fn transform_mirror_vertical_works() {
         let grid = grid_4x4();
         let out = apply_transform(&grid, 4, Transform::MirrorVertical);
-        let expected = vec![
-            4, 3, 2, 1,
-            8, 7, 6, 5,
-            12, 11, 10, 9,
-            16, 15, 14, 13,
-        ];
+        let expected = vec![4, 3, 2, 1, 8, 7, 6, 5, 12, 11, 10, 9, 16, 15, 14, 13];
         assert_eq!(out, expected);
     }
 
@@ -240,12 +217,7 @@ mod tests {
     fn transform_shift_left_no_wrap() {
         let grid = grid_4x4();
         let out = apply_transform(&grid, 4, Transform::ShiftLeft);
-        let expected = vec![
-            2, 3, 4, 0,
-            6, 7, 8, 0,
-            10, 11, 12, 0,
-            14, 15, 16, 0,
-        ];
+        let expected = vec![2, 3, 4, 0, 6, 7, 8, 0, 10, 11, 12, 0, 14, 15, 16, 0];
         assert_eq!(out, expected);
     }
 
@@ -253,12 +225,7 @@ mod tests {
     fn transform_drop_right_matches_spec() {
         let grid = grid_4x4();
         let out = apply_transform(&grid, 4, Transform::DropRight);
-        let expected = vec![
-            0, 1, 2, 3,
-            0, 5, 6, 7,
-            0, 9, 10, 11,
-            0, 13, 14, 15,
-        ];
+        let expected = vec![0, 1, 2, 3, 0, 5, 6, 7, 0, 9, 10, 11, 0, 13, 14, 15];
         assert_eq!(out, expected);
     }
 
@@ -327,7 +294,9 @@ mod tests {
         assert!(!body.contains("class=\"legend-table\""));
         assert!(!body.contains("class=\"legend-check\""));
         assert!(body.contains("Which 2 transforms were applied?"));
-        assert!(body.contains("<div class=\"legend-subtitle\">Which 2 transforms were applied?</div>"));
+        assert!(
+            body.contains("<div class=\"legend-subtitle\">Which 2 transforms were applied?</div>")
+        );
         assert!(!body.contains("Choose 2 transforms:"));
         assert!(!body.contains("Your turn"));
         assert!(!body.contains("Example 2"));
@@ -514,7 +483,11 @@ mod tests {
             .method(Method::Post)
             .uri("/challenge")
             .header("content-type", "application/x-www-form-urlencoded")
-            .body(format!("seed={}&output=0000000000000000", seed_token).as_bytes().to_vec())
+            .body(
+                format!("seed={}&output=0000000000000000", seed_token)
+                    .as_bytes()
+                    .to_vec(),
+            )
             .build();
         let resp = handle_challenge_submit(&store, &req);
         assert_eq!(*resp.status(), 403u16);
@@ -541,6 +514,22 @@ mod tests {
         let body = String::from_utf8(resp.into_body()).unwrap();
         assert!(body.contains("Forbidden. Please request a new challenge."));
         assert!(body.contains("Request new challenge."));
+    }
+
+    #[test]
+    fn handle_challenge_submit_rejects_oversized_form_body() {
+        let store = TestStore::default();
+        let oversized = "a".repeat(crate::input_validation::MAX_CHALLENGE_FORM_BYTES + 1);
+        let req = Request::builder()
+            .method(Method::Post)
+            .uri("/challenge")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(oversized.into_bytes())
+            .build();
+        let resp = handle_challenge_submit(&store, &req);
+        assert_eq!(*resp.status(), 403u16);
+        let body = String::from_utf8(resp.into_body()).unwrap();
+        assert!(body.contains("Forbidden. Please request a new challenge."));
     }
 
     #[test]

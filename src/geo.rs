@@ -28,14 +28,7 @@ pub fn extract_geo_country(req: &Request, headers_trusted: bool) -> Option<Strin
 
 /// Normalize a country code to two-letter uppercase ISO form.
 pub fn normalize_country_code(value: &str) -> Option<String> {
-    let trimmed = value.trim();
-    if trimmed.len() != 2 {
-        return None;
-    }
-    if !trimmed.chars().all(|c| c.is_ascii_alphabetic()) {
-        return None;
-    }
-    Some(trimmed.to_ascii_uppercase())
+    crate::input_validation::normalize_country_code_iso(value)
 }
 
 /// Normalize, deduplicate, and preserve order for configured country lists.
