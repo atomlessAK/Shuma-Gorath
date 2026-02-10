@@ -610,6 +610,10 @@ code.env-var {
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }
 
+.controls-grid--api {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .controls-grid--config {
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 }

@@ -150,6 +150,21 @@
     <div class="section admin-section">
     <h2>Admin Controls</h2>
       <div class="admin-groups">
+        <section class="admin-group admin-group--api-access">
+          <div class="controls-grid controls-grid--api">
+            <div class="control-group panel-soft pad-md">
+              <h3>API Access</h3>
+              <div class="config">
+                <label for="endpoint">API Endpoint:</label>
+                <input id="endpoint" class="input-field input-field--mono" type="url" value="http://127.0.0.1:3000" size="30" maxlength="2048" inputmode="url" spellcheck="false" autocomplete="off" aria-label="API endpoint">
+                <label for="apikey">API Key:</label>
+                <input id="apikey" class="input-field input-field--mono" value="changeme-dev-only-api-key" size="30" type="password" spellcheck="false" autocomplete="off" aria-label="API key">
+                <button id="refresh" class="btn" aria-label="Refresh dashboard">Refresh</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section class="admin-group admin-group--status">
           <h3 class="admin-group-title">IP Bans</h3>
           <div class="table-wrapper">
@@ -198,16 +213,6 @@
             Controlled by <code class="env-var">SHUMA_ADMIN_PAGE_CONFIG</code>. Admin config is <strong>LOADING</strong>.
           </p>
           <div class="controls-grid controls-grid--config">
-            <div class="control-group panel-soft pad-md">
-              <h3>API Access</h3>
-              <div class="config">
-                <label for="endpoint">API Endpoint:</label>
-                <input id="endpoint" class="input-field input-field--mono" type="url" value="http://127.0.0.1:3000" size="30" maxlength="2048" inputmode="url" spellcheck="false" autocomplete="off" aria-label="API endpoint">
-                <label for="apikey">API Key:</label>
-                <input id="apikey" class="input-field input-field--mono" value="changeme-dev-only-api-key" size="30" type="password" spellcheck="false" autocomplete="off" aria-label="API key">
-                <button id="refresh" class="btn" aria-label="Refresh dashboard">Refresh</button>
-              </div>
-            </div>
             <div class="control-group panel-soft pad-md config-edit-pane hidden">
               <h3>Test Mode</h3>
               <p class="control-desc text-muted">Use for safe tuning. Enabled logs detections without blocking; disable to enforce defenses.</p>
@@ -321,7 +326,7 @@
             </div>
             <div class="control-group panel-soft pad-md config-edit-pane hidden">
               <h3>GEO Risk Based Scoring</h3>
-              <p class="control-desc text-muted">Use 2-letter country codes for countries that contribute to combined botness scoring.</p>
+              <p class="control-desc text-muted">Use <a href="https://www.iban.com/country-codes">2-letter country codes</a> to specify countries from where requests will be receive added botness risk to contribute to the combined score.</p>
               <div class="admin-controls geo-controls">
                 <div class="geo-field">
                   <label class="control-label" for="geo-risk-list">Scoring Countries</label>
@@ -332,7 +337,7 @@
             </div>
             <div class="control-group panel-soft pad-md config-edit-pane hidden">
               <h3>GEO Risk Based Routing</h3>
-              <p class="control-desc text-muted">Use 2-letter country codes for countries that contribute to combined botness scoring. Precedence is Block &gt; Maze &gt; Challenge &gt; Allow.</p>
+              <p class="control-desc text-muted">Use <a href="https://www.iban.com/country-codes">2-letter country codes</a> to specify countries from where requests will be automatically routed. Precedence is Block &gt; Maze &gt; Challenge &gt; Allow.</p>
               <div class="admin-controls geo-controls">
                 <div class="geo-field">
                   <label class="control-label" for="geo-block-list">Block Countries</label>
