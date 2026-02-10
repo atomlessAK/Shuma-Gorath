@@ -832,9 +832,10 @@ input:checked + .toggle-slider:before {
 }
 
 .duration-inputs {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
 }
 
 .duration-input {
@@ -842,14 +843,20 @@ input:checked + .toggle-slider:before {
   align-items: center;
   gap: 6px;
   color: var(--muted-fg);
+  min-width: 0;
 }
 
 .duration-input .input-field {
-  width: 3.4ch;
-  min-width: 3.4ch;
-  padding: 6px 3px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 10px;
   margin: 0;
-  text-align: center;
+  text-align: right;
+  flex: 1 1 auto;
+}
+
+.duration-input .input-unit {
+  white-space: nowrap;
 }
 
 #save-durations-btn {
@@ -858,11 +865,7 @@ input:checked + .toggle-slider:before {
 
 @media (max-width: 720px) {
   .duration-inputs {
-    gap: 10px;
-  }
-
-  .duration-input {
-    flex: 0 0 auto;
+    grid-template-columns: 1fr;
   }
 }
 
