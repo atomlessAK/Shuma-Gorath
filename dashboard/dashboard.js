@@ -2688,7 +2688,7 @@ document.getElementById('login-btn').onclick = async function() {
       body: JSON.stringify({ api_key: apiKey })
     });
     if (!resp.ok) {
-      throw new Error('Login failed. Check SHUMA_API_KEY.');
+      throw new Error('Login failed. Check your key.');
     }
     const data = await resp.json();
     setAdminSession(true, data.csrf_token || '');

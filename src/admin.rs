@@ -1226,10 +1226,7 @@ pub fn handle_admin(req: &Request) -> Response {
         return Response::new(403, "Forbidden");
     }
     if !crate::auth::is_admin_api_key_configured() {
-        return Response::new(
-            503,
-            "Admin API disabled: SHUMA_API_KEY must be set to a non-default value",
-        );
+        return Response::new(503, "Admin API disabled: key not configured");
     }
 
     let path = req.path();

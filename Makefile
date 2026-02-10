@@ -41,16 +41,25 @@ SHUMA_BOTNESS_CONFIG_MUTABLE := $(call strip_wrapping_quotes,$(SHUMA_BOTNESS_CON
 # Dev-only default for forwarded IP secret (override with SHUMA_FORWARDED_IP_SECRET=...)
 DEV_FORWARDED_IP_SECRET ?= changeme-dev-only-ip-secret
 SHUMA_FORWARDED_IP_SECRET ?= $(DEV_FORWARDED_IP_SECRET)
+ifeq ($(strip $(SHUMA_FORWARDED_IP_SECRET)),)
+SHUMA_FORWARDED_IP_SECRET := $(DEV_FORWARDED_IP_SECRET)
+endif
 export SHUMA_FORWARDED_IP_SECRET
 
 # Dev-only default for admin API key (override with SHUMA_API_KEY=...)
 DEV_API_KEY ?= changeme-dev-only-api-key
 SHUMA_API_KEY ?= $(DEV_API_KEY)
+ifeq ($(strip $(SHUMA_API_KEY)),)
+SHUMA_API_KEY := $(DEV_API_KEY)
+endif
 export SHUMA_API_KEY
 
 # Dev-only default for JS secret (override with SHUMA_JS_SECRET=...)
 DEV_JS_SECRET ?= changeme-dev-only-js-secret
 SHUMA_JS_SECRET ?= $(DEV_JS_SECRET)
+ifeq ($(strip $(SHUMA_JS_SECRET)),)
+SHUMA_JS_SECRET := $(DEV_JS_SECRET)
+endif
 export SHUMA_JS_SECRET
 
 # Optional header/env for forwarded IP trust (only if SHUMA_FORWARDED_IP_SECRET is set)

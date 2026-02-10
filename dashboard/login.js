@@ -48,7 +48,7 @@ async function initLoginPage() {
     event.preventDefault();
     const apiKey = (keyInput.value || '').trim();
     if (!apiKey) {
-      setMessage('API key is required.', 'error');
+      setMessage('Enter your key.', 'error');
       keyInput.focus();
       return;
     }
@@ -65,7 +65,7 @@ async function initLoginPage() {
         body: JSON.stringify({ api_key: apiKey })
       });
       if (!resp.ok) {
-        throw new Error('Login failed. Check SHUMA_API_KEY.');
+        throw new Error('Login failed. Check your key.');
       }
       keyInput.value = '';
       window.location.replace(nextPath);
