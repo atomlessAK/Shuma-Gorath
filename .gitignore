@@ -4,6 +4,7 @@ build/
 *.lock
 .DS_Store
 .env
+.env.local
 unit_test_output.log
 .worktrees/
 node_modules/

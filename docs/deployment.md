@@ -145,7 +145,8 @@ If you set `SHUMA_FORWARDED_IP_SECRET`, you must inject the matching `X-Shuma-Fo
 
 ## 🐙 Local Dev Defaults
 
-`make dev` sets dev-only defaults for `SHUMA_FORWARDED_IP_SECRET` and `SHUMA_API_KEY`, enables internal debug headers, and passes them to Spin. Override as needed:
+`make setup` creates `.env.local` (gitignored) and auto-generates local dev values for `SHUMA_API_KEY` and `SHUMA_FORWARDED_IP_SECRET`.
+`make dev` loads `.env.local`, enables internal debug headers, and passes values to Spin. Override as needed:
 
 ```bash
 make dev SHUMA_FORWARDED_IP_SECRET="your-dev-secret" SHUMA_API_KEY="your-dev-api-key"
@@ -161,6 +162,7 @@ make dev DEV_CONFIG_USE_KV=false DEV_ADMIN_CONFIG_WRITE_ENABLED=false
 Generate/rotate helper:
 
 - `make api-key-generate` prints a new high-entropy API key
+- `make api-key-show` prints the local dashboard login key from `.env.local`
 - `make api-key-rotate` prints a new key plus rotation steps
 - `make api-key-validate` checks key format before deployment
 - `make deploy-env-validate` fails when unsafe deploy flags are enabled (`SHUMA_DEBUG_HEADERS=true` or `SHUMA_DEV_MODE=true`)

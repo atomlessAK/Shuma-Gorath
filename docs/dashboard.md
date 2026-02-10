@@ -50,7 +50,7 @@ Controls:
 
 Development:
 - `http://127.0.0.1:3000/dashboard/index.html`
-- API key source: `SHUMA_API_KEY` from environment or `spin.toml`
+- API key source: `SHUMA_API_KEY` from environment (local dev commonly loads this from `.env.local`)
 - Login flow: unauthenticated visits to `/dashboard/index.html` are redirected to `/dashboard/login.html`; enter API key once to create a short-lived same-origin admin session cookie
 - Admin API endpoint is inferred from the page origin (same-origin only)
 

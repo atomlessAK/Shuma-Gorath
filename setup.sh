@@ -26,6 +26,90 @@ success() { echo -e "${GREEN}✅ $1${NC}"; }
 warn() { echo -e "${YELLOW}⚠️  $1${NC}"; }
 error() { echo -e "${RED}❌ $1${NC}"; exit 1; }
 
+ENV_LOCAL_FILE=".env.local"
+
+generate_hex_secret() {
+    local bytes="${1:-32}"
+    if command -v openssl &> /dev/null; then
+        openssl rand -hex "$bytes"
+    else
+        od -An -N"$bytes" -tx1 /dev/urandom | tr -d ' \n'
+    fi
+}
+
+read_env_local_value() {
+    local key="$1"
+    local raw=""
+    if [[ -f "$ENV_LOCAL_FILE" ]]; then
+        raw="$(grep -E "^${key}=" "$ENV_LOCAL_FILE" | tail -1 || true)"
+    fi
+    raw="${raw#*=}"
+    raw="${raw#\"}"
+    raw="${raw%\"}"
+    printf '%s' "$raw"
+}
+
+upsert_env_local_value() {
+    local key="$1"
+    local value="$2"
+    local tmp_file
+    tmp_file="$(mktemp)"
+    if [[ -f "$ENV_LOCAL_FILE" ]] && grep -q -E "^${key}=" "$ENV_LOCAL_FILE"; then
+        awk -v target_key="$key" -v target_value="$value" '
+            $0 ~ ("^" target_key "=") { print target_key "=\"" target_value "\""; next }
+            { print }
+        ' "$ENV_LOCAL_FILE" > "$tmp_file"
+    else
+        if [[ -f "$ENV_LOCAL_FILE" ]]; then
+            cat "$ENV_LOCAL_FILE" > "$tmp_file"
+        fi
+        printf '%s="%s"\n' "$key" "$value" >> "$tmp_file"
+    fi
+    mv "$tmp_file" "$ENV_LOCAL_FILE"
+}
+
+ensure_env_local_file() {
+    if [[ ! -f "$ENV_LOCAL_FILE" ]]; then
+        info "Creating $ENV_LOCAL_FILE for local development overrides..."
+        cat > "$ENV_LOCAL_FILE" <<'EOF'
+# Local development overrides (gitignored)
+# Created by `make setup`. Edit values for local development only.
+SHUMA_API_KEY=""
+SHUMA_FORWARDED_IP_SECRET=""
+EOF
+    fi
+    chmod 600 "$ENV_LOCAL_FILE" 2>/dev/null || true
+}
+
+ensure_local_dev_secret() {
+    local key="$1"
+    local bytes="$2"
+    local current_value=""
+    local should_generate=0
+
+    current_value="$(read_env_local_value "$key")"
+    case "$key" in
+        SHUMA_API_KEY)
+            case "$current_value" in
+                ""|changeme-dev-only-api-key|changeme-supersecret|changeme-prod-api-key)
+                    should_generate=1
+                    ;;
+            esac
+            ;;
+        SHUMA_FORWARDED_IP_SECRET)
+            case "$current_value" in
+                ""|changeme-dev-only-ip-secret|changeme-prod-forwarded-ip-secret)
+                    should_generate=1
+                    ;;
+            esac
+            ;;
+    esac
+
+    if [[ "$should_generate" -eq 1 ]]; then
+        upsert_env_local_value "$key" "$(generate_hex_secret "$bytes")"
+    fi
+}
+
 echo -e "${CYAN}"
 echo "╔═══════════════════════════════════════════════════╗"
 echo "║     WASM Bot Trap - Development Setup             ║"
@@ -163,6 +247,14 @@ else
 fi
 
 #--------------------------
+# Local dev secrets
+#--------------------------
+ensure_env_local_file
+ensure_local_dev_secret "SHUMA_API_KEY" 32
+ensure_local_dev_secret "SHUMA_FORWARDED_IP_SECRET" 32
+success "Local dev secrets are ready in $ENV_LOCAL_FILE"
+
+#--------------------------
 # Makefile sanity (dev target)
 #--------------------------
 if grep -q "cargo watch .* -x './scripts/set_crate_type.sh" Makefile 2>/dev/null; then
@@ -207,6 +299,7 @@ echo ""
 echo "  make dev      # Start dev server with file watching"
 echo "  make run      # Build once and run (no watching)"
 echo "  make test     # Run tests"
+echo "  make api-key-show # Show local dashboard login key (SHUMA_API_KEY)"
 echo "  make help     # Show all commands"
 echo ""
 echo -e "${YELLOW}📊 Dashboard: http://127.0.0.1:3000/dashboard/index.html${NC}"

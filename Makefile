@@ -1,4 +1,4 @@
-.PHONY: dev local run run-prebuilt build prod clean test test-unit test-integration test-coverage test-dashboard test-dashboard-e2e deploy logs status stop help setup verify api-key-generate api-key-rotate api-key-validate deploy-env-validate
+.PHONY: dev local run run-prebuilt build prod clean test test-unit test-integration test-coverage test-dashboard test-dashboard-e2e deploy logs status stop help setup verify api-key-generate api-key-show api-key-rotate api-key-validate deploy-env-validate
 
 # Default target
 .DEFAULT_GOAL := help
@@ -13,6 +13,12 @@ NC := \033[0m
 CARGO_HOME ?= $(HOME)/.cargo
 PATH := $(CARGO_HOME)/bin:$(PATH)
 export PATH
+
+# Load local development overrides (created by make setup)
+ENV_LOCAL ?= .env.local
+ifneq ("$(wildcard $(ENV_LOCAL))","")
+include $(ENV_LOCAL)
+endif
 
 # Dev-only default for forwarded IP secret (override with SHUMA_FORWARDED_IP_SECRET=...)
 DEV_FORWARDED_IP_SECRET ?= changeme-dev-only-ip-secret
@@ -241,6 +247,16 @@ api-key-generate: ## Generate a high-entropy SHUMA_API_KEY using system CSPRNG t
 	echo ""; \
 	echo "$(YELLOW)Set in your secret store as: SHUMA_API_KEY=$$KEY$(NC)"
 
+api-key-show: ## Show SHUMA_API_KEY from .env.local (dashboard login key for local dev)
+	@KEY="$$(grep -E '^SHUMA_API_KEY=' .env.local 2>/dev/null | tail -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$$//')"; \
+	if [ -z "$$KEY" ]; then \
+		echo "$(RED)❌ No SHUMA_API_KEY found in .env.local.$(NC)"; \
+		echo "$(YELLOW)Run: make setup$(NC)"; \
+		exit 1; \
+	fi; \
+	echo "$(CYAN)Local dashboard login key (SHUMA_API_KEY):$(NC)"; \
+	echo "$$KEY"
+
 api-key-rotate: ## Generate a replacement SHUMA_API_KEY and print rotation guidance
 	@$(MAKE) --no-print-directory api-key-generate
 	@echo "$(YELLOW)Next steps: update deployment secret, redeploy/restart, then update dashboard login key.$(NC)"
@@ -303,4 +319,4 @@ help: ## Show this help message
 	@grep -E '^test.*:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-15s %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Utilities:$(NC)"
-	@grep -E '^(stop|status|clean|logs|api-key-generate|api-key-rotate|api-key-validate|deploy-env-validate|help):.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-15s %s\n", $$1, $$2}'
+	@grep -E '^(stop|status|clean|logs|api-key-generate|api-key-show|api-key-rotate|api-key-validate|deploy-env-validate|help):.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-15s %s\n", $$1, $$2}'
