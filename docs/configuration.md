@@ -37,6 +37,7 @@ environment = {
   SHUMA_KV_STORE_FAIL_OPEN = "true",
   SHUMA_ENFORCE_HTTPS = "false",
   SHUMA_DEBUG_HEADERS = "false",
+  SHUMA_DEV_MODE = "false",
   SHUMA_TEST_MODE = "false",
   SHUMA_JS_REQUIRED_ENFORCED = "true",
   SHUMA_POW_ENABLED = "true",
@@ -100,6 +101,8 @@ curl -X POST -H "Authorization: Bearer $SHUMA_API_KEY" \
 - `SHUMA_ADMIN_CONFIG_WRITE_ENABLED` - `false` (default) or `true`
 - `SHUMA_KV_STORE_FAIL_OPEN` - `true` (default) or `false` when KV is unavailable
 - `SHUMA_ENFORCE_HTTPS` - `false` (default) or `true` to reject non-HTTPS requests
+- `SHUMA_DEBUG_HEADERS` - `false` (default) or `true` to expose internal health headers (dev only)
+- `SHUMA_DEV_MODE` - `false` (default) or `true` to enable dev-only behavior (for example, allowing the insecure placeholder API key)
 - `SHUMA_TEST_MODE` - Log-only mode (`true/false`, `1/0`)
 - `SHUMA_JS_REQUIRED_ENFORCED` - Enable/disable JS-required enforcement (`true/false`, `1/0`)
 

@@ -115,7 +115,7 @@ fn get_admin_api_key() -> Option<String> {
             _ => None,
         }
     }
-    let debug_mode = std::env::var("SHUMA_DEBUG_HEADERS")
+    let dev_mode = std::env::var("SHUMA_DEV_MODE")
         .ok()
         .as_deref()
         .and_then(parse_bool_like)
@@ -125,7 +125,7 @@ fn get_admin_api_key() -> Option<String> {
     if key.is_empty() {
         return None;
     }
-    if key == INSECURE_DEFAULT_API_KEY && !debug_mode {
+    if key == INSECURE_DEFAULT_API_KEY && !dev_mode {
         return None;
     }
     Some(key.to_string())
@@ -312,7 +312,7 @@ mod tests {
     fn unauthorized_when_api_key_missing() {
         let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
         std::env::remove_var("SHUMA_API_KEY");
-        std::env::remove_var("SHUMA_DEBUG_HEADERS");
+        std::env::remove_var("SHUMA_DEV_MODE");
         let req = request_with_auth(Some("Bearer any-key"));
         assert!(!is_authorized(&req));
     }
@@ -321,26 +321,26 @@ mod tests {
     fn unauthorized_when_api_key_is_insecure_default() {
         let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
         std::env::set_var("SHUMA_API_KEY", INSECURE_DEFAULT_API_KEY);
-        std::env::remove_var("SHUMA_DEBUG_HEADERS");
+        std::env::remove_var("SHUMA_DEV_MODE");
         let req = request_with_auth(Some("Bearer changeme-supersecret"));
         assert!(!is_authorized(&req));
     }
 
     #[test]
-    fn authorized_when_api_key_is_insecure_default_in_debug_mode() {
+    fn authorized_when_api_key_is_insecure_default_in_dev_mode() {
         let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
         std::env::set_var("SHUMA_API_KEY", INSECURE_DEFAULT_API_KEY);
-        std::env::set_var("SHUMA_DEBUG_HEADERS", "true");
+        std::env::set_var("SHUMA_DEV_MODE", "true");
         let req = request_with_auth(Some("Bearer changeme-supersecret"));
         assert!(is_authorized(&req));
-        std::env::remove_var("SHUMA_DEBUG_HEADERS");
+        std::env::remove_var("SHUMA_DEV_MODE");
     }
 
     #[test]
     fn authorized_when_api_key_is_explicitly_set() {
         let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
         std::env::set_var("SHUMA_API_KEY", "test-admin-key");
-        std::env::remove_var("SHUMA_DEBUG_HEADERS");
+        std::env::remove_var("SHUMA_DEV_MODE");
         let req = request_with_auth(Some("Bearer test-admin-key"));
         assert!(is_authorized(&req));
     }
@@ -349,7 +349,7 @@ mod tests {
     fn create_and_authenticate_cookie_session() {
         let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
         std::env::set_var("SHUMA_API_KEY", "test-admin-key");
-        std::env::remove_var("SHUMA_DEBUG_HEADERS");
+        std::env::remove_var("SHUMA_DEV_MODE");
         let store = MockStore::default();
         let (session_id, csrf_token, _expires) =
             create_admin_session(&store).expect("session should be created");

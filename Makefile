@@ -1,4 +1,4 @@
-.PHONY: dev local run run-prebuilt build prod clean test test-unit test-integration test-coverage test-dashboard test-dashboard-e2e deploy logs status stop help setup verify api-key-generate api-key-rotate api-key-validate
+.PHONY: dev local run run-prebuilt build prod clean test test-unit test-integration test-coverage test-dashboard test-dashboard-e2e deploy logs status stop help setup verify api-key-generate api-key-rotate api-key-validate deploy-env-validate
 
 # Default target
 .DEFAULT_GOAL := help
@@ -30,6 +30,8 @@ SPIN_FORWARD_SECRET := $(if $(SHUMA_FORWARDED_IP_SECRET),--env SHUMA_FORWARDED_I
 SPIN_API_KEY := $(if $(SHUMA_API_KEY),--env SHUMA_API_KEY=$(SHUMA_API_KEY),)
 SPIN_CHALLENGE_MUTABLE := --env SHUMA_CHALLENGE_CONFIG_MUTABLE=true
 SPIN_DEBUG_HEADERS := --env SHUMA_DEBUG_HEADERS=true
+SPIN_DEV_MODE := --env SHUMA_DEV_MODE=true
+SPIN_PROD_HARDEN := --env SHUMA_DEV_MODE=false --env SHUMA_DEBUG_HEADERS=false
 DEV_CONFIG_USE_KV ?= true
 DEV_ADMIN_CONFIG_WRITE_ENABLED ?= true
 SPIN_CONFIG_USE_KV_DEV := --env SHUMA_CONFIG_USE_KV=$(DEV_CONFIG_USE_KV)
@@ -62,7 +64,7 @@ dev: ## Build and run with file watching (auto-rebuild on save)
 	@./scripts/set_crate_type.sh rlib
 	@cargo watch --poll -w src -w dashboard -w spin.toml -i '*.wasm' -i 'src/bot_trap.wasm' -i '.spin/**' \
 		-s 'if [ ! -f target/wasm32-wasip1/release/shuma_gorath.wasm ] || find src -name "*.rs" -newer target/wasm32-wasip1/release/shuma_gorath.wasm -print -quit | grep -q .; then ./scripts/set_crate_type.sh cdylib && cargo build --target wasm32-wasip1 --release && cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm && ./scripts/set_crate_type.sh rlib; else echo "No Rust changes detected; skipping WASM rebuild."; fi' \
-		-s 'pkill -x spin 2>/dev/null || true; SPIN_ALWAYS_BUILD=0 spin up --direct-mounts $(SPIN_API_KEY) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) $(SPIN_CONFIG_USE_KV_DEV) $(SPIN_ADMIN_CONFIG_WRITE_ENABLED_DEV) --listen 127.0.0.1:3000'
+		-s 'pkill -x spin 2>/dev/null || true; SPIN_ALWAYS_BUILD=0 spin up --direct-mounts $(SPIN_API_KEY) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) $(SPIN_DEV_MODE) $(SPIN_CONFIG_USE_KV_DEV) $(SPIN_ADMIN_CONFIG_WRITE_ENABLED_DEV) --listen 127.0.0.1:3000'
 
 dev-closed: ## Build and run with file watching and SHUMA_KV_STORE_FAIL_OPEN=false (fail-closed)
 	@echo "$(CYAN)🚨 Starting development server with SHUMA_KV_STORE_FAIL_OPEN=false (fail-closed)...$(NC)"
@@ -77,7 +79,7 @@ dev-closed: ## Build and run with file watching and SHUMA_KV_STORE_FAIL_OPEN=fal
 	@./scripts/set_crate_type.sh rlib
 	@cargo watch --poll -w src -w dashboard -w spin.toml -i '*.wasm' -i 'src/bot_trap.wasm' -i '.spin/**' \
 		-s 'if [ ! -f target/wasm32-wasip1/release/shuma_gorath.wasm ] || find src -name "*.rs" -newer target/wasm32-wasip1/release/shuma_gorath.wasm -print -quit | grep -q .; then ./scripts/set_crate_type.sh cdylib && cargo build --target wasm32-wasip1 --release && cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm && ./scripts/set_crate_type.sh rlib; else echo "No Rust changes detected; skipping WASM rebuild."; fi' \
-		-s 'pkill -x spin 2>/dev/null || true; SPIN_ALWAYS_BUILD=0 spin up --direct-mounts --env SHUMA_KV_STORE_FAIL_OPEN=false $(SPIN_API_KEY) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) $(SPIN_CONFIG_USE_KV_DEV) $(SPIN_ADMIN_CONFIG_WRITE_ENABLED_DEV) --listen 127.0.0.1:3000'
+		-s 'pkill -x spin 2>/dev/null || true; SPIN_ALWAYS_BUILD=0 spin up --direct-mounts --env SHUMA_KV_STORE_FAIL_OPEN=false $(SPIN_API_KEY) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) $(SPIN_DEV_MODE) $(SPIN_CONFIG_USE_KV_DEV) $(SPIN_ADMIN_CONFIG_WRITE_ENABLED_DEV) --listen 127.0.0.1:3000'
 
 local: dev ## Alias for dev
 
@@ -93,7 +95,7 @@ run: ## Build once and run (no file watching)
 	@echo "$(YELLOW)📊 Dashboard: http://127.0.0.1:3000/dashboard/index.html$(NC)"
 	@echo "$(YELLOW)📈 Metrics:   http://127.0.0.1:3000/metrics$(NC)"
 	@echo "$(YELLOW)❤️  Health:    http://127.0.0.1:3000/health$(NC)"
-	@spin up $(SPIN_API_KEY) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) $(SPIN_CONFIG_USE_KV_DEV) $(SPIN_ADMIN_CONFIG_WRITE_ENABLED_DEV) --listen 127.0.0.1:3000
+	@spin up $(SPIN_API_KEY) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) $(SPIN_DEV_MODE) $(SPIN_CONFIG_USE_KV_DEV) $(SPIN_ADMIN_CONFIG_WRITE_ENABLED_DEV) --listen 127.0.0.1:3000
 
 run-prebuilt: ## Run Spin using prebuilt wasm (CI helper)
 	@echo "$(CYAN)🚀 Starting prebuilt server...$(NC)"
@@ -101,7 +103,7 @@ run-prebuilt: ## Run Spin using prebuilt wasm (CI helper)
 	@echo "$(YELLOW)📊 Dashboard: http://127.0.0.1:3000/dashboard/index.html$(NC)"
 	@echo "$(YELLOW)📈 Metrics:   http://127.0.0.1:3000/metrics$(NC)"
 	@echo "$(YELLOW)❤️  Health:    http://127.0.0.1:3000/health$(NC)"
-	@spin up $(SPIN_API_KEY) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) $(SPIN_CONFIG_USE_KV_DEV) $(SPIN_ADMIN_CONFIG_WRITE_ENABLED_DEV) --listen 127.0.0.1:3000
+	@spin up $(SPIN_API_KEY) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) $(SPIN_DEV_MODE) $(SPIN_CONFIG_USE_KV_DEV) $(SPIN_ADMIN_CONFIG_WRITE_ENABLED_DEV) --listen 127.0.0.1:3000
 
 #--------------------------
 # Production
@@ -118,10 +120,11 @@ build: ## Build release binary only (no server start)
 prod: build ## Build for production and start server
 	@echo "$(CYAN)🚀 Starting production server...$(NC)"
 	@pkill -x spin 2>/dev/null || true
-	@spin up --listen 0.0.0.0:3000
+	@spin up $(SPIN_PROD_HARDEN) --listen 0.0.0.0:3000
 
 deploy: build ## Deploy to Fermyon Cloud
 	@$(MAKE) --no-print-directory api-key-validate
+	@$(MAKE) --no-print-directory deploy-env-validate
 	@echo "$(CYAN)☁️  Deploying to Fermyon Cloud...$(NC)"
 	@spin cloud deploy
 	@echo "$(GREEN)✅ Deployment complete!$(NC)"
@@ -261,6 +264,25 @@ api-key-validate: ## Validate SHUMA_API_KEY for deployment (must be 64-char hex 
 	fi; \
 	echo "$(GREEN)✅ SHUMA_API_KEY format is valid for deployment.$(NC)"
 
+deploy-env-validate: ## Fail deployment when unsafe debug/dev flags are enabled
+	@DEBUG_VAL="$${SHUMA_DEBUG_HEADERS:-false}"; \
+	DEBUG_NORM="$$(printf '%s' "$$DEBUG_VAL" | tr '[:upper:]' '[:lower:]')"; \
+	case "$$DEBUG_NORM" in \
+		1|true|yes|on) \
+			echo "$(RED)❌ Refusing deployment: SHUMA_DEBUG_HEADERS=true exposes internal headers.$(NC)"; \
+			echo "$(YELLOW)Set SHUMA_DEBUG_HEADERS=false for production deploys.$(NC)"; \
+			exit 1 ;; \
+	esac; \
+	DEV_VAL="$${SHUMA_DEV_MODE:-false}"; \
+	DEV_NORM="$$(printf '%s' "$$DEV_VAL" | tr '[:upper:]' '[:lower:]')"; \
+	case "$$DEV_NORM" in \
+		1|true|yes|on) \
+			echo "$(RED)❌ Refusing deployment: SHUMA_DEV_MODE=true enables dev-mode behavior.$(NC)"; \
+			echo "$(YELLOW)Set SHUMA_DEV_MODE=false (or unset it) for production deploys.$(NC)"; \
+			exit 1 ;; \
+	esac; \
+	echo "$(GREEN)✅ Deployment env guardrails passed (SHUMA_DEBUG_HEADERS/SHUMA_DEV_MODE).$(NC)"
+
 #--------------------------
 # Help
 #--------------------------
@@ -281,4 +303,4 @@ help: ## Show this help message
 	@grep -E '^test.*:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-15s %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Utilities:$(NC)"
-	@grep -E '^(stop|status|clean|logs|api-key-generate|api-key-rotate|api-key-validate|help):.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-15s %s\n", $$1, $$2}'
+	@grep -E '^(stop|status|clean|logs|api-key-generate|api-key-rotate|api-key-validate|deploy-env-validate|help):.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-15s %s\n", $$1, $$2}'

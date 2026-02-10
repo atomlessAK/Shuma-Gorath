@@ -51,6 +51,7 @@ Key environment variables:
 - `SHUMA_EVENT_LOG_RETENTION_HOURS` - Event log retention window
 - `SHUMA_CONFIG_USE_KV` - `true/false` to load runtime config base from KV (default: `false`)
 - `SHUMA_ADMIN_CONFIG_WRITE_ENABLED` - `true/false` to allow `POST /admin/config` writes (default: `false`)
+- `SHUMA_DEV_MODE` - `true/false` dev-mode guard (default: `false`; set by `make dev`)
 - `SHUMA_KV_STORE_FAIL_OPEN` - `true/false` KV outage policy (`true` fail-open, `false` fail-closed)
 - `SHUMA_POW_ENABLED` - Enable proof-of-work before JS verification
 - `SHUMA_POW_DIFFICULTY` - Leading zero bits required (default: 15)

@@ -16,11 +16,13 @@ Shuma-Gorath is designed to **complement enterprise bot defenses** (such as Akam
 - `SHUMA_KV_STORE_FAIL_OPEN` - `true` (default) or `false`
 - `SHUMA_ENFORCE_HTTPS` - `false` (default) or `true`
 - `SHUMA_DEBUG_HEADERS` - Optional; expose internal health/fail-mode headers (dev only)
+- `SHUMA_DEV_MODE` - `false` (default) in production; enables dev-only behavior when `true`
 
 API key requirements:
 
 - Use a high-entropy 64-hex-character value for `SHUMA_API_KEY`.
 - Placeholder keys are rejected by `make deploy`.
+- Placeholder key login is only allowed when `SHUMA_DEV_MODE=true`.
 - Use `make api-key-generate` to create a valid key.
 
 JS/PoW deployment recommendation:
@@ -150,6 +152,7 @@ make dev SHUMA_FORWARDED_IP_SECRET="your-dev-secret" SHUMA_API_KEY="your-dev-api
 ```
 
 `make dev` sets `SHUMA_CONFIG_USE_KV=true` and `SHUMA_ADMIN_CONFIG_WRITE_ENABLED=true` by default.
+`make dev` also sets `SHUMA_DEV_MODE=true` by default.
 To preview ENV-only behavior locally:
 
 ```bash
@@ -160,3 +163,4 @@ Generate/rotate helper:
 - `make api-key-generate` prints a new high-entropy API key
 - `make api-key-rotate` prints a new key plus rotation steps
 - `make api-key-validate` checks key format before deployment
+- `make deploy-env-validate` fails when unsafe deploy flags are enabled (`SHUMA_DEBUG_HEADERS=true` or `SHUMA_DEV_MODE=true`)
