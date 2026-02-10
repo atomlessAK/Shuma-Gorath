@@ -659,9 +659,8 @@ const STATUS_DEFINITIONS = [
   {
     title: 'JS Required',
     description: state => (
-      `Controlled by ${envVar('SHUMA_JS_REQUIRED_ENFORCED')}. ` +
-      `When enabled, requests without a valid <code>js_verified</code> cookie are served a JS verification page ` +
-      `that will write the cookie. The originally requested page is then reloaded and access is re-evaluated. ` +
+      `When ${envVar('SHUMA_JS_REQUIRED_ENFORCED')} is true, requests without a valid <code>js_verified</code> cookie are served a JS verification page ` +
+      `to write the cookie. The originally requested page is then reloaded and access is re-evaluated. ` +
       `If ${envVar('SHUMA_POW_ENABLED')} is true, this verification step includes PoW before <code>js_verified</code> is issued. ` +
       `Disable ${envVar('SHUMA_JS_REQUIRED_ENFORCED')} only if you must allow non-JS clients; doing so weakens bot defense and removes PoW from the normal request path. ` +
       `Its botness contribution is weighted separately by ${envVar('SHUMA_BOTNESS_WEIGHT_JS_REQUIRED')} ` +
