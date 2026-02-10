@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   coverage:
@@ -36,9 +35,27 @@ jobs:
           name: coverage-lcov
           path: lcov.info
 
-      - name: Upload to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          use_oidc: true
-          files: ./lcov.info
-          fail_ci_if_error: false
+      - name: Publish coverage summary
+        run: |
+          if [ ! -f lcov.info ]; then
+            echo "lcov.info not found"
+            exit 1
+          fi
+          LF=$(awk -F: '/^LF:/{sum+=$2} END {print sum+0}' lcov.info)
+          LH=$(awk -F: '/^LH:/{sum+=$2} END {print sum+0}' lcov.info)
+          if [ "${LF}" -gt 0 ]; then
+            PCT=$(awk -v lh="${LH}" -v lf="${LF}" 'BEGIN { printf "%.2f", (lh/lf)*100 }')
+          else
+            PCT="0.00"
+          fi
+          {
+            echo "## Coverage Summary"
+            echo ""
+            echo "| Metric | Value |"
+            echo "|---|---:|"
+            echo "| Lines Hit | ${LH} |"
+            echo "| Lines Found | ${LF} |"
+            echo "| Line Coverage | ${PCT}% |"
+            echo ""
+            echo "Coverage artifact: \`coverage-lcov\` (\`lcov.info\`)."
+          } >> "$GITHUB_STEP_SUMMARY"
