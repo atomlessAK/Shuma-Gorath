@@ -1,7 +1,5 @@
 name: CI
 
-name: CI
-
 on:
   push:
     branches: [ main ]
@@ -14,62 +12,54 @@ jobs:
     env:
       RUST_BACKTRACE: full
       SHUMA_KV_STORE_FAIL_OPEN: "true"
+      SHUMA_API_KEY: changeme-dev-only-api-key
+      SHUMA_FORWARDED_IP_SECRET: changeme-dev-only-ip-secret
+      DEV_ADMIN_PAGE_CONFIG: "true"
+      SHUMA_DEBUG_HEADERS: "true"
     steps:
       - name: Checkout
-        name: CI
+        uses: actions/checkout@v4
 
-        on:
-          push:
-            branches: [ main ]
-          pull_request:
-            branches: [ main ]
+      - name: Install Rust toolchain and target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
 
-        jobs:
-          test:
-            runs-on: ubuntu-latest
-            env:
-              RUST_BACKTRACE: full
-              SHUMA_KV_STORE_FAIL_OPEN: "true"
-            steps:
-              - name: Checkout
-                uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y curl ca-certificates
 
-              - name: Install Rust toolchain and target
-                uses: actions-rs/toolchain@v1
-                with:
-                  toolchain: stable
-                  target: wasm32-wasip1
+      - name: Install Spin CLI
+        run: |
+          curl -fsSL https://github.com/fermyon/spin/releases/latest/download/spin-linux-amd64.tar.gz -o /tmp/spin.tar.gz
+          tar -xzf /tmp/spin.tar.gz -C /tmp
+          sudo mv /tmp/spin /usr/local/bin/spin
+          spin --version
 
-              - name: Install dependencies
-                run: |
-                  sudo apt-get update && sudo apt-get install -y curl ca-certificates
+      - name: Build wasm release
+        run: |
+          cargo build --target wasm32-wasip1 --release
+          cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm
 
-              - name: Install Spin CLI
-                run: |
-                  curl -fsSL https://github.com/fermyon/spin/releases/latest/download/spin-linux-x86_64 -o /usr/local/bin/spin
-                  sudo chmod +x /usr/local/bin/spin
+      - name: Start Spin server (background)
+        run: |
+          nohup make run > /tmp/spin.log 2>&1 &
+          for i in {1..60}; do
+            if curl -sf -H "X-Forwarded-For: 127.0.0.1" -H "X-Shuma-Forwarded-Secret: ${SHUMA_FORWARDED_IP_SECRET}" http://127.0.0.1:3000/health > /dev/null 2>&1; then
+              echo "spin ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "spin did not become ready"
+          exit 1
 
-              - name: Build wasm release
-                run: |
-                  cargo build --target wasm32-wasip1 --release
-                  cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm
+      - name: Run full test suite
+        run: make test
 
-              - name: Start Spin server (background)
-                run: |
-                  nohup spin up --listen 127.0.0.1:3000 > /tmp/spin.log 2>&1 &
-                  for i in {1..30}; do
-                    if curl -sS http://127.0.0.1:3000/health >/dev/null 2>&1; then
-                      echo "spin ready"; break
-                    fi
-                    sleep 1
-                  done
-
-              - name: Run full test suite
-                run: make test
-
-              - name: Upload Spin logs (on failure)
-                if: failure()
-                uses: actions/upload-artifact@v4
-                with:
-                  name: spin-log
-                  path: /tmp/spin.log
+      - name: Upload Spin logs (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spin-log
+          path: /tmp/spin.log
