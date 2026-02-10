@@ -1227,7 +1227,7 @@ input:checked + .toggle-slider:before {
     --color-accent-hover: var(--color-800);
     --color-success: var(--color-800);
     --color-success-bg: var(--color-200);
-    --color-error: #fff8fc;
+    --color-error: red;
     --color-error-bg: var(--color-200);
     --color-warning: var(--color-700);
     --color-warning-bg: var(--color-50);
