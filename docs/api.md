@@ -18,7 +18,7 @@ If `SHUMA_ENFORCE_HTTPS=true`:
 - requests without HTTPS context are rejected with `403 HTTPS required`
 - forwarded proto headers are trusted only when `SHUMA_FORWARDED_IP_SECRET` validation succeeds
 
-If `SHUMA_API_KEY` is missing or set to the insecure default (`changeme-supersecret`), `/admin/*` endpoints are disabled.
+If `SHUMA_API_KEY` is missing, `/admin/*` endpoints are disabled. The insecure placeholder key (`changeme-supersecret`) is rejected unless `SHUMA_DEBUG_HEADERS=true` (dev/debug mode).
 
 ## 🐙 Public Endpoints
 
