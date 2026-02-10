@@ -53,14 +53,14 @@ dev: ## Build and run with file watching (auto-rebuild on save)
 	@echo "$(YELLOW)📈 Metrics:   http://127.0.0.1:3000/metrics$(NC)"
 	@echo "$(YELLOW)❤️  Health:    http://127.0.0.1:3000/health$(NC)"
 	@echo "$(CYAN)👀 Watching src/*.rs, dashboard/*, and spin.toml for changes... (Ctrl+C to stop)$(NC)"
-	@pkill -f "spin up" 2>/dev/null || true
+	@pkill -x spin 2>/dev/null || true
 	@./scripts/set_crate_type.sh cdylib
 	@cargo build --target wasm32-wasip1 --release
 	@cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm
 	@./scripts/set_crate_type.sh rlib
 	@cargo watch --poll -w src -w dashboard -w spin.toml -i '*.wasm' -i 'src/bot_trap.wasm' -i '.spin/**' \
 		-s 'if [ ! -f target/wasm32-wasip1/release/shuma_gorath.wasm ] || find src -name "*.rs" -newer target/wasm32-wasip1/release/shuma_gorath.wasm -print -quit | grep -q .; then ./scripts/set_crate_type.sh cdylib && cargo build --target wasm32-wasip1 --release && cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm && ./scripts/set_crate_type.sh rlib; else echo "No Rust changes detected; skipping WASM rebuild."; fi' \
-		-s 'pkill -f "spin up" 2>/dev/null; SPIN_ALWAYS_BUILD=0 spin up --direct-mounts $(SPIN_API_KEY) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) $(SPIN_ADMIN_PAGE_CONFIG_DEV) --listen 127.0.0.1:3000'
+		-s 'pkill -x spin 2>/dev/null || true; SPIN_ALWAYS_BUILD=0 spin up --direct-mounts $(SPIN_API_KEY) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) $(SPIN_ADMIN_PAGE_CONFIG_DEV) --listen 127.0.0.1:3000'
 
 dev-closed: ## Build and run with file watching and SHUMA_KV_STORE_FAIL_OPEN=false (fail-closed)
 	@echo "$(CYAN)🚨 Starting development server with SHUMA_KV_STORE_FAIL_OPEN=false (fail-closed)...$(NC)"
@@ -68,20 +68,20 @@ dev-closed: ## Build and run with file watching and SHUMA_KV_STORE_FAIL_OPEN=fal
 	@echo "$(YELLOW)📈 Metrics:   http://127.0.0.1:3000/metrics$(NC)"
 	@echo "$(YELLOW)❤️  Health:    http://127.0.0.1:3000/health$(NC)"
 	@echo "$(CYAN)👀 Watching src/*.rs, dashboard/*, and spin.toml for changes... (Ctrl+C to stop)$(NC)"
-	@pkill -f "spin up" 2>/dev/null || true
+	@pkill -x spin 2>/dev/null || true
 	@./scripts/set_crate_type.sh cdylib
 	@cargo build --target wasm32-wasip1 --release
 	@cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm
 	@./scripts/set_crate_type.sh rlib
 	@cargo watch --poll -w src -w dashboard -w spin.toml -i '*.wasm' -i 'src/bot_trap.wasm' -i '.spin/**' \
 		-s 'if [ ! -f target/wasm32-wasip1/release/shuma_gorath.wasm ] || find src -name "*.rs" -newer target/wasm32-wasip1/release/shuma_gorath.wasm -print -quit | grep -q .; then ./scripts/set_crate_type.sh cdylib && cargo build --target wasm32-wasip1 --release && cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm && ./scripts/set_crate_type.sh rlib; else echo "No Rust changes detected; skipping WASM rebuild."; fi' \
-		-s 'pkill -f "spin up" 2>/dev/null; SPIN_ALWAYS_BUILD=0 spin up --direct-mounts --env SHUMA_KV_STORE_FAIL_OPEN=false $(SPIN_API_KEY) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) $(SPIN_ADMIN_PAGE_CONFIG_DEV) --listen 127.0.0.1:3000'
+		-s 'pkill -x spin 2>/dev/null || true; SPIN_ALWAYS_BUILD=0 spin up --direct-mounts --env SHUMA_KV_STORE_FAIL_OPEN=false $(SPIN_API_KEY) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) $(SPIN_ADMIN_PAGE_CONFIG_DEV) --listen 127.0.0.1:3000'
 
 local: dev ## Alias for dev
 
 run: ## Build once and run (no file watching)
 	@echo "$(CYAN)🚀 Starting development server...$(NC)"
-	@pkill -f "spin up" 2>/dev/null || true
+	@pkill -x spin 2>/dev/null || true
 	@sleep 1
 	@./scripts/set_crate_type.sh cdylib
 	@cargo build --target wasm32-wasip1 --release
@@ -95,7 +95,7 @@ run: ## Build once and run (no file watching)
 
 run-prebuilt: ## Run Spin using prebuilt wasm (CI helper)
 	@echo "$(CYAN)🚀 Starting prebuilt server...$(NC)"
-	@pkill -f "spin up" 2>/dev/null || true
+	@pkill -x spin 2>/dev/null || true
 	@echo "$(YELLOW)📊 Dashboard: http://127.0.0.1:3000/dashboard/index.html$(NC)"
 	@echo "$(YELLOW)📈 Metrics:   http://127.0.0.1:3000/metrics$(NC)"
 	@echo "$(YELLOW)❤️  Health:    http://127.0.0.1:3000/health$(NC)"
@@ -115,7 +115,7 @@ build: ## Build release binary only (no server start)
 
 prod: build ## Build for production and start server
 	@echo "$(CYAN)🚀 Starting production server...$(NC)"
-	@pkill -f "spin up" 2>/dev/null || true
+	@pkill -x spin 2>/dev/null || true
 	@spin up --listen 0.0.0.0:3000
 
 deploy: build ## Deploy to Fermyon Cloud
@@ -196,7 +196,7 @@ test-dashboard-e2e: ## Run Playwright dashboard smoke tests (requires running se
 
 stop: ## Stop running Spin server
 	@echo "$(CYAN)🛑 Stopping Spin server...$(NC)"
-	@pkill -f "spin up" 2>/dev/null && echo "$(GREEN)✅ Stopped$(NC)" || echo "$(YELLOW)No server running$(NC)"
+	@pkill -x spin 2>/dev/null && echo "$(GREEN)✅ Stopped$(NC)" || echo "$(YELLOW)No server running$(NC)"
 
 status: ## Check if Spin server is running
 	@if curl -sf -H "X-Forwarded-For: 127.0.0.1" $(FORWARDED_SECRET_HEADER) http://127.0.0.1:3000/health > /dev/null 2>&1; then \
