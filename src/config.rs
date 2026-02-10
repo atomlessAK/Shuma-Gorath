@@ -159,12 +159,20 @@ const BOTNESS_WEIGHT_GEO_RISK_DEFAULT: u8 = 2;
 const BOTNESS_WEIGHT_RATE_MEDIUM_DEFAULT: u8 = 1;
 const BOTNESS_WEIGHT_RATE_HIGH_DEFAULT: u8 = 2;
 
-pub(crate) fn parse_admin_page_config_enabled(value: Option<&str>) -> bool {
+pub(crate) fn parse_config_use_kv_enabled(value: Option<&str>) -> bool {
     value.and_then(parse_bool_like).unwrap_or(false)
 }
 
-pub fn admin_page_config_enabled() -> bool {
-    parse_admin_page_config_enabled(env::var("SHUMA_ADMIN_PAGE_CONFIG").ok().as_deref())
+pub fn config_use_kv_enabled() -> bool {
+    parse_config_use_kv_enabled(env::var("SHUMA_CONFIG_USE_KV").ok().as_deref())
+}
+
+pub(crate) fn parse_admin_config_write_enabled(value: Option<&str>) -> bool {
+    value.and_then(parse_bool_like).unwrap_or(false)
+}
+
+pub fn admin_config_write_enabled() -> bool {
+    parse_admin_config_write_enabled(env::var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED").ok().as_deref())
 }
 
 pub fn https_enforced() -> bool {
@@ -579,7 +587,7 @@ fn apply_mutability_policy(cfg: &mut Config) {
 impl Config {
     /// Loads config for a site from the key-value store, or returns defaults if not set.
     pub fn load(store: &impl KeyValueStore, site_id: &str) -> Self {
-        let mut cfg = if admin_page_config_enabled() {
+        let mut cfg = if config_use_kv_enabled() {
             let key = format!("config:{}", site_id);
             if let Ok(Some(val)) = store.get(&key) {
                 if let Ok(cfg) = serde_json::from_slice::<Config>(&val) {

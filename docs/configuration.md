@@ -1,9 +1,16 @@
 # 🐙 Configuration
 
-Shuma-Gorath runtime config control is governed by `SHUMA_ADMIN_PAGE_CONFIG`:
+Shuma-Gorath runtime config control is governed by two independent env vars:
 
-- `false` (default): env-only runtime config. KV config is ignored and `POST /admin/config` is disabled.
-- `true`: admin writes enabled. Runtime load uses KV (`config:<site_id>`) with env overrides applied last.
+- `SHUMA_CONFIG_USE_KV`:
+- `false` (default): env-only runtime config; KV `config:<site_id>` is ignored.
+- `true`: runtime loads KV `config:<site_id>` as base, then applies env overrides.
+- `SHUMA_ADMIN_CONFIG_WRITE_ENABLED`:
+- `false` (default): `POST /admin/config` is disabled.
+- `true`: admin config writes to KV are enabled.
+
+Operational note:
+- If `SHUMA_ADMIN_CONFIG_WRITE_ENABLED=true` and `SHUMA_CONFIG_USE_KV=false`, admin saves persist in KV but do not affect effective runtime until `SHUMA_CONFIG_USE_KV=true`.
 
 You can read current runtime config via `GET /admin/config`.
 
@@ -25,7 +32,8 @@ environment = {
   SHUMA_FORWARDED_IP_SECRET = "changeme-prod-forwarded-ip-secret",
   SHUMA_ADMIN_IP_ALLOWLIST = "",
   SHUMA_EVENT_LOG_RETENTION_HOURS = "168",
-  SHUMA_ADMIN_PAGE_CONFIG = "false",
+  SHUMA_CONFIG_USE_KV = "false",
+  SHUMA_ADMIN_CONFIG_WRITE_ENABLED = "false",
   SHUMA_KV_STORE_FAIL_OPEN = "true",
   SHUMA_ENFORCE_HTTPS = "false",
   SHUMA_DEBUG_HEADERS = "false",
@@ -88,7 +96,8 @@ curl -X POST -H "Authorization: Bearer $SHUMA_API_KEY" \
 
 ## 🐙 Core Mode & Policy Env Vars
 
-- `SHUMA_ADMIN_PAGE_CONFIG` - `false` (default) or `true`
+- `SHUMA_CONFIG_USE_KV` - `false` (default) or `true`
+- `SHUMA_ADMIN_CONFIG_WRITE_ENABLED` - `false` (default) or `true`
 - `SHUMA_KV_STORE_FAIL_OPEN` - `true` (default) or `false` when KV is unavailable
 - `SHUMA_ENFORCE_HTTPS` - `false` (default) or `true` to reject non-HTTPS requests
 - `SHUMA_TEST_MODE` - Log-only mode (`true/false`, `1/0`)
@@ -193,8 +202,9 @@ Supporting control vars:
 
 - `SHUMA_POW_DIFFICULTY` and `SHUMA_POW_TTL_SECONDS` are always env-controlled unless `SHUMA_POW_CONFIG_MUTABLE=1`.
 - `SHUMA_CHALLENGE_RISK_THRESHOLD`, `SHUMA_BOTNESS_MAZE_THRESHOLD`, and `SHUMA_BOTNESS_WEIGHT_*` are env-controlled unless `SHUMA_BOTNESS_CONFIG_MUTABLE=true` (or legacy fallback `SHUMA_CHALLENGE_CONFIG_MUTABLE=true`).
-- When `SHUMA_ADMIN_PAGE_CONFIG=false`, admin writes are blocked regardless of mutability flags.
-- Local `make dev` sets `SHUMA_ADMIN_PAGE_CONFIG=true` by default for easier dashboard testing.
+- `SHUMA_ADMIN_CONFIG_WRITE_ENABLED=false` blocks admin writes regardless of mutability flags.
+- `SHUMA_CONFIG_USE_KV=false` makes runtime config env-only (KV config ignored).
+- Local `make dev` sets both `SHUMA_CONFIG_USE_KV=true` and `SHUMA_ADMIN_CONFIG_WRITE_ENABLED=true` by default for easier dashboard testing.
 
 ## 🐙 Example Config (Partial)
 

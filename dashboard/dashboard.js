@@ -755,12 +755,17 @@ function parseBoolLike(value, fallback = false) {
   return fallback;
 }
 
-function adminPageConfigEnabled(config) {
-  return parseBoolLike(config && config.admin_page_config_enabled, false);
+function configUseKvEnabled(config) {
+  return parseBoolLike(config && config.config_use_kv_enabled, false);
+}
+
+function adminConfigWriteEnabled(config) {
+  return parseBoolLike(config && config.admin_config_write_enabled, false);
 }
 
 function updateConfigModeUi(config) {
-  const enabled = adminPageConfigEnabled(config);
+  const useKvEnabled = configUseKvEnabled(config);
+  const writeEnabled = adminConfigWriteEnabled(config);
   statusPanelState.httpsEnforced = parseBoolLike(config && config.https_enforced, false);
   statusPanelState.forwardedHeaderTrustConfigured = parseBoolLike(
     config && config.forwarded_header_trust_configured,
@@ -768,13 +773,19 @@ function updateConfigModeUi(config) {
   );
   const subtitle = document.getElementById('config-mode-subtitle');
   if (subtitle) {
-    subtitle.innerHTML = enabled
-      ? `Admin page configuration enabled. Set the ${envVar('SHUMA_ADMIN_PAGE_CONFIG')} ENV var to <strong>false</strong> to disable.`
-      : `Admin page configuration disabled. Set the ${envVar('SHUMA_ADMIN_PAGE_CONFIG')} ENV var to <strong>true</strong> to enable.`;
+    if (writeEnabled) {
+      subtitle.innerHTML =
+        `Admin config editing is enabled (${envVar('SHUMA_ADMIN_CONFIG_WRITE_ENABLED')}=<strong>true</strong>). ` +
+        `Runtime KV loading is currently <strong>${useKvEnabled ? 'ENABLED' : 'DISABLED'}</strong> via ${envVar('SHUMA_CONFIG_USE_KV')}.`;
+    } else {
+      subtitle.innerHTML =
+        `Admin config editing is disabled (${envVar('SHUMA_ADMIN_CONFIG_WRITE_ENABLED')}=<strong>false</strong>). ` +
+        `Set ${envVar('SHUMA_ADMIN_CONFIG_WRITE_ENABLED')} to <strong>true</strong> to allow saves.`;
+    }
   }
 
   document.querySelectorAll('.config-edit-pane').forEach(el => {
-    el.classList.toggle('hidden', !enabled);
+    el.classList.toggle('hidden', !writeEnabled);
   });
   renderStatusItems();
 }
@@ -1425,7 +1436,7 @@ function updateMazeConfig(config) {
 }
 
 function updateGeoConfig(config) {
-  const mutable = adminPageConfigEnabled(config);
+  const mutable = adminConfigWriteEnabled(config);
   const risk = formatCountryCodes(config.geo_risk);
   const allow = formatCountryCodes(config.geo_allow);
   const challenge = formatCountryCodes(config.geo_challenge);
@@ -2190,7 +2201,7 @@ document.getElementById('save-geo-scoring-config').onclick = async function() {
   const btn = this;
 
   if (!geoSavedState.mutable) {
-    msg.textContent = 'GEO settings are read-only while SHUMA_ADMIN_PAGE_CONFIG=false.';
+    msg.textContent = 'GEO settings are read-only while SHUMA_ADMIN_CONFIG_WRITE_ENABLED=false.';
     msg.className = 'message warning';
     btn.disabled = true;
     return;
@@ -2253,7 +2264,7 @@ document.getElementById('save-geo-routing-config').onclick = async function() {
   const btn = this;
 
   if (!geoSavedState.mutable) {
-    msg.textContent = 'GEO settings are read-only while SHUMA_ADMIN_PAGE_CONFIG=false.';
+    msg.textContent = 'GEO settings are read-only while SHUMA_ADMIN_CONFIG_WRITE_ENABLED=false.';
     msg.className = 'message warning';
     btn.disabled = true;
     return;

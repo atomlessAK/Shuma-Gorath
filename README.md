@@ -49,7 +49,8 @@ Key environment variables:
 - `SHUMA_FORWARDED_IP_SECRET` - Trusts `X-Forwarded-For` only when `X-Shuma-Forwarded-Secret` matches
 - `SHUMA_ADMIN_IP_ALLOWLIST` - CIDR/IP allowlist for admin access
 - `SHUMA_EVENT_LOG_RETENTION_HOURS` - Event log retention window
-- `SHUMA_ADMIN_PAGE_CONFIG` - `true/false` to enable/disable runtime admin config writes (default: `false`)
+- `SHUMA_CONFIG_USE_KV` - `true/false` to load runtime config base from KV (default: `false`)
+- `SHUMA_ADMIN_CONFIG_WRITE_ENABLED` - `true/false` to allow `POST /admin/config` writes (default: `false`)
 - `SHUMA_KV_STORE_FAIL_OPEN` - `true/false` KV outage policy (`true` fail-open, `false` fail-closed)
 - `SHUMA_POW_ENABLED` - Enable proof-of-work before JS verification
 - `SHUMA_POW_DIFFICULTY` - Leading zero bits required (default: 15)

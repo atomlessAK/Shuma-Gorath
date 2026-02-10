@@ -292,23 +292,24 @@ mod admin_config_tests {
     }
 
     #[test]
-    fn admin_config_rejects_updates_when_admin_page_config_disabled() {
+    fn admin_config_rejects_updates_when_admin_config_write_disabled() {
         let _lock = ENV_MUTEX.lock().unwrap();
-        std::env::set_var("SHUMA_ADMIN_PAGE_CONFIG", "false");
+        std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "false");
         let body = br#"{"test_mode":true}"#.to_vec();
         let req = make_request(Method::Post, "/admin/config", body);
         let store = TestStore::default();
         let resp = handle_admin_config(&req, &store, "default");
         assert_eq!(*resp.status(), 403u16);
         let msg = String::from_utf8_lossy(resp.body());
-        assert!(msg.contains("SHUMA_ADMIN_PAGE_CONFIG=false"));
-        std::env::remove_var("SHUMA_ADMIN_PAGE_CONFIG");
+        assert!(msg.contains("SHUMA_ADMIN_CONFIG_WRITE_ENABLED=false"));
+        std::env::remove_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED");
     }
 
     #[test]
     fn admin_config_updates_geo_policy_lists() {
         let _lock = ENV_MUTEX.lock().unwrap();
-        std::env::set_var("SHUMA_ADMIN_PAGE_CONFIG", "true");
+        std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
+        std::env::set_var("SHUMA_CONFIG_USE_KV", "true");
         std::env::remove_var("SHUMA_GEO_RISK_COUNTRIES");
         std::env::remove_var("SHUMA_GEO_ALLOW_COUNTRIES");
         std::env::remove_var("SHUMA_GEO_CHALLENGE_COUNTRIES");
@@ -371,13 +372,14 @@ mod admin_config_tests {
         std::env::remove_var("SHUMA_GEO_CHALLENGE_COUNTRIES");
         std::env::remove_var("SHUMA_GEO_MAZE_COUNTRIES");
         std::env::remove_var("SHUMA_GEO_BLOCK_COUNTRIES");
-        std::env::remove_var("SHUMA_ADMIN_PAGE_CONFIG");
+        std::env::remove_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED");
+        std::env::remove_var("SHUMA_CONFIG_USE_KV");
     }
 
     #[test]
     fn admin_config_rejects_non_iso_geo_country_codes() {
         let _lock = ENV_MUTEX.lock().unwrap();
-        std::env::set_var("SHUMA_ADMIN_PAGE_CONFIG", "true");
+        std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
         let store = TestStore::default();
         let body = br#"{"geo_risk": ["US", "ZZ"]}"#.to_vec();
         let post_req = make_request(Method::Post, "/admin/config", body);
@@ -385,7 +387,7 @@ mod admin_config_tests {
         assert_eq!(*post_resp.status(), 400u16);
         let msg = String::from_utf8_lossy(post_resp.body());
         assert!(msg.contains("invalid country code"));
-        std::env::remove_var("SHUMA_ADMIN_PAGE_CONFIG");
+        std::env::remove_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED");
     }
 
     #[test]
@@ -393,7 +395,7 @@ mod admin_config_tests {
         let _lock = ENV_MUTEX.lock().unwrap();
         let prior_js_required_env = std::env::var("SHUMA_JS_REQUIRED_ENFORCED").ok();
         std::env::remove_var("SHUMA_JS_REQUIRED_ENFORCED");
-        std::env::set_var("SHUMA_ADMIN_PAGE_CONFIG", "true");
+        std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
         let store = TestStore::default();
 
         let post_req = make_request(
@@ -419,13 +421,13 @@ mod admin_config_tests {
         } else {
             std::env::remove_var("SHUMA_JS_REQUIRED_ENFORCED");
         }
-        std::env::remove_var("SHUMA_ADMIN_PAGE_CONFIG");
+        std::env::remove_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED");
     }
 
     #[test]
     fn admin_config_rejects_out_of_range_rate_limit() {
         let _lock = ENV_MUTEX.lock().unwrap();
-        std::env::set_var("SHUMA_ADMIN_PAGE_CONFIG", "true");
+        std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
         let store = TestStore::default();
 
         let post_req = make_request(
@@ -438,7 +440,7 @@ mod admin_config_tests {
         let msg = String::from_utf8_lossy(post_resp.body());
         assert!(msg.contains("rate_limit out of range"));
 
-        std::env::remove_var("SHUMA_ADMIN_PAGE_CONFIG");
+        std::env::remove_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED");
     }
 }
 
@@ -721,10 +723,10 @@ fn handle_admin_config(
     // GET: Return current config
     // POST: Update config (supports {"test_mode": true/false})
     if *req.method() == spin_sdk::http::Method::Post {
-        if !crate::config::admin_page_config_enabled() {
+        if !crate::config::admin_config_write_enabled() {
             return Response::new(
                 403,
-                "Config updates are disabled when SHUMA_ADMIN_PAGE_CONFIG=false",
+                "Config updates are disabled when SHUMA_ADMIN_CONFIG_WRITE_ENABLED=false",
             );
         }
         let json = match crate::input_validation::parse_json_body(
@@ -1094,7 +1096,8 @@ fn handle_admin_config(
                 "pow_config_mutable": crate::config::pow_config_mutable(),
                 "pow_difficulty": cfg.pow_difficulty,
                 "pow_ttl_seconds": cfg.pow_ttl_seconds,
-                "admin_page_config_enabled": crate::config::admin_page_config_enabled(),
+                "config_use_kv_enabled": crate::config::config_use_kv_enabled(),
+                "admin_config_write_enabled": crate::config::admin_config_write_enabled(),
                 "https_enforced": crate::config::https_enforced(),
                 "forwarded_header_trust_configured": crate::config::forwarded_header_trust_configured(),
                 "challenge_risk_threshold": cfg.challenge_risk_threshold,
@@ -1166,7 +1169,8 @@ fn handle_admin_config(
         "pow_config_mutable": crate::config::pow_config_mutable(),
         "pow_difficulty": cfg.pow_difficulty,
         "pow_ttl_seconds": cfg.pow_ttl_seconds,
-        "admin_page_config_enabled": crate::config::admin_page_config_enabled(),
+        "config_use_kv_enabled": crate::config::config_use_kv_enabled(),
+        "admin_config_write_enabled": crate::config::admin_config_write_enabled(),
         "https_enforced": crate::config::https_enforced(),
         "forwarded_header_trust_configured": crate::config::forwarded_header_trust_configured(),
         "challenge_risk_threshold": cfg.challenge_risk_threshold,

@@ -11,7 +11,8 @@ Shuma-Gorath is designed to **complement enterprise bot defenses** (such as Akam
 - `SHUMA_FORWARDED_IP_SECRET` - Required when trusting `X-Forwarded-For`
 - `SHUMA_ADMIN_IP_ALLOWLIST` - Optional; CIDR/IP allowlist for admin access
 - `SHUMA_EVENT_LOG_RETENTION_HOURS` - Event retention window
-- `SHUMA_ADMIN_PAGE_CONFIG` - `false` (default) or `true`
+- `SHUMA_CONFIG_USE_KV` - `false` (default) or `true`
+- `SHUMA_ADMIN_CONFIG_WRITE_ENABLED` - `false` (default) or `true`
 - `SHUMA_KV_STORE_FAIL_OPEN` - `true` (default) or `false`
 - `SHUMA_ENFORCE_HTTPS` - `false` (default) or `true`
 - `SHUMA_DEBUG_HEADERS` - Optional; expose internal health/fail-mode headers (dev only)
@@ -28,8 +29,9 @@ JS/PoW deployment recommendation:
 - Keep `SHUMA_POW_ENABLED=true` for stronger, server-verified JS gate completion.
 - Setting `SHUMA_JS_REQUIRED_ENFORCED=false` bypasses JS gate routing even if PoW endpoints are enabled.
 
-`SHUMA_ADMIN_PAGE_CONFIG=false` makes runtime config fully env-driven and disables `POST /admin/config`.
-Use this for immutable infrastructure-style deployments.
+`SHUMA_CONFIG_USE_KV=false` makes runtime config fully env-driven (KV config ignored).
+`SHUMA_ADMIN_CONFIG_WRITE_ENABLED=false` disables `POST /admin/config`.
+For immutable infrastructure-style deployments, set both to `false`.
 
 Admin API surface defaults:
 
@@ -147,10 +149,11 @@ If you set `SHUMA_FORWARDED_IP_SECRET`, you must inject the matching `X-Shuma-Fo
 make dev SHUMA_FORWARDED_IP_SECRET="your-dev-secret" SHUMA_API_KEY="your-dev-api-key"
 ```
 
-`make dev` also sets `SHUMA_ADMIN_PAGE_CONFIG=true` by default. To preview ENV-only behavior locally:
+`make dev` sets `SHUMA_CONFIG_USE_KV=true` and `SHUMA_ADMIN_CONFIG_WRITE_ENABLED=true` by default.
+To preview ENV-only behavior locally:
 
 ```bash
-make dev DEV_ADMIN_PAGE_CONFIG=false
+make dev DEV_CONFIG_USE_KV=false DEV_ADMIN_CONFIG_WRITE_ENABLED=false
 ```
 Generate/rotate helper:
 

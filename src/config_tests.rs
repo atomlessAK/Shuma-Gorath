@@ -81,12 +81,21 @@ mod tests {
     }
 
     #[test]
-    fn parse_admin_page_config_defaults_to_disabled() {
-        assert!(!crate::config::parse_admin_page_config_enabled(None));
-        assert!(!crate::config::parse_admin_page_config_enabled(Some("junk")));
-        assert!(crate::config::parse_admin_page_config_enabled(Some("true")));
-        assert!(crate::config::parse_admin_page_config_enabled(Some("1")));
-        assert!(!crate::config::parse_admin_page_config_enabled(Some("false")));
+    fn parse_config_use_kv_defaults_to_disabled() {
+        assert!(!crate::config::parse_config_use_kv_enabled(None));
+        assert!(!crate::config::parse_config_use_kv_enabled(Some("junk")));
+        assert!(crate::config::parse_config_use_kv_enabled(Some("true")));
+        assert!(crate::config::parse_config_use_kv_enabled(Some("1")));
+        assert!(!crate::config::parse_config_use_kv_enabled(Some("false")));
+    }
+
+    #[test]
+    fn parse_admin_config_write_defaults_to_disabled() {
+        assert!(!crate::config::parse_admin_config_write_enabled(None));
+        assert!(!crate::config::parse_admin_config_write_enabled(Some("junk")));
+        assert!(crate::config::parse_admin_config_write_enabled(Some("true")));
+        assert!(crate::config::parse_admin_config_write_enabled(Some("1")));
+        assert!(!crate::config::parse_admin_config_write_enabled(Some("false")));
     }
 
     #[test]
@@ -117,16 +126,16 @@ mod tests {
     }
 
     #[test]
-    fn load_admin_page_config_disabled_ignores_kv_values() {
+    fn load_config_use_kv_disabled_ignores_kv_values() {
         let _lock = ENV_MUTEX.lock().unwrap();
         let keys = [
-            "SHUMA_ADMIN_PAGE_CONFIG",
+            "SHUMA_CONFIG_USE_KV",
             "SHUMA_RATE_LIMIT",
             "SHUMA_MAZE_ENABLED",
             "SHUMA_TEST_MODE",
         ];
         clear_env(&keys);
-        std::env::set_var("SHUMA_ADMIN_PAGE_CONFIG", "false");
+        std::env::set_var("SHUMA_CONFIG_USE_KV", "false");
         std::env::set_var("SHUMA_RATE_LIMIT", "321");
         std::env::set_var("SHUMA_MAZE_ENABLED", "0");
         std::env::set_var("SHUMA_TEST_MODE", "1");
@@ -148,11 +157,11 @@ mod tests {
     }
 
     #[test]
-    fn load_admin_page_config_enabled_applies_env_overrides_over_kv() {
+    fn load_config_use_kv_enabled_applies_env_overrides_over_kv() {
         let _lock = ENV_MUTEX.lock().unwrap();
-        let keys = ["SHUMA_ADMIN_PAGE_CONFIG", "SHUMA_RATE_LIMIT", "SHUMA_HONEYPOTS"];
+        let keys = ["SHUMA_CONFIG_USE_KV", "SHUMA_RATE_LIMIT", "SHUMA_HONEYPOTS"];
         clear_env(&keys);
-        std::env::set_var("SHUMA_ADMIN_PAGE_CONFIG", "true");
+        std::env::set_var("SHUMA_CONFIG_USE_KV", "true");
         std::env::set_var("SHUMA_RATE_LIMIT", "222");
         std::env::set_var("SHUMA_HONEYPOTS", "[\"/trap-a\",\"/trap-b\"]");
 
