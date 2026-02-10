@@ -188,7 +188,21 @@
               <h3>Ban IP</h3>
               <input id="ban-ip" class="input-field" type="text" placeholder="IP address" aria-label="IP address to ban" maxlength="45" spellcheck="false" autocomplete="off" />
               <input id="ban-reason" class="input-field" type="text" value="manual_ban" aria-label="Ban reason (fixed)" readonly disabled />
-              <input id="ban-duration" class="input-field" type="number" min="60" max="31536000" step="1" inputmode="numeric" placeholder="Duration (seconds)" value="3600" aria-label="Ban duration in seconds" />
+              <label class="control-label" for="ban-duration-days">Duration</label>
+              <div class="duration-inputs">
+                <label class="duration-input" for="ban-duration-days">
+                  <input id="ban-duration-days" class="input-field" type="number" min="0" max="365" step="1" inputmode="numeric" value="0" aria-label="Manual ban duration days" />
+                  <span class="input-unit">d</span>
+                </label>
+                <label class="duration-input" for="ban-duration-hours">
+                  <input id="ban-duration-hours" class="input-field" type="number" min="0" max="23" step="1" inputmode="numeric" value="1" aria-label="Manual ban duration hours" />
+                  <span class="input-unit">hr</span>
+                </label>
+                <label class="duration-input" for="ban-duration-minutes">
+                  <input id="ban-duration-minutes" class="input-field" type="number" min="0" max="59" step="1" inputmode="numeric" value="0" aria-label="Manual ban duration minutes" />
+                  <span class="input-unit">min</span>
+                </label>
+              </div>
               <button id="ban-btn" class="btn btn-submit">Ban</button>
             </div>
             <div class="control-group panel-soft pad-md">
@@ -361,7 +375,7 @@
             </div>
             <div class="control-group panel-soft pad-md config-edit-pane hidden">
               <h3>Ban Durations</h3>
-              <p class="control-desc text-muted">Set ban length per trigger type. Longer bans increase deterrence but slow recovery from false positives.</p>
+              <p class="control-desc text-muted">Set ban length in days, hours, and minutes per trigger type. Longer bans increase deterrence but slow recovery from false positives.</p>
               <div class="duration-grid">
                 <div class="duration-row">
                   <label class="control-label" for="dur-honeypot-days">Link Maze Threshold Exceeded</label>
@@ -415,7 +429,7 @@
                   </div>
                 </div>
                 <div class="duration-row">
-                  <label class="control-label" for="dur-admin-days">Admin Manual Ban</label>
+                  <label class="control-label" for="dur-admin-days">Admin Manual Ban Default</label>
                   <div class="duration-inputs">
                     <label class="duration-input" for="dur-admin-days">
                       <input id="dur-admin-days" class="input-field" type="number" min="0" max="365" step="1" inputmode="numeric" value="0" />

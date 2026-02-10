@@ -44,7 +44,9 @@ const statusPanelState = {
 };
 
 const INTEGER_FIELD_RULES = {
-  'ban-duration': { min: 60, max: 31536000, fallback: 3600, label: 'Ban duration' },
+  'ban-duration-days': { min: 0, max: 365, fallback: 0, label: 'Manual ban duration days' },
+  'ban-duration-hours': { min: 0, max: 23, fallback: 1, label: 'Manual ban duration hours' },
+  'ban-duration-minutes': { min: 0, max: 59, fallback: 0, label: 'Manual ban duration minutes' },
   'robots-crawl-delay': { min: 0, max: 60, fallback: 2, label: 'Crawl delay' },
   'maze-threshold': { min: 5, max: 500, fallback: 50, label: 'Maze threshold' },
   'rate-limit-threshold': { min: 1, max: 1000000, fallback: 80, label: 'Rate limit' },
@@ -101,6 +103,14 @@ const BAN_DURATION_FIELDS = {
     hoursId: 'dur-admin-hours',
     minutesId: 'dur-admin-minutes'
   }
+};
+
+const MANUAL_BAN_DURATION_FIELD = {
+  label: 'Manual ban duration',
+  fallback: 3600,
+  daysId: 'ban-duration-days',
+  hoursId: 'ban-duration-hours',
+  minutesId: 'ban-duration-minutes'
 };
 
 const IPV4_SEGMENT_PATTERN = /^\d{1,3}$/;
@@ -189,8 +199,7 @@ function secondsToDurationParts(totalSeconds, fallbackSeconds) {
   };
 }
 
-function setBanDurationInputFromSeconds(durationKey, totalSeconds) {
-  const group = BAN_DURATION_FIELDS[durationKey];
+function setDurationInputsFromSeconds(group, totalSeconds) {
   if (!group) return;
   const daysInput = document.getElementById(group.daysId);
   const hoursInput = document.getElementById(group.hoursId);
@@ -203,8 +212,12 @@ function setBanDurationInputFromSeconds(durationKey, totalSeconds) {
   minutesInput.value = String(parts.minutes);
 }
 
-function readBanDurationFromInputs(durationKey, showInline = false) {
+function setBanDurationInputFromSeconds(durationKey, totalSeconds) {
   const group = BAN_DURATION_FIELDS[durationKey];
+  setDurationInputsFromSeconds(group, totalSeconds);
+}
+
+function readDurationFromInputs(group, showInline = false) {
   if (!group) return null;
 
   const daysInput = document.getElementById(group.daysId);
@@ -236,15 +249,49 @@ function readBanDurationFromInputs(durationKey, showInline = false) {
   return { days, hours, minutes, totalSeconds };
 }
 
+function readBanDurationFromInputs(durationKey, showInline = false) {
+  const group = BAN_DURATION_FIELDS[durationKey];
+  return readDurationFromInputs(group, showInline);
+}
+
 function readBanDurationSeconds(durationKey) {
   const group = BAN_DURATION_FIELDS[durationKey];
   if (!group) return null;
-  const result = readBanDurationFromInputs(durationKey, true);
+  const result = readDurationFromInputs(group, true);
   if (result) return result.totalSeconds;
 
   const daysInput = document.getElementById(group.daysId);
   const hoursInput = document.getElementById(group.hoursId);
   const minutesInput = document.getElementById(group.minutesId);
+  if (daysInput && !daysInput.checkValidity()) {
+    daysInput.reportValidity();
+    daysInput.focus();
+    return null;
+  }
+  if (hoursInput && !hoursInput.checkValidity()) {
+    hoursInput.reportValidity();
+    hoursInput.focus();
+    return null;
+  }
+  if (minutesInput && !minutesInput.checkValidity()) {
+    minutesInput.reportValidity();
+    minutesInput.focus();
+    return null;
+  }
+  if (daysInput) {
+    daysInput.reportValidity();
+    daysInput.focus();
+  }
+  return null;
+}
+
+function readManualBanDurationSeconds(showInline = false) {
+  const result = readDurationFromInputs(MANUAL_BAN_DURATION_FIELD, showInline);
+  if (result) return result.totalSeconds;
+
+  const daysInput = document.getElementById(MANUAL_BAN_DURATION_FIELD.daysId);
+  const hoursInput = document.getElementById(MANUAL_BAN_DURATION_FIELD.hoursId);
+  const minutesInput = document.getElementById(MANUAL_BAN_DURATION_FIELD.minutesId);
   if (daysInput && !daysInput.checkValidity()) {
     daysInput.reportValidity();
     daysInput.focus();
@@ -429,7 +476,7 @@ function refreshCoreActionButtonsState() {
   setValidActionButtonState(
     'ban-btn',
     apiValid,
-    validateIpFieldById('ban-ip', true, 'Ban IP') && validateIntegerFieldById('ban-duration')
+    validateIpFieldById('ban-ip', true, 'Ban IP') && Boolean(readDurationFromInputs(MANUAL_BAN_DURATION_FIELD))
   );
   setValidActionButtonState(
     'unban-btn',
@@ -2582,8 +2629,7 @@ document.getElementById('ban-btn').onclick = async function() {
   const { endpoint, apikey } = ctx;
   const ip = readIpFieldValue('ban-ip', true, msg, 'Ban IP');
   if (ip === null) return;
-  const reason = 'manual_ban';
-  const duration = readIntegerFieldValue('ban-duration', msg);
+  const duration = readManualBanDurationSeconds(true);
   if (duration === null) return;
   
   msg.textContent = `Banning ${ip}...`;
