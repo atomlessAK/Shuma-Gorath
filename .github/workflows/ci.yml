@@ -47,7 +47,7 @@ jobs:
 
       - name: Start Spin server (background)
         run: |
-          nohup make run > /tmp/spin.log 2>&1 &
+          nohup make run-prebuilt > /tmp/spin.log 2>&1 &
           for i in {1..180}; do
             if curl -sf -H "X-Forwarded-For: 127.0.0.1" -H "X-Shuma-Forwarded-Secret: ${SHUMA_FORWARDED_IP_SECRET}" http://127.0.0.1:3000/health > /dev/null 2>&1; then
               echo "spin ready"

@@ -1,4 +1,4 @@
-.PHONY: dev local run build prod clean test test-unit test-integration test-dashboard test-dashboard-e2e deploy logs status stop help setup verify
+.PHONY: dev local run run-prebuilt build prod clean test test-unit test-integration test-dashboard test-dashboard-e2e deploy logs status stop help setup verify
 
 # Default target
 .DEFAULT_GOAL := help
@@ -88,6 +88,14 @@ run: ## Build once and run (no file watching)
 	@cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm
 	@./scripts/set_crate_type.sh rlib
 	@echo "$(GREEN)✅ Build complete. Starting Spin...$(NC)"
+	@echo "$(YELLOW)📊 Dashboard: http://127.0.0.1:3000/dashboard/index.html$(NC)"
+	@echo "$(YELLOW)📈 Metrics:   http://127.0.0.1:3000/metrics$(NC)"
+	@echo "$(YELLOW)❤️  Health:    http://127.0.0.1:3000/health$(NC)"
+	@spin up $(SPIN_API_KEY) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) $(SPIN_ADMIN_PAGE_CONFIG_DEV) --listen 127.0.0.1:3000
+
+run-prebuilt: ## Run Spin using prebuilt wasm (CI helper)
+	@echo "$(CYAN)🚀 Starting prebuilt server...$(NC)"
+	@pkill -f "spin up" 2>/dev/null || true
 	@echo "$(YELLOW)📊 Dashboard: http://127.0.0.1:3000/dashboard/index.html$(NC)"
 	@echo "$(YELLOW)📈 Metrics:   http://127.0.0.1:3000/metrics$(NC)"
 	@echo "$(YELLOW)❤️  Health:    http://127.0.0.1:3000/health$(NC)"
