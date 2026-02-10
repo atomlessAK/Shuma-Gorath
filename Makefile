@@ -1,4 +1,4 @@
-.PHONY: dev local run run-prebuilt build prod clean test test-unit test-integration test-coverage test-dashboard test-dashboard-e2e deploy logs status stop help setup verify
+.PHONY: dev local run run-prebuilt build prod clean test test-unit test-integration test-coverage test-dashboard test-dashboard-e2e deploy logs status stop help setup verify api-key-generate api-key-rotate
 
 # Default target
 .DEFAULT_GOAL := help
@@ -227,6 +227,18 @@ logs: ## View Spin component logs
 	@echo "$(CYAN)📜 Spin logs:$(NC)"
 	@cat .spin/logs/* 2>/dev/null || echo "No logs found. Run 'make dev' first."
 
+api-key-generate: ## Generate a high-entropy SHUMA_API_KEY using system CSPRNG tools
+	@echo "$(CYAN)🔐 Generating SHUMA_API_KEY...$(NC)"
+	@KEY="$$(if command -v openssl >/dev/null 2>&1; then openssl rand -hex 32; else od -An -N32 -tx1 /dev/urandom | tr -d ' \n'; fi)"; \
+	echo ""; \
+	echo "$$KEY"; \
+	echo ""; \
+	echo "$(YELLOW)Set in your secret store as: SHUMA_API_KEY=$$KEY$(NC)"
+
+api-key-rotate: ## Generate a replacement SHUMA_API_KEY and print rotation guidance
+	@$(MAKE) --no-print-directory api-key-generate
+	@echo "$(YELLOW)Next steps: update deployment secret, redeploy/restart, then update dashboard login key.$(NC)"
+
 #--------------------------
 # Help
 #--------------------------
@@ -247,4 +259,4 @@ help: ## Show this help message
 	@grep -E '^test.*:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-15s %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Utilities:$(NC)"
-	@grep -E '^(stop|status|clean|logs|help):.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-15s %s\n", $$1, $$2}'
+	@grep -E '^(stop|status|clean|logs|api-key-generate|api-key-rotate|help):.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-15s %s\n", $$1, $$2}'

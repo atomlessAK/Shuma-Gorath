@@ -145,3 +145,7 @@ make dev SHUMA_FORWARDED_IP_SECRET="your-dev-secret" SHUMA_API_KEY="your-dev-api
 ```bash
 make dev DEV_ADMIN_PAGE_CONFIG=false
 ```
+Generate/rotate helper:
+
+- `make api-key-generate` prints a new high-entropy API key
+- `make api-key-rotate` prints a new key plus rotation steps

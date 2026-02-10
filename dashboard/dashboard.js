@@ -374,7 +374,6 @@ function resolveAdminApiEndpoint() {
 
   const origin = window.location.origin || `${window.location.protocol}//${window.location.host}`;
   let endpoint = parseEndpointUrl(origin) || origin;
-  let source = 'Same-origin endpoint inference active.';
 
   // Local diagnostics only: allow ?api_endpoint=http://127.0.0.1:3000 override on loopback dashboards.
   if (isLoopbackHostname(window.location.hostname)) {
@@ -387,30 +386,14 @@ function resolveAdminApiEndpoint() {
           const parsedUrl = new URL(parsed);
           if (isLoopbackHostname(parsedUrl.hostname)) {
             endpoint = parsed;
-            source = 'Dev override active via ?api_endpoint=...';
-          } else {
-            source = 'Ignoring ?api_endpoint override (loopback hosts only).';
           }
-        } catch (_e) {
-          source = 'Ignoring ?api_endpoint override (invalid URL).';
-        }
-      } else {
-        source = 'Ignoring ?api_endpoint override (invalid URL).';
+        } catch (_e) {}
       }
     }
   }
 
-  adminEndpointContext = { endpoint, source };
+  adminEndpointContext = { endpoint };
   return adminEndpointContext;
-}
-
-function updateEndpointDisplay() {
-  const endpointDisplay = document.getElementById('endpoint-display');
-  const endpointSource = document.getElementById('endpoint-source');
-  const resolved = resolveAdminApiEndpoint();
-
-  if (endpointDisplay) endpointDisplay.value = resolved.endpoint;
-  if (endpointSource) endpointSource.textContent = resolved.source;
 }
 
 function validateIntegerFieldById(id, showInline = false) {
@@ -659,7 +642,6 @@ function bindApiKeyFieldValidation() {
 }
 
 function initInputValidation() {
-  updateEndpointDisplay();
   Object.keys(INTEGER_FIELD_RULES).forEach(bindIntegerFieldValidation);
   bindIpFieldValidation('ban-ip', true, 'Ban IP');
   bindIpFieldValidation('unban-ip', true, 'Unban IP');
