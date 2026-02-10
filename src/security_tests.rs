@@ -7,8 +7,16 @@ use crate::{forwarded_ip_trusted, response_with_optional_debug_headers};
 static ENV_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 fn request_with_headers(path: &str, headers: &[(&str, &str)]) -> Request {
+    request_with_method_and_headers(Method::Get, path, headers)
+}
+
+fn request_with_method_and_headers(
+    method: Method,
+    path: &str,
+    headers: &[(&str, &str)],
+) -> Request {
     let mut builder = Request::builder();
-    builder.method(Method::Get).uri(path);
+    builder.method(method).uri(path);
     for (key, value) in headers {
         builder.header(*key, *value);
     }
@@ -48,6 +56,27 @@ fn health_internal_headers_visible_when_enabled() {
 
     assert!(has_header(&resp, "X-KV-Status"));
     assert!(has_header(&resp, "X-Shuma-Fail-Mode"));
+}
+
+#[test]
+fn admin_options_preflight_is_rejected_without_cors_headers() {
+    let _lock = ENV_MUTEX.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let req = request_with_method_and_headers(
+        Method::Options,
+        "/admin/config",
+        &[
+            ("origin", "https://example.com"),
+            ("access-control-request-method", "POST"),
+            ("access-control-request-headers", "authorization,content-type"),
+        ],
+    );
+
+    let resp = crate::handle_bot_trap_impl(&req);
+
+    assert_eq!(*resp.status(), 403u16);
+    assert!(!has_header(&resp, "Access-Control-Allow-Origin"));
+    assert!(!has_header(&resp, "Access-Control-Allow-Methods"));
+    assert!(!has_header(&resp, "Access-Control-Allow-Headers"));
 }
 
 #[test]

@@ -24,7 +24,7 @@ mod whitelist_tests;
 // Entry point for the WASM Stealth Bot Trap Spin app
 
 use serde::Serialize;
-use spin_sdk::http::{Request, Response};
+use spin_sdk::http::{Method, Request, Response};
 use spin_sdk::http_component;
 use spin_sdk::key_value::Store;
 use std::env;
@@ -373,10 +373,6 @@ fn serve_maze_with_tracking(
 
 /// Main handler logic, testable as a plain Rust function.
 pub fn handle_bot_trap_impl(req: &Request) -> Response {
-    let store = match Store::open_default() {
-        Ok(s) => Some(s),
-        Err(_e) => None,
-    };
     let path = req.path();
 
     // Health check endpoint
@@ -496,8 +492,16 @@ pub fn handle_bot_trap_impl(req: &Request) -> Response {
 
     // Admin API
     if path.starts_with("/admin") {
+        if req.method() == &Method::Options {
+            return Response::new(403, "Forbidden");
+        }
         return admin::handle_admin(req);
     }
+
+    let store = match Store::open_default() {
+        Ok(s) => Some(s),
+        Err(_e) => None,
+    };
     if store.is_none() {
         let fail_open = shuma_fail_open();
         let mode = fail_mode_label(fail_open);

@@ -115,6 +115,7 @@ const MANUAL_BAN_DURATION_FIELD = {
 
 const IPV4_SEGMENT_PATTERN = /^\d{1,3}$/;
 const IPV6_INPUT_PATTERN = /^[0-9a-fA-F:.]+$/;
+let adminEndpointContext = null;
 
 function sanitizeIntegerText(value) {
   return (value || '').replace(/[^\d]/g, '');
@@ -126,6 +127,16 @@ function sanitizeIpText(value) {
 
 function sanitizeEndpointText(value) {
   return (value || '').replace(/\s+/g, '').trim();
+}
+
+function isLoopbackHostname(hostname) {
+  const normalized = String(hostname || '').trim().toLowerCase();
+  return (
+    normalized === 'localhost' ||
+    normalized === '127.0.0.1' ||
+    normalized === '::1' ||
+    normalized === '[::1]'
+  );
 }
 
 function fieldErrorIdFor(input) {
@@ -356,6 +367,50 @@ function parseEndpointUrl(value) {
   }
 }
 
+function resolveAdminApiEndpoint() {
+  if (adminEndpointContext) return adminEndpointContext;
+
+  const origin = window.location.origin || `${window.location.protocol}//${window.location.host}`;
+  let endpoint = parseEndpointUrl(origin) || origin;
+  let source = 'Same-origin endpoint inference active.';
+
+  // Local diagnostics only: allow ?api_endpoint=http://127.0.0.1:3000 override on loopback dashboards.
+  if (isLoopbackHostname(window.location.hostname)) {
+    const params = new URLSearchParams(window.location.search || '');
+    const override = sanitizeEndpointText(params.get('api_endpoint') || '');
+    if (override) {
+      const parsed = parseEndpointUrl(override);
+      if (parsed) {
+        try {
+          const parsedUrl = new URL(parsed);
+          if (isLoopbackHostname(parsedUrl.hostname)) {
+            endpoint = parsed;
+            source = 'Dev override active via ?api_endpoint=...';
+          } else {
+            source = 'Ignoring ?api_endpoint override (loopback hosts only).';
+          }
+        } catch (_e) {
+          source = 'Ignoring ?api_endpoint override (invalid URL).';
+        }
+      } else {
+        source = 'Ignoring ?api_endpoint override (invalid URL).';
+      }
+    }
+  }
+
+  adminEndpointContext = { endpoint, source };
+  return adminEndpointContext;
+}
+
+function updateEndpointDisplay() {
+  const endpointDisplay = document.getElementById('endpoint-display');
+  const endpointSource = document.getElementById('endpoint-source');
+  const resolved = resolveAdminApiEndpoint();
+
+  if (endpointDisplay) endpointDisplay.value = resolved.endpoint;
+  if (endpointSource) endpointSource.textContent = resolved.source;
+}
+
 function validateIntegerFieldById(id, showInline = false) {
   const input = document.getElementById(id);
   const rules = INTEGER_FIELD_RULES[id];
@@ -433,16 +488,6 @@ function readIpFieldValue(id, required, messageTarget, label) {
   return sanitized;
 }
 
-function validateEndpointInput(showInline = false) {
-  const endpointInput = document.getElementById('endpoint');
-  if (!endpointInput) return null;
-  const sanitized = sanitizeEndpointText(endpointInput.value);
-  if (endpointInput.value !== sanitized) endpointInput.value = sanitized;
-  const endpoint = parseEndpointUrl(sanitized);
-  setFieldError(endpointInput, endpoint ? '' : 'Enter a valid http(s) API endpoint URL.', showInline);
-  return endpoint;
-}
-
 function validateApiKeyInput(showInline = false) {
   const apikeyInput = document.getElementById('apikey');
   if (!apikeyInput) return false;
@@ -452,9 +497,8 @@ function validateApiKeyInput(showInline = false) {
 }
 
 function hasValidApiContext() {
-  const endpoint = validateEndpointInput();
   const hasKey = validateApiKeyInput();
-  return Boolean(endpoint && hasKey);
+  return Boolean(hasKey);
 }
 
 function validateGeoFieldById(id, showInline = false) {
@@ -515,12 +559,13 @@ function refreshCoreActionButtonsState() {
 }
 
 function getAdminContext(messageTarget) {
-  const endpointInput = document.getElementById('endpoint');
   const apikeyInput = document.getElementById('apikey');
-  const endpoint = validateEndpointInput(true);
+  const endpoint = resolveAdminApiEndpoint().endpoint;
   if (!endpoint) {
-    endpointInput.reportValidity();
-    endpointInput.focus();
+    if (messageTarget) {
+      messageTarget.textContent = 'Unable to resolve admin API endpoint from the current page origin.';
+      messageTarget.className = 'message error';
+    }
     refreshCoreActionButtonsState();
     return null;
   }
@@ -533,8 +578,6 @@ function getAdminContext(messageTarget) {
     return null;
   }
 
-  endpointInput.value = endpoint;
-  setFieldError(endpointInput, '', true);
   setFieldError(apikeyInput, '', true);
   refreshCoreActionButtonsState();
   return { endpoint, apikey };
@@ -598,22 +641,6 @@ function bindIpFieldValidation(id, required, label) {
   apply(false);
 }
 
-function bindEndpointFieldValidation() {
-  const input = document.getElementById('endpoint');
-  if (!input) return;
-  const apply = (showInline = false) => validateEndpointInput(showInline);
-  input.addEventListener('input', () => {
-    apply(true);
-    refreshCoreActionButtonsState();
-  });
-  input.addEventListener('blur', () => {
-    const endpoint = validateEndpointInput(true);
-    if (endpoint) input.value = endpoint;
-    refreshCoreActionButtonsState();
-  });
-  apply(false);
-}
-
 function bindApiKeyFieldValidation() {
   const input = document.getElementById('apikey');
   if (!input) return;
@@ -630,10 +657,10 @@ function bindApiKeyFieldValidation() {
 }
 
 function initInputValidation() {
+  updateEndpointDisplay();
   Object.keys(INTEGER_FIELD_RULES).forEach(bindIntegerFieldValidation);
   bindIpFieldValidation('ban-ip', true, 'Ban IP');
   bindIpFieldValidation('unban-ip', true, 'Unban IP');
-  bindEndpointFieldValidation();
   bindApiKeyFieldValidation();
   refreshCoreActionButtonsState();
 }

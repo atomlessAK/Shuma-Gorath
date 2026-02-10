@@ -43,7 +43,7 @@ Controls:
 - risk scoring countries (`geo_risk`)
 - tiered routing countries (`geo_allow`, `geo_challenge`, `geo_maze`, `geo_block`)
 - Link maze stats
-- Enter key submits inputs (endpoint, API key, ban, unban)
+- Enter key submits inputs (API key, ban, unban)
 - Auto-refresh every 30 seconds
 
 ## 🐙 Access
@@ -51,6 +51,8 @@ Controls:
 Development:
 - `http://127.0.0.1:3000/dashboard/index.html`
 - API key: `SHUMA_API_KEY` from environment or `spin.toml`
+- Admin API endpoint is inferred from the page origin by default (same-origin only)
+- Local diagnostics override: `?api_endpoint=http://127.0.0.1:3000` (loopback dashboards only)
 
 Production (recommended):
 - Protect the dashboard with auth

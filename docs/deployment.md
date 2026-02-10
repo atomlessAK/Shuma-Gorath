@@ -24,6 +24,11 @@ JS/PoW deployment recommendation:
 `SHUMA_ADMIN_PAGE_CONFIG=false` makes runtime config fully env-driven and disables `POST /admin/config`.
 Use this for immutable infrastructure-style deployments.
 
+Admin API surface defaults:
+
+- Dashboard admin calls are same-origin by default (endpoint inferred from current page origin).
+- Cross-origin admin API use is intentionally closed; `/admin/*` CORS preflight is rejected.
+
 ## 🐙 Forwarded IP Trust
 
 When `SHUMA_FORWARDED_IP_SECRET` is set, the app only trusts `X-Forwarded-For` when the request also includes:

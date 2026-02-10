@@ -32,6 +32,8 @@ This is a **policy decision** and should be explicitly chosen for each deploymen
 - Restrict access with `SHUMA_ADMIN_IP_ALLOWLIST`
 - Limit `/admin/*` access at the CDN or firewall
 - Use TLS for all admin traffic
+- Keep admin API same-origin from the dashboard; no cross-origin admin API is enabled
+- CORS preflight (`OPTIONS`) for `/admin/*` is rejected by design
 
 ## 🐙 Health Endpoint Access
 
