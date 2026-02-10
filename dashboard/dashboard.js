@@ -603,34 +603,35 @@ const STATUS_DEFINITIONS = [
   {
     title: 'Fail Mode Policy',
     description: () => (
-      `Controlled by ${envVar('SHUMA_KV_STORE_FAIL_OPEN')}. <strong>true</strong> uses fail-open (allow requests when KV is unavailable); ` +
-      '<strong>false</strong> uses fail-closed (block requests when KV is unavailable).'
+      `Controls request handling when the KV store is unavailable. ${envVar('SHUMA_KV_STORE_FAIL_OPEN')}=<strong>true</strong> allows requests to continue (fail-open); ` +
+      `${envVar('SHUMA_KV_STORE_FAIL_OPEN')}=<strong>false</strong> blocks requests that require KV-backed decisions (fail-closed).`
     ),
     status: state => normalizeFailMode(state.failMode).toUpperCase()
   },
   {
     title: 'Test Mode',
     description: () => (
-      `When enabled, actions are logged without blocking traffic. It can be set at build time with the ENV var: ${envVar('SHUMA_TEST_MODE')} ` +
-      'and it can be toggled on and off in admin.'
+      `${envVar('SHUMA_TEST_MODE')} controls whether defenses are enforce-only or log-only. When enabled, detections and ban actions are logged but traffic is not blocked. ` +
+      'Use this for safe tuning before turning enforcement on.'
     ),
     status: state => boolStatus(state.testMode)
   },
   {
     title: 'Proof-of-Work (PoW)',
     description: state => (
-      'PoW adds a lightweight computational puzzle before JS verification to increase bot cost. ' +
-      'For a human visitor the work happens invisibly, once, in a couple of milliseconds. For a scraper or botnet, having to repeatedly perform the work accumulates a prohibitive cost. ' +
+      `PoW is applied in the JS verification flow and increases bot cost before <code>js_verified</code> is issued. ` +
       `Primary controls are ${envVar('SHUMA_POW_ENABLED')}, ${envVar('SHUMA_POW_DIFFICULTY')}, and ${envVar('SHUMA_POW_TTL_SECONDS')}. ` +
-      `Runtime editability is controlled by ${envVar('SHUMA_POW_CONFIG_MUTABLE')} and is currently ${formatMutability(state.powMutable)}.`
+      `Runtime editability is controlled by ${envVar('SHUMA_POW_CONFIG_MUTABLE')} and is currently ${formatMutability(state.powMutable)}. ` +
+      `If ${envVar('SHUMA_JS_REQUIRED_ENFORCED')} is disabled, normal visitor requests bypass this flow.`
     ),
     status: state => boolStatus(state.powEnabled)
   },
   {
     title: 'Challenge',
     description: state => (
-      `Step-up to the puzzle challenge is gated by ${envVar('SHUMA_CHALLENGE_RISK_THRESHOLD')} (current: <strong>${state.challengeThreshold}</strong>) ` +
-      `and uses ${envVar('SHUMA_CHALLENGE_TRANSFORM_COUNT')} to enable adjustment of the complexity of puzzle served. ` +
+      `Step-up routing sends suspicious traffic to the puzzle challenge when cumulative botness reaches ${envVar('SHUMA_CHALLENGE_RISK_THRESHOLD')} ` +
+      `(current: <strong>${state.challengeThreshold}</strong>). ` +
+      `Puzzle complexity is controlled by ${envVar('SHUMA_CHALLENGE_TRANSFORM_COUNT')}. ` +
       `Runtime threshold mutability is controlled by ${envVar('SHUMA_CHALLENGE_CONFIG_MUTABLE')} / ${envVar('SHUMA_BOTNESS_CONFIG_MUTABLE')} and is currently ${formatMutability(state.challengeMutable || state.botnessMutable)}.`
     ),
     status: state => boolStatus(state.challengeThreshold >= 1)
@@ -638,31 +639,28 @@ const STATUS_DEFINITIONS = [
   {
     title: 'CDP Detection',
     description: () => (
-      `Detects browser automation fingerprints. Primary controls: ${envVar('SHUMA_CDP_DETECTION_ENABLED')}, ` +
-      `${envVar('SHUMA_CDP_AUTO_BAN')}, and ${envVar('SHUMA_CDP_DETECTION_THRESHOLD')}. ` +
-      `Hard checks like <code>webdriver</code> or <code>automation_props</code> are classified as <strong>strong</strong> CDP detections. ` +
-      `If hard checks are absent, reports are <strong>medium</strong> when score >= ${envVar('SHUMA_CDP_DETECTION_THRESHOLD')} (or when <code>cdp_timing</code> is present). ` +
-      `Without hard checks, <strong>strong</strong> requires score >= threshold + 0.4 and at least two soft checks (<code>cdp_timing</code>, <code>chrome_obj</code>, <code>plugins</code>). ` +
-      `Automatic ban applies only when ${envVar('SHUMA_CDP_AUTO_BAN')} is enabled and the final CDP tier is <strong>strong</strong>.`
+      `Detects browser automation from client CDP reports. Primary controls are ${envVar('SHUMA_CDP_DETECTION_ENABLED')}, ${envVar('SHUMA_CDP_AUTO_BAN')}, and ${envVar('SHUMA_CDP_DETECTION_THRESHOLD')}. ` +
+      `Hard checks (for example <code>webdriver</code> or <code>automation_props</code>) are treated as <strong>strong</strong>. ` +
+      `Without hard checks, detections are tiered by score and soft signals using ${envVar('SHUMA_CDP_DETECTION_THRESHOLD')}. ` +
+      `If ${envVar('SHUMA_CDP_AUTO_BAN')} is enabled, only final <strong>strong</strong> CDP detections trigger automatic IP bans.`
     ),
     status: state => boolStatus(state.cdpEnabled)
   },
   {
     title: 'Link Maze',
     description: () => (
-      'Link Maze serves trap pages to suspicious traffic. ' +
-      `Primary controls are ${envVar('SHUMA_MAZE_ENABLED')}, ${envVar('SHUMA_MAZE_AUTO_BAN')}, and ${envVar('SHUMA_MAZE_AUTO_BAN_THRESHOLD')}. ` +
-      `Automatic bans will be triggered when Link Maze hits exceed the configured ${envVar('SHUMA_MAZE_AUTO_BAN_THRESHOLD')}.`
+      `Link Maze routes suspicious traffic into trap pages when ${envVar('SHUMA_MAZE_ENABLED')} is enabled. ` +
+      `If ${envVar('SHUMA_MAZE_AUTO_BAN')} is enabled, automatic bans trigger when maze hits exceed ${envVar('SHUMA_MAZE_AUTO_BAN_THRESHOLD')}.`
     ),
     status: state => boolStatus(state.mazeEnabled)
-  },  
+  },
   {
     title: 'JS Required',
     description: state => (
-      `When ${envVar('SHUMA_JS_REQUIRED_ENFORCED')} is true, requests without a valid <code>js_verified</code> cookie are served a JS verification page ` +
-      `to write the cookie. The originally requested page is then reloaded and access is re-evaluated. ` +
-      `If ${envVar('SHUMA_POW_ENABLED')} is true, this verification step includes PoW before <code>js_verified</code> is issued. ` +
-      `Disable ${envVar('SHUMA_JS_REQUIRED_ENFORCED')} only if you must allow non-JS clients; doing so weakens bot defense and removes PoW from the normal request path. ` +
+      `When ${envVar('SHUMA_JS_REQUIRED_ENFORCED')} is true, requests without a valid <code>js_verified</code> cookie are sent to the JS verification page. ` +
+      `That flow writes <code>js_verified</code>, reloads the original path, and re-evaluates access. ` +
+      `If ${envVar('SHUMA_POW_ENABLED')} is true, this step includes PoW before the cookie is issued. ` +
+      `Disabling ${envVar('SHUMA_JS_REQUIRED_ENFORCED')} allows non-JS clients but removes PoW from the normal request path. ` +
       `Its botness contribution is weighted separately by ${envVar('SHUMA_BOTNESS_WEIGHT_JS_REQUIRED')} ` +
       `(current weight: <strong>${state.botnessWeights.js_required || 0}</strong>). ` +
       cumulativeBotnessRoutingText(state)
@@ -672,13 +670,13 @@ const STATUS_DEFINITIONS = [
   {
     title: 'GEO Fencing',
     description: state => (
-      `Uses trusted edge GEO headers only (trusted when ${envVar('SHUMA_FORWARDED_IP_SECRET')} validation succeeds). ` +
-      `Scoring countries are set by ${envVar('SHUMA_GEO_RISK_COUNTRIES')} ` +
+      `Uses trusted upstream GEO headers only (headers are trusted when ${envVar('SHUMA_FORWARDED_IP_SECRET')} validation succeeds). ` +
+      `Scoring countries are configured by ${envVar('SHUMA_GEO_RISK_COUNTRIES')} ` +
       `(current count: <strong>${state.geoRiskCount}</strong>). ` +
-      `Policy tiers use ${envVar('SHUMA_GEO_ALLOW_COUNTRIES')} (<strong>${state.geoAllowCount}</strong>), ` +
+      `Routing precedence uses ${envVar('SHUMA_GEO_BLOCK_COUNTRIES')} (<strong>${state.geoBlockCount}</strong>), ` +
+      `${envVar('SHUMA_GEO_MAZE_COUNTRIES')} (<strong>${state.geoMazeCount}</strong>), ` +
       `${envVar('SHUMA_GEO_CHALLENGE_COUNTRIES')} (<strong>${state.geoChallengeCount}</strong>), ` +
-      `${envVar('SHUMA_GEO_MAZE_COUNTRIES')} (<strong>${state.geoMazeCount}</strong>), and ` +
-      `${envVar('SHUMA_GEO_BLOCK_COUNTRIES')} (<strong>${state.geoBlockCount}</strong>). ` +
+      `and ${envVar('SHUMA_GEO_ALLOW_COUNTRIES')} (<strong>${state.geoAllowCount}</strong>). ` +
       `Scoring matches contribute via ${envVar('SHUMA_BOTNESS_WEIGHT_GEO_RISK')} ` +
       `(current weight: <strong>${state.botnessWeights.geo_risk || 0}</strong>). ` +
       cumulativeBotnessRoutingText(state)
@@ -688,7 +686,8 @@ const STATUS_DEFINITIONS = [
   {
     title: 'Rate Limiting',
     description: state => (
-      `Rate pressure is measured against ${envVar('SHUMA_RATE_LIMIT')} (current limit: <strong>${state.rateLimit}</strong>). ` +
+      `Rate pressure is measured against ${envVar('SHUMA_RATE_LIMIT')} (current limit: <strong>${state.rateLimit}</strong> requests/min). ` +
+      `Crossing the hard limit triggers immediate rate-limit enforcement. ` +
       `Medium pressure (>=50%) contributes ${envVar('SHUMA_BOTNESS_WEIGHT_RATE_MEDIUM')} and high pressure (>=80%) ` +
       `contributes ${envVar('SHUMA_BOTNESS_WEIGHT_RATE_HIGH')} (current weights: <strong>${state.botnessWeights.rate_medium || 0}</strong> / ` +
       `<strong>${state.botnessWeights.rate_high || 0}</strong>). ` +
@@ -1268,9 +1267,17 @@ function updateGeoConfig(config) {
 
   setGeoConfigEditable(mutable);
 
-  const btn = document.getElementById('save-geo-config');
-  btn.disabled = true;
-  btn.textContent = 'Save GEO Settings';
+  const scoringBtn = document.getElementById('save-geo-scoring-config');
+  if (scoringBtn) {
+    scoringBtn.disabled = true;
+    scoringBtn.textContent = 'Save GEO Scoring';
+  }
+
+  const routingBtn = document.getElementById('save-geo-routing-config');
+  if (routingBtn) {
+    routingBtn.disabled = true;
+    routingBtn.textContent = 'Save GEO Routing';
+  }
 }
 
 // Update robots.txt config controls from loaded config
@@ -1338,13 +1345,14 @@ let geoSavedState = {
   mutable: false
 };
 
-const GEO_FIELD_IDS = [
-  'geo-risk-list',
+const GEO_SCORING_FIELD_IDS = ['geo-risk-list'];
+const GEO_ROUTING_FIELD_IDS = [
   'geo-allow-list',
   'geo-challenge-list',
   'geo-maze-list',
   'geo-block-list'
 ];
+const GEO_FIELD_IDS = [...GEO_SCORING_FIELD_IDS, ...GEO_ROUTING_FIELD_IDS];
 
 const ISO_ALPHA2_CODES = new Set([
   'AD', 'AE', 'AF', 'AG', 'AI', 'AL', 'AM', 'AO', 'AQ', 'AR', 'AS', 'AT', 'AU', 'AW', 'AX', 'AZ', 'BA', 'BB', 'BD', 'BE', 'BF', 'BG', 'BH', 'BI', 'BJ', 'BL', 'BM', 'BN', 'BO', 'BQ', 'BR', 'BS', 'BT', 'BV', 'BW', 'BY', 'BZ', 'CA', 'CC', 'CD', 'CF', 'CG', 'CH', 'CI', 'CK', 'CL', 'CM', 'CN', 'CO', 'CR', 'CU', 'CV', 'CW', 'CX', 'CY', 'CZ', 'DE', 'DJ', 'DK', 'DM', 'DO', 'DZ', 'EC', 'EE', 'EG', 'EH', 'ER', 'ES', 'ET', 'FI', 'FJ', 'FK', 'FM', 'FO', 'FR', 'GA', 'GB', 'GD', 'GE', 'GF', 'GG', 'GH', 'GI', 'GL', 'GM', 'GN', 'GP', 'GQ', 'GR', 'GS', 'GT', 'GU', 'GW', 'GY', 'HK', 'HM', 'HN', 'HR', 'HT', 'HU', 'ID', 'IE', 'IL', 'IM', 'IN', 'IO', 'IQ', 'IR', 'IS', 'IT', 'JE', 'JM', 'JO', 'JP', 'KE', 'KG', 'KH', 'KI', 'KM', 'KN', 'KP', 'KR', 'KW', 'KY', 'KZ', 'LA', 'LB', 'LC', 'LI', 'LK', 'LR', 'LS', 'LT', 'LU', 'LV', 'LY', 'MA', 'MC', 'MD', 'ME', 'MF', 'MG', 'MH', 'MK', 'ML', 'MM', 'MN', 'MO', 'MP', 'MQ', 'MR', 'MS', 'MT', 'MU', 'MV', 'MW', 'MX', 'MY', 'MZ', 'NA', 'NC', 'NE', 'NF', 'NG', 'NI', 'NL', 'NO', 'NP', 'NR', 'NU', 'NZ', 'OM', 'PA', 'PE', 'PF', 'PG', 'PH', 'PK', 'PL', 'PM', 'PN', 'PR', 'PS', 'PT', 'PW', 'PY', 'QA', 'RE', 'RO', 'RS', 'RU', 'RW', 'SA', 'SB', 'SC', 'SD', 'SE', 'SG', 'SH', 'SI', 'SJ', 'SK', 'SL', 'SM', 'SN', 'SO', 'SR', 'SS', 'ST', 'SV', 'SX', 'SY', 'SZ', 'TC', 'TD', 'TF', 'TG', 'TH', 'TJ', 'TK', 'TL', 'TM', 'TN', 'TO', 'TR', 'TT', 'TV', 'TW', 'TZ', 'UA', 'UG', 'UM', 'US', 'UY', 'UZ', 'VA', 'VC', 'VE', 'VG', 'VI', 'VN', 'VU', 'WF', 'WS', 'YE', 'YT', 'ZA', 'ZM', 'ZW'
@@ -1933,10 +1941,13 @@ function checkBotnessConfigChanged() {
 
 function checkGeoConfigChanged() {
   const apiValid = hasValidApiContext();
-  const geoValid = GEO_FIELD_IDS.every(validateGeoFieldById);
+  const scoringValid = GEO_SCORING_FIELD_IDS.every(validateGeoFieldById);
+  const routingValid = GEO_ROUTING_FIELD_IDS.every(validateGeoFieldById);
   if (!geoSavedState.mutable) {
-    const btn = document.getElementById('save-geo-config');
-    btn.disabled = true;
+    const scoringBtn = document.getElementById('save-geo-scoring-config');
+    if (scoringBtn) scoringBtn.disabled = true;
+    const routingBtn = document.getElementById('save-geo-routing-config');
+    if (routingBtn) routingBtn.disabled = true;
     return;
   }
 
@@ -1947,13 +1958,15 @@ function checkGeoConfigChanged() {
     maze: normalizeCountryCodesForCompare(document.getElementById('geo-maze-list').value),
     block: normalizeCountryCodesForCompare(document.getElementById('geo-block-list').value)
   };
-  const changed =
-    current.risk !== geoSavedState.risk ||
+  const scoringChanged = current.risk !== geoSavedState.risk;
+  const routingChanged =
     current.allow !== geoSavedState.allow ||
     current.challenge !== geoSavedState.challenge ||
     current.maze !== geoSavedState.maze ||
     current.block !== geoSavedState.block;
-  setDirtySaveButtonState('save-geo-config', changed, apiValid, geoValid);
+
+  setDirtySaveButtonState('save-geo-scoring-config', scoringChanged, apiValid, scoringValid);
+  setDirtySaveButtonState('save-geo-routing-config', routingChanged, apiValid, routingValid);
 }
 
 GEO_FIELD_IDS.forEach(id => {
@@ -1980,7 +1993,7 @@ GEO_FIELD_IDS.forEach(id => {
   });
 });
 
-document.getElementById('save-geo-config').onclick = async function() {
+document.getElementById('save-geo-scoring-config').onclick = async function() {
   const msg = document.getElementById('admin-msg');
   const ctx = getAdminContext(msg);
   if (!ctx) return;
@@ -1995,12 +2008,73 @@ document.getElementById('save-geo-config').onclick = async function() {
   }
 
   let geoRisk;
+  try {
+    geoRisk = parseCountryCodesStrict(document.getElementById('geo-risk-list').value);
+  } catch (e) {
+    msg.textContent = 'Error: ' + e.message;
+    msg.className = 'message error';
+    return;
+  }
+
+  btn.textContent = 'Saving...';
+  btn.dataset.saving = 'true';
+  btn.disabled = true;
+  try {
+    const resp = await fetch(`${endpoint}/admin/config`, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + apikey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ geo_risk: geoRisk })
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(text || 'Failed to save GEO scoring config');
+    }
+    const data = await resp.json();
+    if (data && data.config) {
+      updateGeoConfig(data.config);
+    } else {
+      geoSavedState = {
+        ...geoSavedState,
+        risk: geoRisk.join(','),
+        mutable: true
+      };
+    }
+    msg.textContent = 'GEO scoring saved';
+    msg.className = 'message success';
+    btn.textContent = 'Save GEO Scoring';
+    btn.dataset.saving = 'false';
+    checkGeoConfigChanged();
+  } catch (e) {
+    msg.textContent = 'Error: ' + e.message;
+    msg.className = 'message error';
+    btn.textContent = 'Save GEO Scoring';
+    btn.dataset.saving = 'false';
+    checkGeoConfigChanged();
+  }
+};
+
+document.getElementById('save-geo-routing-config').onclick = async function() {
+  const msg = document.getElementById('admin-msg');
+  const ctx = getAdminContext(msg);
+  if (!ctx) return;
+  const { endpoint, apikey } = ctx;
+  const btn = this;
+
+  if (!geoSavedState.mutable) {
+    msg.textContent = 'GEO settings are read-only while SHUMA_ADMIN_PAGE_CONFIG=false.';
+    msg.className = 'message warning';
+    btn.disabled = true;
+    return;
+  }
+
   let geoAllow;
   let geoChallenge;
   let geoMaze;
   let geoBlock;
   try {
-    geoRisk = parseCountryCodesStrict(document.getElementById('geo-risk-list').value);
     geoAllow = parseCountryCodesStrict(document.getElementById('geo-allow-list').value);
     geoChallenge = parseCountryCodesStrict(document.getElementById('geo-challenge-list').value);
     geoMaze = parseCountryCodesStrict(document.getElementById('geo-maze-list').value);
@@ -2022,7 +2096,6 @@ document.getElementById('save-geo-config').onclick = async function() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        geo_risk: geoRisk,
         geo_allow: geoAllow,
         geo_challenge: geoChallenge,
         geo_maze: geoMaze,
@@ -2031,31 +2104,30 @@ document.getElementById('save-geo-config').onclick = async function() {
     });
     if (!resp.ok) {
       const text = await resp.text();
-      throw new Error(text || 'Failed to save GEO config');
+      throw new Error(text || 'Failed to save GEO routing config');
     }
     const data = await resp.json();
     if (data && data.config) {
       updateGeoConfig(data.config);
     } else {
       geoSavedState = {
-        risk: geoRisk.join(','),
+        ...geoSavedState,
         allow: geoAllow.join(','),
         challenge: geoChallenge.join(','),
         maze: geoMaze.join(','),
         block: geoBlock.join(','),
         mutable: true
       };
-      btn.disabled = true;
     }
-    msg.textContent = 'GEO settings saved';
+    msg.textContent = 'GEO routing saved';
     msg.className = 'message success';
-    btn.textContent = 'Save GEO Settings';
+    btn.textContent = 'Save GEO Routing';
     btn.dataset.saving = 'false';
     checkGeoConfigChanged();
   } catch (e) {
     msg.textContent = 'Error: ' + e.message;
     msg.className = 'message error';
-    btn.textContent = 'Save GEO Settings';
+    btn.textContent = 'Save GEO Routing';
     btn.dataset.saving = 'false';
     checkGeoConfigChanged();
   }

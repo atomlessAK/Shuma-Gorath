@@ -320,17 +320,20 @@
               <button id="save-cdp-config" class="btn btn-submit" disabled>Save CDP Settings</button>
             </div>
             <div class="control-group panel-soft pad-md config-edit-pane hidden">
-              <h3>GEO Policy</h3>
-              <p class="control-desc text-muted">Use <a href="https://www.iban.com/country-codes">2-letter country codes</a> to tune GEO scoring and routing. Broader lists increase protection but can impact legitimate users in those regions.</p>
-              <h4>GEO Risk Based Scoring</h4>
+              <h3>GEO Risk Based Scoring</h3>
+              <p class="control-desc text-muted">Use <a href="https://www.iban.com/country-codes">2-letter country codes</a> for countries that contribute to combined botness scoring.</p>
               <div class="admin-controls geo-controls">
                 <div class="geo-field">
-                  <label class="control-label" for="geo-risk-list">Countries to be treated as contributing to combined "botness" score.</label>
+                  <label class="control-label" for="geo-risk-list">Scoring Countries</label>
                   <textarea class="input-field geo-textarea" id="geo-risk-list" rows="1" aria-label="GEO scoring countries" spellcheck="false"></textarea>
                 </div>
-                <div class="geo-divider" role="separator" aria-hidden="true"></div>
-                <h4>GEO Risk Based Routing</h4>
-                <p class="control-desc geo-controls">Precedence: Block > Maze > Challenge > Allow.</p>
+              </div>
+              <button id="save-geo-scoring-config" class="btn btn-submit" disabled>Save GEO Scoring</button>
+            </div>
+            <div class="control-group panel-soft pad-md config-edit-pane hidden">
+              <h3>GEO Risk Based Routing</h3>
+              <p class="control-desc text-muted">Set routing lists by country code. Precedence is Block &gt; Maze &gt; Challenge &gt; Allow.</p>
+              <div class="admin-controls geo-controls">
                 <div class="geo-field">
                   <label class="control-label" for="geo-block-list">Block Countries</label>
                   <textarea class="input-field geo-textarea" id="geo-block-list" rows="1" aria-label="GEO block countries" spellcheck="false"></textarea>
@@ -348,7 +351,7 @@
                   <textarea class="input-field geo-textarea" id="geo-allow-list" rows="1" aria-label="GEO allow countries" spellcheck="false"></textarea>
                 </div>
               </div>
-              <button id="save-geo-config" class="btn btn-submit" disabled>Save GEO Settings</button>
+              <button id="save-geo-routing-config" class="btn btn-submit" disabled>Save GEO Routing</button>
             </div>
             <div class="control-group panel-soft pad-md config-edit-pane hidden">
               <h3>Ban Durations</h3>
