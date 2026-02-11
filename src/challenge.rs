@@ -176,6 +176,7 @@ fn inverse_transform(transform: Transform) -> Option<Transform> {
 
 const MIN_TRANSFORM_COUNT: usize = 4;
 const MAX_TRANSFORM_COUNT: usize = 8;
+#[cfg(test)]
 const DEFAULT_TRANSFORM_COUNT: usize = 6;
 
 fn all_transforms() -> Vec<Transform> {
@@ -191,6 +192,7 @@ fn all_transforms() -> Vec<Transform> {
     ]
 }
 
+#[cfg(test)]
 pub(crate) fn parse_transform_count(value: Option<&str>) -> usize {
     let parsed = value
         .and_then(|v| v.parse::<usize>().ok())

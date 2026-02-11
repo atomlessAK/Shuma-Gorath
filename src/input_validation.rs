@@ -8,6 +8,7 @@ pub const MAX_ADMIN_JSON_BYTES: usize = 64 * 1024;
 pub const MAX_CDP_REPORT_BYTES: usize = 16 * 1024;
 pub const MAX_POW_VERIFY_BYTES: usize = 8 * 1024;
 pub const MAX_CHALLENGE_FORM_BYTES: usize = 8 * 1024;
+#[cfg(test)]
 pub const MAX_BAN_REASON_LEN: usize = 120;
 pub const MAX_CHECK_NAME_LEN: usize = 32;
 pub const MAX_NONCE_LEN: usize = 512;
@@ -70,6 +71,7 @@ pub fn parse_ip_addr(input: &str) -> Option<String> {
     trimmed.parse::<IpAddr>().ok().map(|addr| addr.to_string())
 }
 
+#[cfg(test)]
 pub fn sanitize_admin_reason(input: &str) -> Result<String, &'static str> {
     let trimmed = input.trim();
     if trimmed.is_empty() {

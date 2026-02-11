@@ -307,6 +307,7 @@ fn validate_u64_var(name: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn parse_admin_config_write_enabled(value: Option<&str>) -> bool {
     value.and_then(parse_bool_like).unwrap_or(false)
 }
@@ -338,6 +339,7 @@ fn parse_bool_like(value: &str) -> Option<bool> {
     }
 }
 
+#[cfg(test)]
 fn parse_bool_env(value: Option<&str>) -> bool {
     value.and_then(parse_bool_like).unwrap_or(false)
 }
@@ -346,6 +348,7 @@ pub fn pow_config_mutable() -> bool {
     env_bool_required("SHUMA_POW_CONFIG_MUTABLE")
 }
 
+#[cfg(test)]
 pub(crate) fn challenge_config_mutable_from_env(value: Option<&str>) -> bool {
     parse_bool_env(value)
 }

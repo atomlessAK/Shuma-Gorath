@@ -3,40 +3,6 @@
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-    use std::sync::Mutex;
-
-    struct TestStore {
-        map: Mutex<HashMap<String, Vec<u8>>>,
-    }
-
-    impl TestStore {
-        fn new() -> Self {
-            TestStore {
-                map: Mutex::new(HashMap::new()),
-            }
-        }
-    }
-
-    impl crate::challenge::KeyValueStore for TestStore {
-        fn get(&self, key: &str) -> Result<Option<Vec<u8>>, ()> {
-            let map = self.map.lock().unwrap();
-            Ok(map.get(key).cloned())
-        }
-
-        fn set(&self, key: &str, value: &[u8]) -> Result<(), ()> {
-            let mut map = self.map.lock().unwrap();
-            map.insert(key.to_string(), value.to_vec());
-            Ok(())
-        }
-
-        fn delete(&self, key: &str) -> Result<(), ()> {
-            let mut map = self.map.lock().unwrap();
-            map.remove(key);
-            Ok(())
-        }
-    }
-
     #[test]
     fn risk_score_accounts_for_signals() {
         let score = crate::compute_risk_score(true, true, 40, 80);

@@ -147,10 +147,6 @@ pub fn is_bearer_authorized(req: &Request) -> bool {
     verify_admin_api_key_candidate(&candidate)
 }
 
-pub fn is_authorized(req: &Request) -> bool {
-    is_bearer_authorized(req)
-}
-
 pub fn has_admin_session_cookie(req: &Request) -> bool {
     parse_cookie(req, ADMIN_SESSION_COOKIE_NAME).is_some()
 }
@@ -301,7 +297,7 @@ mod tests {
         let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
         std::env::remove_var("SHUMA_API_KEY");
         let req = request_with_auth(Some("Bearer any-key"));
-        assert!(!is_authorized(&req));
+        assert!(!is_bearer_authorized(&req));
     }
 
     #[test]
@@ -309,7 +305,7 @@ mod tests {
         let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
         std::env::set_var("SHUMA_API_KEY", INSECURE_DEFAULT_API_KEY);
         let req = request_with_auth(Some("Bearer changeme-supersecret"));
-        assert!(!is_authorized(&req));
+        assert!(!is_bearer_authorized(&req));
     }
 
     #[test]
@@ -317,7 +313,7 @@ mod tests {
         let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
         std::env::set_var("SHUMA_API_KEY", INSECURE_DEFAULT_API_KEY);
         let req = request_with_auth(Some("Bearer changeme-supersecret"));
-        assert!(!is_authorized(&req));
+        assert!(!is_bearer_authorized(&req));
     }
 
     #[test]
@@ -325,7 +321,7 @@ mod tests {
         let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
         std::env::set_var("SHUMA_API_KEY", "test-admin-key");
         let req = request_with_auth(Some("Bearer test-admin-key"));
-        assert!(is_authorized(&req));
+        assert!(is_bearer_authorized(&req));
     }
 
     #[test]

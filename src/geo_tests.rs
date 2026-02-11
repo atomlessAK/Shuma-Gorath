@@ -1,32 +1,6 @@
 #[cfg(test)]
 mod tests {
     use spin_sdk::http::{Method, Request};
-    use std::collections::HashMap;
-    use std::sync::Mutex;
-
-    #[derive(Default)]
-    struct TestStore {
-        map: Mutex<HashMap<String, Vec<u8>>>,
-    }
-
-    impl crate::challenge::KeyValueStore for TestStore {
-        fn get(&self, key: &str) -> Result<Option<Vec<u8>>, ()> {
-            let map = self.map.lock().unwrap();
-            Ok(map.get(key).cloned())
-        }
-
-        fn set(&self, key: &str, value: &[u8]) -> Result<(), ()> {
-            let mut map = self.map.lock().unwrap();
-            map.insert(key.to_string(), value.to_vec());
-            Ok(())
-        }
-
-        fn delete(&self, key: &str) -> Result<(), ()> {
-            let mut map = self.map.lock().unwrap();
-            map.remove(key);
-            Ok(())
-        }
-    }
 
     fn build_request(headers: &[(&str, &str)]) -> Request {
         let mut builder = Request::builder();
