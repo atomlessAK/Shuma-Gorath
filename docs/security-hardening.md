@@ -53,6 +53,9 @@ If your monitoring goes through a proxy, set:
 - `X-Forwarded-For: 127.0.0.1`
 - `X-Shuma-Forwarded-Secret: <SHUMA_FORWARDED_IP_SECRET>`
 
+For defense in depth, set `SHUMA_HEALTH_SECRET` and require:
+- `X-Shuma-Health-Secret: <SHUMA_HEALTH_SECRET>`
+
 ## 🐙 Test Mode vs Fail Mode
 
 - Test mode logs actions without enforcing blocks

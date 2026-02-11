@@ -104,6 +104,17 @@ fn request_is_https(req: &Request) -> bool {
     forwarded_proto_is_https(req)
 }
 
+fn constant_time_eq(a: &str, b: &str) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.bytes().zip(b.bytes()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
 /// Extract the best available client IP from the request.
 pub(crate) fn extract_client_ip(req: &Request) -> String {
     // Prefer X-Forwarded-For (may be a comma-separated list) when trusted
@@ -131,6 +142,59 @@ pub(crate) fn extract_client_ip(req: &Request) -> String {
 
     // Last resort:
     "unknown".to_string()
+}
+
+/// Extract client IP for `/health` checks.
+///
+/// Security posture:
+/// - Only trust forwarded headers when `forwarded_ip_trusted` is true.
+/// - Reject multi-hop XFF chains for health checks to avoid accepting attacker-
+///   supplied left-most values when an upstream proxy appends addresses.
+fn extract_health_client_ip(req: &Request) -> String {
+    if forwarded_ip_trusted(req) {
+        if let Some(h) = req.header("x-forwarded-for") {
+            let mut entries = h
+                .as_str()
+                .unwrap_or("")
+                .split(',')
+                .map(|ip| ip.trim())
+                .filter(|ip| !ip.is_empty() && *ip != "unknown");
+
+            if let Some(first) = entries.next() {
+                if entries.next().is_some() {
+                    return "unknown".to_string();
+                }
+                return first.to_string();
+            }
+        }
+
+        if let Some(h) = req.header("x-real-ip") {
+            let val = h.as_str().unwrap_or("").trim();
+            if !val.is_empty() && val != "unknown" {
+                return val.to_string();
+            }
+        }
+    }
+
+    "unknown".to_string()
+}
+
+fn health_secret_authorized(req: &Request) -> bool {
+    let expected = match env::var("SHUMA_HEALTH_SECRET") {
+        Ok(secret) => secret.trim().to_string(),
+        Err(_) => return true,
+    };
+    if expected.is_empty() {
+        return true;
+    }
+
+    let presented = req
+        .header("x-shuma-health-secret")
+        .and_then(|v| v.as_str())
+        .map(|v| v.trim())
+        .unwrap_or("");
+
+    constant_time_eq(presented, expected.as_str())
 }
 
 /// Return true when KV outage policy is fail-open.
@@ -442,8 +506,11 @@ pub fn handle_bot_defence_impl(req: &Request) -> Response {
 
     // Health check endpoint
     if path == "/health" {
+        if !health_secret_authorized(req) {
+            return Response::new(403, "Forbidden");
+        }
         let allowed = ["127.0.0.1", "::1"];
-        let ip = extract_client_ip(req);
+        let ip = extract_health_client_ip(req);
         if !allowed.contains(&ip.as_str()) {
             return Response::new(403, "Forbidden");
         }

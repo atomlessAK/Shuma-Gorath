@@ -27,6 +27,7 @@ SHUMA_JS_SECRET := $(call strip_wrapping_quotes,$(SHUMA_JS_SECRET))
 SHUMA_POW_SECRET := $(call strip_wrapping_quotes,$(SHUMA_POW_SECRET))
 SHUMA_CHALLENGE_SECRET := $(call strip_wrapping_quotes,$(SHUMA_CHALLENGE_SECRET))
 SHUMA_FORWARDED_IP_SECRET := $(call strip_wrapping_quotes,$(SHUMA_FORWARDED_IP_SECRET))
+SHUMA_HEALTH_SECRET := $(call strip_wrapping_quotes,$(SHUMA_HEALTH_SECRET))
 SHUMA_ADMIN_IP_ALLOWLIST := $(call strip_wrapping_quotes,$(SHUMA_ADMIN_IP_ALLOWLIST))
 SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE := $(call strip_wrapping_quotes,$(SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE))
 SHUMA_EVENT_LOG_RETENTION_HOURS := $(call strip_wrapping_quotes,$(SHUMA_EVENT_LOG_RETENTION_HOURS))
@@ -39,10 +40,12 @@ SHUMA_CHALLENGE_CONFIG_MUTABLE := $(call strip_wrapping_quotes,$(SHUMA_CHALLENGE
 SHUMA_BOTNESS_CONFIG_MUTABLE := $(call strip_wrapping_quotes,$(SHUMA_BOTNESS_CONFIG_MUTABLE))
 
 # Inject env-only runtime keys into Spin from .env.local / shell env.
-SPIN_ENV_ONLY := --env SHUMA_API_KEY=$(SHUMA_API_KEY) --env SHUMA_JS_SECRET=$(SHUMA_JS_SECRET) --env SHUMA_POW_SECRET=$(SHUMA_POW_SECRET) --env SHUMA_CHALLENGE_SECRET=$(SHUMA_CHALLENGE_SECRET) --env SHUMA_FORWARDED_IP_SECRET=$(SHUMA_FORWARDED_IP_SECRET) --env SHUMA_ADMIN_IP_ALLOWLIST=$(SHUMA_ADMIN_IP_ALLOWLIST) --env SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE=$(SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE) --env SHUMA_EVENT_LOG_RETENTION_HOURS=$(SHUMA_EVENT_LOG_RETENTION_HOURS) --env SHUMA_ADMIN_CONFIG_WRITE_ENABLED=$(SHUMA_ADMIN_CONFIG_WRITE_ENABLED) --env SHUMA_KV_STORE_FAIL_OPEN=$(SHUMA_KV_STORE_FAIL_OPEN) --env SHUMA_ENFORCE_HTTPS=$(SHUMA_ENFORCE_HTTPS) --env SHUMA_DEBUG_HEADERS=$(SHUMA_DEBUG_HEADERS) --env SHUMA_POW_CONFIG_MUTABLE=$(SHUMA_POW_CONFIG_MUTABLE) --env SHUMA_CHALLENGE_CONFIG_MUTABLE=$(SHUMA_CHALLENGE_CONFIG_MUTABLE) --env SHUMA_BOTNESS_CONFIG_MUTABLE=$(SHUMA_BOTNESS_CONFIG_MUTABLE)
+SPIN_ENV_ONLY := --env SHUMA_API_KEY=$(SHUMA_API_KEY) --env SHUMA_JS_SECRET=$(SHUMA_JS_SECRET) --env SHUMA_POW_SECRET=$(SHUMA_POW_SECRET) --env SHUMA_CHALLENGE_SECRET=$(SHUMA_CHALLENGE_SECRET) --env SHUMA_FORWARDED_IP_SECRET=$(SHUMA_FORWARDED_IP_SECRET) --env SHUMA_HEALTH_SECRET=$(SHUMA_HEALTH_SECRET) --env SHUMA_ADMIN_IP_ALLOWLIST=$(SHUMA_ADMIN_IP_ALLOWLIST) --env SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE=$(SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE) --env SHUMA_EVENT_LOG_RETENTION_HOURS=$(SHUMA_EVENT_LOG_RETENTION_HOURS) --env SHUMA_ADMIN_CONFIG_WRITE_ENABLED=$(SHUMA_ADMIN_CONFIG_WRITE_ENABLED) --env SHUMA_KV_STORE_FAIL_OPEN=$(SHUMA_KV_STORE_FAIL_OPEN) --env SHUMA_ENFORCE_HTTPS=$(SHUMA_ENFORCE_HTTPS) --env SHUMA_DEBUG_HEADERS=$(SHUMA_DEBUG_HEADERS) --env SHUMA_POW_CONFIG_MUTABLE=$(SHUMA_POW_CONFIG_MUTABLE) --env SHUMA_CHALLENGE_CONFIG_MUTABLE=$(SHUMA_CHALLENGE_CONFIG_MUTABLE) --env SHUMA_BOTNESS_CONFIG_MUTABLE=$(SHUMA_BOTNESS_CONFIG_MUTABLE)
 
 # Optional forwarded-IP trust header for local health/test requests.
 FORWARDED_SECRET_HEADER := $(if $(SHUMA_FORWARDED_IP_SECRET),-H "X-Shuma-Forwarded-Secret: $(SHUMA_FORWARDED_IP_SECRET)",)
+# Optional health secret header for local health/test requests.
+HEALTH_SECRET_HEADER := $(if $(SHUMA_HEALTH_SECRET),-H "X-Shuma-Health-Secret: $(SHUMA_HEALTH_SECRET)",)
 DEV_ADMIN_CONFIG_WRITE_ENABLED ?= true
 SPIN_DEV_OVERRIDES := --env SHUMA_CHALLENGE_CONFIG_MUTABLE=true --env SHUMA_DEBUG_HEADERS=true --env SHUMA_ADMIN_CONFIG_WRITE_ENABLED=$(DEV_ADMIN_CONFIG_WRITE_ENABLED)
 SPIN_PROD_OVERRIDES := --env SHUMA_DEBUG_HEADERS=false
@@ -158,8 +161,8 @@ test: ## Run ALL tests: unit tests first, then integration tests (requires serve
 	@echo ""
 	@echo "$(CYAN)Step 2/2: Integration Tests (21 scenarios)$(NC)"
 	@echo "$(CYAN)--------------------------------------------$(NC)"
-	@if curl -sf -H "X-Forwarded-For: 127.0.0.1" $(FORWARDED_SECRET_HEADER) http://127.0.0.1:3000/health > /dev/null 2>&1; then \
-		SHUMA_API_KEY="$(SHUMA_API_KEY)" SHUMA_FORWARDED_IP_SECRET="$(SHUMA_FORWARDED_IP_SECRET)" ./scripts/tests/integration.sh || exit 1; \
+	@if curl -sf -H "X-Forwarded-For: 127.0.0.1" $(FORWARDED_SECRET_HEADER) $(HEALTH_SECRET_HEADER) http://127.0.0.1:3000/health > /dev/null 2>&1; then \
+		SHUMA_API_KEY="$(SHUMA_API_KEY)" SHUMA_FORWARDED_IP_SECRET="$(SHUMA_FORWARDED_IP_SECRET)" SHUMA_HEALTH_SECRET="$(SHUMA_HEALTH_SECRET)" ./scripts/tests/integration.sh || exit 1; \
 	else \
 		echo "$(YELLOW)⚠️  Spin server not running. Skipping integration tests.$(NC)"; \
 		echo "$(YELLOW)   To run integration tests:$(NC)"; \
@@ -178,8 +181,8 @@ test-unit: ## Run Rust unit tests only (34 tests)
 
 test-integration: ## Run integration tests only (21 scenarios, requires running server)
 	@echo "$(CYAN)🧪 Running integration tests...$(NC)"
-	@if curl -sf -H "X-Forwarded-For: 127.0.0.1" $(FORWARDED_SECRET_HEADER) http://127.0.0.1:3000/health > /dev/null 2>&1; then \
-		SHUMA_API_KEY="$(SHUMA_API_KEY)" SHUMA_FORWARDED_IP_SECRET="$(SHUMA_FORWARDED_IP_SECRET)" ./scripts/tests/integration.sh; \
+	@if curl -sf -H "X-Forwarded-For: 127.0.0.1" $(FORWARDED_SECRET_HEADER) $(HEALTH_SECRET_HEADER) http://127.0.0.1:3000/health > /dev/null 2>&1; then \
+		SHUMA_API_KEY="$(SHUMA_API_KEY)" SHUMA_FORWARDED_IP_SECRET="$(SHUMA_FORWARDED_IP_SECRET)" SHUMA_HEALTH_SECRET="$(SHUMA_HEALTH_SECRET)" ./scripts/tests/integration.sh; \
 	else \
 		echo "$(RED)❌ Error: Spin server not running$(NC)"; \
 		echo "$(YELLOW)   Start the server first: make dev$(NC)"; \
@@ -205,7 +208,7 @@ test-dashboard: ## Dashboard testing instructions (manual)
 
 test-dashboard-e2e: ## Run Playwright dashboard smoke tests (requires running server)
 	@echo "$(CYAN)🧪 Running dashboard e2e smoke tests...$(NC)"
-	@if curl -sf -H "X-Forwarded-For: 127.0.0.1" $(FORWARDED_SECRET_HEADER) http://127.0.0.1:3000/health > /dev/null 2>&1; then \
+	@if curl -sf -H "X-Forwarded-For: 127.0.0.1" $(FORWARDED_SECRET_HEADER) $(HEALTH_SECRET_HEADER) http://127.0.0.1:3000/health > /dev/null 2>&1; then \
 		if ! command -v corepack >/dev/null 2>&1; then \
 			echo "$(RED)❌ Error: corepack not found (install Node.js 18+).$(NC)"; \
 			exit 1; \
@@ -229,7 +232,7 @@ stop: ## Stop running Spin server
 	@pkill -x spin 2>/dev/null && echo "$(GREEN)✅ Stopped$(NC)" || echo "$(YELLOW)No server running$(NC)"
 
 status: ## Check if Spin server is running
-	@if curl -sf -H "X-Forwarded-For: 127.0.0.1" $(FORWARDED_SECRET_HEADER) http://127.0.0.1:3000/health > /dev/null 2>&1; then \
+	@if curl -sf -H "X-Forwarded-For: 127.0.0.1" $(FORWARDED_SECRET_HEADER) $(HEALTH_SECRET_HEADER) http://127.0.0.1:3000/health > /dev/null 2>&1; then \
 		echo "$(GREEN)✅ Spin server is running$(NC)"; \
 		echo "   Dashboard: http://127.0.0.1:3000/dashboard/index.html"; \
 	else \
@@ -271,6 +274,7 @@ env-help: ## Show supported env-only runtime overrides
 	@echo "  SHUMA_POW_SECRET"
 	@echo "  SHUMA_CHALLENGE_SECRET"
 	@echo "  SHUMA_FORWARDED_IP_SECRET"
+	@echo "  SHUMA_HEALTH_SECRET"
 	@echo "  SHUMA_ADMIN_IP_ALLOWLIST"
 	@echo "  SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE"
 	@echo "  SHUMA_EVENT_LOG_RETENTION_HOURS"

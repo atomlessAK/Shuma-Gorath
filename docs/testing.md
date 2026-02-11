@@ -60,6 +60,12 @@ If your Spin environment sets `SHUMA_FORWARDED_IP_SECRET`, export it before runn
 export SHUMA_FORWARDED_IP_SECRET="your-forwarded-ip-secret"
 ```
 
+If you configured `SHUMA_HEALTH_SECRET`, export it too so health checks include `X-Shuma-Health-Secret`:
+
+```bash
+export SHUMA_HEALTH_SECRET="your-health-secret"
+```
+
 The integration suite is implemented in `scripts/tests/integration.sh` and is invoked by `make test-integration`.
 
 Integration coverage includes:
@@ -108,12 +114,14 @@ Use the Makefile targets rather than calling scripts directly.
 
 Use these steps to manually validate behavior. They mirror the integration suite but let you inspect responses in detail.
 If `SHUMA_FORWARDED_IP_SECRET` is set, include the matching `X-Shuma-Forwarded-Secret` header on requests that use `X-Forwarded-For`.
+If `SHUMA_HEALTH_SECRET` is set, include `X-Shuma-Health-Secret` on `/health`.
 Start the server in another terminal with `make dev` before running these steps.
 
 1. Health check (loopback only):
 ```bash
 curl -H "X-Forwarded-For: 127.0.0.1" \
   -H "X-Shuma-Forwarded-Secret: $SHUMA_FORWARDED_IP_SECRET" \
+  -H "X-Shuma-Health-Secret: $SHUMA_HEALTH_SECRET" \
   http://127.0.0.1:3000/health
 ```
 Expected: `OK`. If `SHUMA_DEBUG_HEADERS=true`, headers `X-KV-Status` and `X-Shuma-Fail-Mode` are also present.
@@ -292,6 +300,7 @@ curl -X POST -H "Authorization: Bearer $SHUMA_API_KEY" \
 Problem: `/health` returns 403
 - Ensure you passed `X-Forwarded-For: 127.0.0.1`
 - If `SHUMA_FORWARDED_IP_SECRET` is set, include `X-Shuma-Forwarded-Secret`
+- If `SHUMA_HEALTH_SECRET` is set, include `X-Shuma-Health-Secret`
 - Confirm the server is running with `make status`
 
 Problem: Admin calls fail with 401/403

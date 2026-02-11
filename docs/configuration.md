@@ -38,6 +38,7 @@ These are read from process env at runtime (not from KV).
 | `SHUMA_POW_SECRET` | No | empty | Optional dedicated PoW signing secret. Falls back to `SHUMA_JS_SECRET` when unset. |
 | `SHUMA_CHALLENGE_SECRET` | No | empty | Optional dedicated challenge signing secret. Falls back to `SHUMA_JS_SECRET` when unset. |
 | `SHUMA_FORWARDED_IP_SECRET` | Yes | `changeme-prod-forwarded-ip-secret` | Trust boundary secret for forwarded IP/proto headers (`X-Shuma-Forwarded-Secret`). |
+| `SHUMA_HEALTH_SECRET` | No | empty | Optional shared secret for `/health` via `X-Shuma-Health-Secret`. |
 | `SHUMA_ADMIN_IP_ALLOWLIST` | No | empty | Optional CIDR/IP allowlist for `/admin/*`. |
 | `SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE` | No | `10` | Per-IP per-minute limit for failed admin authentication attempts before returning `429`. |
 | `SHUMA_EVENT_LOG_RETENTION_HOURS` | Yes | `168` | Event retention window in hours (`0` disables cleanup). |

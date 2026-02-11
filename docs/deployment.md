@@ -19,6 +19,7 @@ Set these in your deployment secret/config system:
 - `SHUMA_API_KEY`
 - `SHUMA_JS_SECRET`
 - `SHUMA_FORWARDED_IP_SECRET` (required when trusting forwarded headers)
+- `SHUMA_HEALTH_SECRET` (recommended; required if you want header-authenticated `/health`)
 - `SHUMA_ADMIN_CONFIG_WRITE_ENABLED`
 - `SHUMA_KV_STORE_FAIL_OPEN`
 - `SHUMA_ENFORCE_HTTPS`
@@ -33,6 +34,7 @@ Template file: `/.env.full.example`.
 - Keep `SHUMA_ENFORCE_HTTPS=true` in production.
 - Keep `SHUMA_ADMIN_CONFIG_WRITE_ENABLED=false` unless you explicitly need live tuning.
 - Generate a strong `SHUMA_API_KEY` with `make api-key-generate` (or rotate with `make api-key-rotate`).
+- Set `SHUMA_HEALTH_SECRET` and require `X-Shuma-Health-Secret` for `/health`.
 - Restrict `/admin/*` with `SHUMA_ADMIN_IP_ALLOWLIST` and upstream network controls.
 - Apply CDN/WAF rate limits to `POST /admin/login` and all `/admin/*`.
 
@@ -51,6 +53,18 @@ X-Shuma-Forwarded-Secret: <same secret>
 ```
 
 Configure your CDN/reverse proxy to inject this header.
+Also sanitize incoming `X-Forwarded-For` / `X-Real-IP` from untrusted clients and overwrite with edge-observed values.
+
+## 🐙 Health Endpoint Hardening
+
+- `/health` allows loopback IPs only (`127.0.0.1`, `::1`) after trusted forwarded-IP extraction.
+- For defense in depth, set `SHUMA_HEALTH_SECRET` and require monitors/proxies to send:
+
+```http
+X-Shuma-Health-Secret: <same secret>
+```
+
+- Strip `X-Shuma-Health-Secret` from public inbound traffic at your edge and only inject it from trusted monitoring/proxy paths.
 
 ## 🐙 Fail-Open vs Fail-Closed
 

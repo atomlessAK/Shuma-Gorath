@@ -67,11 +67,12 @@ make test-integration      # In terminal 2
 Set in `spin.toml` or environment:
 ```toml
 [component.bot-defence]
-environment = { SHUMA_API_KEY = "your-secret-key-here", SHUMA_JS_SECRET = "your-js-secret-here", SHUMA_EVENT_LOG_RETENTION_HOURS = "168", SHUMA_ADMIN_IP_ALLOWLIST = "203.0.113.0/24,198.51.100.10" }
+environment = { SHUMA_API_KEY = "your-secret-key-here", SHUMA_JS_SECRET = "your-js-secret-here", SHUMA_EVENT_LOG_RETENTION_HOURS = "168", SHUMA_HEALTH_SECRET = "your-health-secret-here", SHUMA_ADMIN_IP_ALLOWLIST = "203.0.113.0/24,198.51.100.10" }
 ```
 
 `SHUMA_JS_SECRET` is used to sign the `js_verified` cookie for the JS challenge.
 `SHUMA_FORWARDED_IP_SECRET` is optional and is used to trust `X-Forwarded-For` from your proxy/CDN (it must also send `X-Shuma-Forwarded-Secret`). If you set it, include that header in integration tests.
+`SHUMA_HEALTH_SECRET` is optional and, when set, `/health` also requires `X-Shuma-Health-Secret`.
 `SHUMA_EVENT_LOG_RETENTION_HOURS` controls how long event logs are kept (set to `0` to disable cleanup).
 `SHUMA_ADMIN_IP_ALLOWLIST` limits admin API access to specific IPs/CIDRs (comma-separated).
 `SHUMA_KV_STORE_FAIL_OPEN` controls fail-open/closed behavior when the KV store is unavailable (`true`=open, `false`=closed).

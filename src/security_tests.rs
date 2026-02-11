@@ -2,7 +2,10 @@ use once_cell::sync::Lazy;
 use spin_sdk::http::{Method, Request};
 use std::sync::Mutex;
 
-use crate::{forwarded_ip_trusted, response_with_optional_debug_headers};
+use crate::{
+    extract_health_client_ip, forwarded_ip_trusted, health_secret_authorized,
+    response_with_optional_debug_headers,
+};
 
 static ENV_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
@@ -63,6 +66,69 @@ fn health_internal_headers_visible_when_enabled() {
 
     assert!(has_header(&resp, "X-KV-Status"));
     assert!(has_header(&resp, "X-Shuma-Fail-Mode"));
+}
+
+#[test]
+fn health_secret_not_required_when_unset() {
+    let _lock = ENV_MUTEX
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    std::env::remove_var("SHUMA_HEALTH_SECRET");
+    let req = request_with_headers("/health", &[("x-forwarded-for", "127.0.0.1")]);
+    assert!(health_secret_authorized(&req));
+}
+
+#[test]
+fn health_secret_required_when_configured() {
+    let _lock = ENV_MUTEX
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    std::env::set_var("SHUMA_HEALTH_SECRET", "health-secret-value");
+
+    let missing = request_with_headers("/health", &[("x-forwarded-for", "127.0.0.1")]);
+    assert!(!health_secret_authorized(&missing));
+
+    let wrong = request_with_headers(
+        "/health",
+        &[
+            ("x-forwarded-for", "127.0.0.1"),
+            ("x-shuma-health-secret", "wrong-value"),
+        ],
+    );
+    assert!(!health_secret_authorized(&wrong));
+
+    let correct = request_with_headers(
+        "/health",
+        &[
+            ("x-forwarded-for", "127.0.0.1"),
+            ("x-shuma-health-secret", "health-secret-value"),
+        ],
+    );
+    assert!(health_secret_authorized(&correct));
+
+    std::env::remove_var("SHUMA_HEALTH_SECRET");
+}
+
+#[test]
+fn health_endpoint_rejects_when_health_secret_missing() {
+    let _lock = ENV_MUTEX
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    std::env::set_var("SHUMA_FORWARDED_IP_SECRET", "test-forwarded-secret");
+    std::env::set_var("SHUMA_HEALTH_SECRET", "health-secret-value");
+    let req = request_with_headers(
+        "/health",
+        &[
+            ("x-forwarded-for", "127.0.0.1"),
+            ("x-shuma-forwarded-secret", "test-forwarded-secret"),
+        ],
+    );
+
+    let resp = crate::handle_bot_defence_impl(&req);
+    assert_eq!(*resp.status(), 403u16);
+
+    std::env::remove_var("SHUMA_HEALTH_SECRET");
+    std::env::remove_var("SHUMA_FORWARDED_IP_SECRET");
 }
 
 #[test]
@@ -151,6 +217,24 @@ fn forwarded_headers_are_trusted_with_matching_secret() {
         ],
     );
     assert!(forwarded_ip_trusted(&req));
+}
+
+#[test]
+fn health_ip_extraction_rejects_multi_hop_forwarded_for() {
+    let _lock = ENV_MUTEX
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    std::env::set_var("SHUMA_FORWARDED_IP_SECRET", "test-forwarded-secret");
+    let req = request_with_headers(
+        "/health",
+        &[
+            ("x-forwarded-for", "127.0.0.1, 203.0.113.10"),
+            ("x-shuma-forwarded-secret", "test-forwarded-secret"),
+        ],
+    );
+
+    assert_eq!(extract_health_client_ip(&req), "unknown");
+    std::env::remove_var("SHUMA_FORWARDED_IP_SECRET");
 }
 
 #[test]

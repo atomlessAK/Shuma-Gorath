@@ -22,6 +22,9 @@ If `SHUMA_API_KEY` is missing, `/admin/*` endpoints are disabled. Placeholder/in
 
 Failed admin auth attempts are rate-limited per IP bucket (`SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE`, default `10`), but you should still enforce CDN/WAF rate limits for `POST /admin/login` and `/admin/*`.
 
+If `SHUMA_HEALTH_SECRET` is configured, `/health` also requires:
+- `X-Shuma-Health-Secret: <SHUMA_HEALTH_SECRET>`
+
 ## 🐙 Public Endpoints
 
 - `GET /` - Main bot defence handler

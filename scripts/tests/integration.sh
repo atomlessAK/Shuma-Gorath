@@ -97,10 +97,19 @@ if [[ -n "${SHUMA_FORWARDED_IP_SECRET:-}" ]]; then
   FORWARDED_SECRET_HEADER=(-H "X-Shuma-Forwarded-Secret: ${SHUMA_FORWARDED_IP_SECRET}")
 fi
 
+HEALTH_SECRET_HEADER=()
+if [[ -z "${SHUMA_HEALTH_SECRET:-}" ]]; then
+  SHUMA_HEALTH_SECRET="$(read_env_local_value SHUMA_HEALTH_SECRET || true)"
+fi
+
+if [[ -n "${SHUMA_HEALTH_SECRET:-}" ]]; then
+  HEALTH_SECRET_HEADER=(-H "X-Shuma-Health-Secret: ${SHUMA_HEALTH_SECRET}")
+fi
+
 # Test 1: Health check
 info "Testing /health endpoint..."
 
-health_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" "$BASE_URL/health")
+health_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" "${HEALTH_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" "$BASE_URL/health")
 if echo "$health_resp" | grep -q OK; then
   pass "/health returns OK"
 else
@@ -258,7 +267,7 @@ fi
 
 # Test 6: Health check after ban/unban
 info "Testing /health endpoint again..."
-if curl -sf "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" "$BASE_URL/health" | grep -q OK; then
+if curl -sf "${FORWARDED_SECRET_HEADER[@]}" "${HEALTH_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" "$BASE_URL/health" | grep -q OK; then
   pass "/health returns OK after ban/unban"
 else
   fail "/health did not return OK after ban/unban"
