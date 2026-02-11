@@ -20,6 +20,12 @@ At runtime:
 - Env-only keys are loaded from process env.
 - Missing/invalid KV config returns `500 Configuration unavailable` for config-dependent requests.
 
+## 🐙 Runtime Config Cache
+
+- KV-backed runtime config is cached in-process for a short TTL (currently 2 seconds).
+- `POST /admin/config` invalidates the cache on the handling instance immediately after a successful KV write.
+- In multi-instance deployments, other instances refresh on their own TTL window, so brief config staleness (up to TTL) is expected.
+
 ## 🐙 Canonical Variable Reference
 
 Source of truth files:
@@ -103,6 +109,7 @@ These keys are seeded into KV and loaded from KV at runtime.
 
 - `GET /admin/config` reads effective KV-backed config.
 - `POST /admin/config` writes to KV only when `SHUMA_ADMIN_CONFIG_WRITE_ENABLED=true`.
+- Successful writes invalidate runtime config cache on the instance that processed the request.
 - KV writes persist across restarts.
 
 ## 🐙 JS Verification + PoW
