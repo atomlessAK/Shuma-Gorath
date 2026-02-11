@@ -192,6 +192,15 @@ function sanitizeEndpointText(value) {
   return (value || '').replace(/\s+/g, '').trim();
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function isLoopbackHostname(hostname) {
   const normalized = String(hostname || '').trim().toLowerCase();
   return (
@@ -1176,15 +1185,17 @@ function updateBansTable(bans) {
     const isExpired = ban.expires < now;
     const bannedAt = ban.banned_at ? new Date(ban.banned_at * 1000).toLocaleString() : '-';
     const expiresAt = new Date(ban.expires * 1000).toLocaleString();
+    const safeIp = escapeHtml(ban.ip || '-');
+    const safeReason = escapeHtml(ban.reason || 'unknown');
     const signals = (ban.fingerprint && Array.isArray(ban.fingerprint.signals)) ? ban.fingerprint.signals : [];
     const signalBadges = signals.length
-      ? signals.map(signal => `<span class="ban-signal-badge">${signal}</span>`).join('')
+      ? signals.map(signal => `<span class="ban-signal-badge">${escapeHtml(signal)}</span>`).join('')
       : '<span class="text-muted">none</span>';
-    const detailsId = `ban-detail-${ban.ip.replace(/[^a-zA-Z0-9]/g, '-')}`;
+    const detailsId = `ban-detail-${String(ban.ip || 'unknown').replace(/[^a-zA-Z0-9]/g, '-')}`;
     
     tr.innerHTML = `
-      <td><code>${ban.ip}</code></td>
-      <td>${ban.reason || 'unknown'}</td>
+      <td><code>${safeIp}</code></td>
+      <td>${safeReason}</td>
       <td>${bannedAt}</td>
       <td class="${isExpired ? 'expired' : ''}">${isExpired ? 'Expired' : expiresAt}</td>
       <td>${signalBadges}</td>
@@ -1200,11 +1211,12 @@ function updateBansTable(bans) {
     detailRow.className = 'ban-detail-row hidden';
     const score = ban.fingerprint && typeof ban.fingerprint.score === 'number' ? ban.fingerprint.score : null;
     const summary = ban.fingerprint && ban.fingerprint.summary ? ban.fingerprint.summary : 'No additional fingerprint details.';
+    const safeSummary = escapeHtml(summary);
     detailRow.innerHTML = `
       <td colspan="6">
         <div class="ban-detail-content">
           <div><strong>Score:</strong> ${score === null ? 'n/a' : score}</div>
-          <div><strong>Summary:</strong> ${summary}</div>
+          <div><strong>Summary:</strong> ${safeSummary}</div>
         </div>
       </td>
     `;
@@ -1257,14 +1269,19 @@ function updateEventsTable(events) {
   
   for (const ev of events) {
     const tr = document.createElement('tr');
-    const eventClass = ev.event.toLowerCase();
+    const eventClass = String(ev.event || '').toLowerCase().replace(/[^a-z_]/g, '');
+    const safeEvent = escapeHtml(ev.event || '-');
+    const safeIp = escapeHtml(ev.ip || '-');
+    const safeReason = escapeHtml(ev.reason || '-');
+    const safeOutcome = escapeHtml(ev.outcome || '-');
+    const safeAdmin = escapeHtml(ev.admin || '-');
     tr.innerHTML = `
       <td>${new Date(ev.ts * 1000).toLocaleString()}</td>
-      <td><span class="badge ${eventClass}">${ev.event}</span></td>
-      <td><code>${ev.ip || '-'}</code></td>
-      <td>${ev.reason || '-'}</td>
-      <td>${ev.outcome || '-'}</td>
-      <td>${ev.admin || '-'}</td>
+      <td><span class="badge ${eventClass}">${safeEvent}</span></td>
+      <td><code>${safeIp}</code></td>
+      <td>${safeReason}</td>
+      <td>${safeOutcome}</td>
+      <td>${safeAdmin}</td>
     `;
     tbody.appendChild(tr);
   }
@@ -1300,13 +1317,17 @@ function updateCdpEventsTable(events) {
       : (outcome.toLowerCase().startsWith('checks:') ? outcome.replace(/^checks:/i, 'Checks: ') : outcome);
 
     const tr = document.createElement('tr');
+    const safeIp = escapeHtml(ev.ip || '-');
+    const safeTier = escapeHtml(tier);
+    const safeScore = escapeHtml(score);
+    const safeDetails = escapeHtml(details);
     tr.innerHTML = `
       <td>${new Date(ev.ts * 1000).toLocaleString()}</td>
-      <td><code>${ev.ip || '-'}</code></td>
+      <td><code>${safeIp}</code></td>
       <td><span class="badge ${isBan ? 'ban' : 'challenge'}">${isBan ? 'BAN' : 'DETECTION'}</span></td>
-      <td>${tier}</td>
-      <td>${score}</td>
-      <td>${details}</td>
+      <td>${safeTier}</td>
+      <td>${safeScore}</td>
+      <td>${safeDetails}</td>
     `;
     tbody.appendChild(tr);
   }

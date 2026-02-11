@@ -4,6 +4,7 @@
 #[cfg(test)]
 mod tests {
     use super::super::ban::*;
+    use crate::challenge::KeyValueStore;
     use std::collections::HashMap;
 
     use std::cell::RefCell;
@@ -113,6 +114,48 @@ mod tests {
         assert_eq!(de.expires, 42);
         assert!(de.fingerprint.is_none());
         assert!(de.banned_at > 0);
+    }
+
+    #[test]
+    fn test_ban_metadata_is_sanitized_before_persist() {
+        let store = TestStore::default();
+        let site_id = "testsite";
+        let ip = "198.51.100.10";
+        let raw_reason = format!("{}\n{}", "r".repeat(200), "tail");
+        let raw_summary = format!("ua=\t{}\r\n", "a".repeat(700));
+
+        ban_ip_with_fingerprint(
+            &store,
+            site_id,
+            ip,
+            &raw_reason,
+            60,
+            Some(BanFingerprint {
+                score: Some(5),
+                signals: vec!["outdated_browser".to_string()],
+                summary: Some(raw_summary),
+            }),
+        );
+
+        let key = format!("ban:{}:{}", site_id, ip);
+        let raw = store.get(&key).unwrap().unwrap();
+        let entry: BanEntry = serde_json::from_slice(&raw).unwrap();
+
+        assert!(!entry.reason.chars().any(|c| c.is_control()));
+        assert_eq!(
+            entry.reason.chars().count(),
+            crate::input_validation::MAX_BAN_REASON_LEN
+        );
+
+        let summary = entry
+            .fingerprint
+            .and_then(|f| f.summary)
+            .expect("summary should be present");
+        assert!(!summary.chars().any(|c| c.is_control()));
+        assert_eq!(
+            summary.chars().count(),
+            crate::input_validation::MAX_BAN_SUMMARY_LEN
+        );
     }
     // use super::super::ban::*;
     // Removed MockStore; all tests use TestStore implementing KeyValueStore

@@ -8,8 +8,8 @@ pub const MAX_ADMIN_JSON_BYTES: usize = 64 * 1024;
 pub const MAX_CDP_REPORT_BYTES: usize = 16 * 1024;
 pub const MAX_POW_VERIFY_BYTES: usize = 8 * 1024;
 pub const MAX_CHALLENGE_FORM_BYTES: usize = 8 * 1024;
-#[cfg(test)]
 pub const MAX_BAN_REASON_LEN: usize = 120;
+pub const MAX_BAN_SUMMARY_LEN: usize = 512;
 pub const MAX_CHECK_NAME_LEN: usize = 32;
 pub const MAX_NONCE_LEN: usize = 512;
 pub const MAX_SEED_TOKEN_LEN: usize = 4096;
@@ -69,6 +69,43 @@ pub fn parse_ip_addr(input: &str) -> Option<String> {
         return None;
     }
     trimmed.parse::<IpAddr>().ok().map(|addr| addr.to_string())
+}
+
+fn strip_control_chars_and_limit(input: &str, max_chars: usize) -> String {
+    if max_chars == 0 {
+        return String::new();
+    }
+    let mut out = String::new();
+    let mut count = 0usize;
+    for ch in input.chars() {
+        if ch.is_control() {
+            continue;
+        }
+        out.push(ch);
+        count += 1;
+        if count >= max_chars {
+            break;
+        }
+    }
+    out
+}
+
+pub fn sanitize_ban_reason(input: &str) -> String {
+    let cleaned = strip_control_chars_and_limit(input.trim(), MAX_BAN_REASON_LEN);
+    if cleaned.is_empty() {
+        "unknown".to_string()
+    } else {
+        cleaned
+    }
+}
+
+pub fn sanitize_ban_summary(input: &str) -> Option<String> {
+    let cleaned = strip_control_chars_and_limit(input.trim(), MAX_BAN_SUMMARY_LEN);
+    if cleaned.is_empty() {
+        None
+    } else {
+        Some(cleaned)
+    }
 }
 
 #[cfg(test)]
@@ -200,5 +237,21 @@ mod tests {
         );
         assert!(sanitize_check_name("bad check").is_none());
         assert!(sanitize_check_name("DROP TABLE;").is_none());
+    }
+
+    #[test]
+    fn sanitize_ban_reason_removes_controls_and_limits_length() {
+        let raw = format!("  bad\nreason\r{}  ", "x".repeat(MAX_BAN_REASON_LEN + 20));
+        let sanitized = sanitize_ban_reason(&raw);
+        assert!(!sanitized.chars().any(|c| c.is_control()));
+        assert_eq!(sanitized.chars().count(), MAX_BAN_REASON_LEN);
+    }
+
+    #[test]
+    fn sanitize_ban_summary_removes_controls_and_limits_length() {
+        let raw = format!("ua=\t{}\n", "y".repeat(MAX_BAN_SUMMARY_LEN + 20));
+        let sanitized = sanitize_ban_summary(&raw).unwrap();
+        assert!(!sanitized.chars().any(|c| c.is_control()));
+        assert_eq!(sanitized.chars().count(), MAX_BAN_SUMMARY_LEN);
     }
 }

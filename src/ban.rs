@@ -193,11 +193,19 @@ pub fn ban_ip_with_fingerprint(
 ) {
     let key = format!("ban:{}:{}", site_id, ip);
     let ts = now_ts();
+    let normalized_reason = crate::input_validation::sanitize_ban_reason(reason);
+    let normalized_fingerprint = fingerprint.map(|mut fp| {
+        fp.summary = fp
+            .summary
+            .as_deref()
+            .and_then(crate::input_validation::sanitize_ban_summary);
+        fp
+    });
     let entry = BanEntry {
-        reason: reason.to_string(),
+        reason: normalized_reason,
         expires: ts + duration_secs,
         banned_at: ts,
-        fingerprint,
+        fingerprint: normalized_fingerprint,
     };
     if let Ok(val) = serde_json::to_vec(&entry) {
         let _ = store.set(&key, &val);
