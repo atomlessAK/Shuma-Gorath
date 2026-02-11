@@ -11,6 +11,9 @@ This and `todos/security-review.md` are the single sources of truth for active p
 
 ## Security and Platform
 - [ ] Design strategy for syncing bans/unbans across global edge instances. (architecture, ops)
+- [ ] Implement and tune CDN/WAF rate limits for `POST /admin/login` and all `/admin/*` as immediate first-layer abuse control. (ops, deployment)
+- [ ] Design and implement atomic distributed rate limiting (Redis `INCR`/Lua) for main traffic and admin auth, aligned with global edge-state sync work. (architecture, src/rate.rs, src/auth.rs, spin.toml)
+- [ ] Define outage posture for distributed limiter (`fail-open` vs `fail-closed`) and add monitoring/alerts for limiter backend health. (architecture, ops, docs/deployment.md)
 - [ ] Design runtime-agnostic architecture that keeps core detection logic portable while preserving Fermyon-first performance paths. (architecture)
 - [ ] Define platform scope boundaries to avoid overreach by leaning on upstream bot managers (for example Akamai) for features better handled there. (product architecture)
 - [x] Keep dashboard/admin API same-origin by default: infer endpoint from page origin and remove normal endpoint editing; keep only a dev override path. (dashboard/index.html, dashboard/dashboard.js, docs/dashboard.md)
