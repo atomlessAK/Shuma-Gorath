@@ -251,6 +251,7 @@ body {
   max-width: 1400px;
   margin: 0 auto;
   padding: 30px;
+  position: relative;
 }
 
 .login-shell {
@@ -305,30 +306,18 @@ h1 {
   font-weight: 900;
 }
 
+.dashboard-logout {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: auto;
+  min-width: 96px;
+  z-index: 1100;
+}
+
 .subtitle {
   font-size: var(--text-xl);
   margin-top: -20px;
-}
-
-/* ===========================================
-   Config Bar
-   =========================================== */
-
-.config {
-  margin-bottom: 30px;
-  display: flex;
-  gap: 15px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.config label {
-  font-weight: 500;
-  color: var(--color-700);
-}
-
-.config input {
-  padding: 8px 12px;
 }
 
 #last-updated {
@@ -662,10 +651,6 @@ code.env-var {
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }
 
-.controls-grid--api {
-  grid-template-columns: minmax(0, 1fr);
-}
-
 .controls-grid--config {
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 }
@@ -700,16 +685,6 @@ code.env-var {
   padding: 12px;
 }
 
-/* Keep API access bar inline inside admin config section */
-.control-group .config {
-  margin-bottom: 0;
-}
-
-.control-group .config .btn {
-  width: auto;
-  padding: 10px 16px;
-}
-
 .control-desc {
   font-size: var(--text-sm);
   margin-bottom: 10px;
@@ -735,12 +710,6 @@ code.env-var {
 .input-row .field-error,
 .toggle-row .field-error {
   grid-column: 1 / -1;
-}
-
-.config .field-error {
-  flex: 1 1 100%;
-  margin-top: -2px;
-  margin-bottom: 2px;
 }
 
 /* ===========================================
@@ -1264,15 +1233,6 @@ input:checked + .toggle-slider:before {
 
   h1 {
     font-size: 2rem;
-  }
-
-  .config {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .config input {
-    width: 100%;
   }
 
   .stats-cards {

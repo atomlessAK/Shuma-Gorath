@@ -12,6 +12,7 @@
 
 <body>
   <div class="container panel panel-border">
+    <button id="logout-btn" class="btn btn-subtle dashboard-logout" aria-label="Log out of admin session" disabled>Logout</button>
     <header>
       <div class="shuma-image-wrapper">
         <img src="assets/shuma-gorath.png" alt="Shuma-Gorath" class="shuma-gorath-img">
@@ -150,23 +151,6 @@
     <div class="section admin-section">
     <h2>Admin Controls</h2>
       <div class="admin-groups">
-        <section class="admin-group admin-group--api-access">
-          <div class="controls-grid controls-grid--api">
-            <div class="control-group panel-soft pad-md">
-              <h3>API Access</h3>
-              <p class="control-desc text-muted">This dashboard uses same-origin <code>/admin/*</code> APIs and does not support cross-origin admin calls (CORS is closed by default). Set <code class="env-var">SHUMA_API_KEY</code> in your deployment secret store, then use it once to log in below. Without a valid key, admin actions are blocked. Generate or rotate keys with <code>make api-key-generate</code> / <code>make api-key-rotate</code>.</p>
-              <div class="config">
-                <label for="apikey">API Key:</label>
-                <input id="apikey" class="input-field input-field--mono" value="changeme-dev-only-api-key" size="30" type="password" spellcheck="false" autocomplete="off" aria-label="API key">
-                <button id="login-btn" class="btn btn-submit" aria-label="Log in to admin session">Login</button>
-                <button id="logout-btn" class="btn btn-subtle" aria-label="Log out of admin session" disabled>Logout</button>
-                <button id="refresh" class="btn" aria-label="Refresh dashboard">Refresh</button>
-              </div>
-              <p id="api-auth-status" class="control-desc text-muted">Session: not authenticated</p>
-            </div>
-          </div>
-        </section>
-
         <section class="admin-group admin-group--status">
           <h3 class="admin-group-title">IP Bans</h3>
           <div class="table-wrapper">

@@ -12,8 +12,12 @@ async function openDashboard(page) {
     await page.click("#login-submit");
     await expect(page).toHaveURL(/\/dashboard\/index\.html/);
   }
-  await page.waitForSelector("#refresh", { timeout: 15000 });
-  await page.click("#refresh");
+  await page.waitForSelector("#logout-btn", { timeout: 15000 });
+  await expect(page.locator("#logout-btn")).toBeEnabled();
+  await page.waitForFunction(() => {
+    const total = document.getElementById("total-events")?.textContent?.trim();
+    return Boolean(total && total !== "-" && total !== "...");
+  }, { timeout: 15000 });
 }
 
 test.beforeAll(async () => {
@@ -24,6 +28,7 @@ test("dashboard loads and shows seeded operational data", async ({ page }) => {
   await openDashboard(page);
 
   await expect(page.locator("h1")).toHaveText("Shuma-Gorath");
+  await expect(page.locator("h3", { hasText: "API Access" })).toHaveCount(0);
 
   await expect(page.locator("#last-updated")).toContainText("updated:");
   await expect(page.locator("#config-mode-subtitle")).toContainText("Admin page configuration enabled.");

@@ -534,18 +534,6 @@ function readIpFieldValue(id, required, messageTarget, label) {
   return sanitized;
 }
 
-function validateApiKeyInput(showInline = false) {
-  const apikeyInput = document.getElementById('apikey');
-  if (!apikeyInput) return false;
-  if (adminSessionState.authenticated) {
-    setFieldError(apikeyInput, '', showInline);
-    return true;
-  }
-  const apikey = (apikeyInput.value || '').trim();
-  setFieldError(apikeyInput, apikey ? '' : 'API key is required.', showInline);
-  return Boolean(apikey);
-}
-
 function hasValidApiContext() {
   return adminSessionState.authenticated;
 }
@@ -558,17 +546,6 @@ function redirectToLogin() {
 function setAdminSession(authenticated, csrfToken = '') {
   adminSessionState.authenticated = Boolean(authenticated);
   adminSessionState.csrfToken = adminSessionState.authenticated ? String(csrfToken || '') : '';
-  const statusEl = document.getElementById('api-auth-status');
-  if (statusEl) {
-    statusEl.textContent = adminSessionState.authenticated
-      ? 'Session: authenticated'
-      : 'Session: not authenticated';
-  }
-
-  const apikeyInput = document.getElementById('apikey');
-  if (apikeyInput && adminSessionState.authenticated) {
-    apikeyInput.value = '';
-  }
   refreshCoreActionButtonsState();
 }
 
@@ -587,12 +564,6 @@ function validateGeoFieldById(id, showInline = false) {
 
 function refreshCoreActionButtonsState() {
   const apiValid = hasValidApiContext();
-  setValidActionButtonState('refresh', apiValid, true);
-  const loginBtn = document.getElementById('login-btn');
-  if (loginBtn) {
-    const canLogin = !adminSessionState.authenticated && Boolean((document.getElementById('apikey')?.value || '').trim());
-    loginBtn.disabled = !canLogin;
-  }
   const logoutBtn = document.getElementById('logout-btn');
   if (logoutBtn) {
     logoutBtn.disabled = !adminSessionState.authenticated;
@@ -720,26 +691,10 @@ function bindIpFieldValidation(id, required, label) {
   apply(false);
 }
 
-function bindApiKeyFieldValidation() {
-  const input = document.getElementById('apikey');
-  if (!input) return;
-  const apply = (showInline = false) => validateApiKeyInput(showInline);
-  input.addEventListener('input', () => {
-    apply(true);
-    refreshCoreActionButtonsState();
-  });
-  input.addEventListener('blur', () => {
-    apply(true);
-    refreshCoreActionButtonsState();
-  });
-  apply(false);
-}
-
 function initInputValidation() {
   Object.keys(INTEGER_FIELD_RULES).forEach(bindIntegerFieldValidation);
   bindIpFieldValidation('ban-ip', true, 'Ban IP');
   bindIpFieldValidation('unban-ip', true, 'Unban IP');
-  bindApiKeyFieldValidation();
   refreshCoreActionButtonsState();
 }
 
@@ -1281,7 +1236,7 @@ function updateBansTable(bans) {
         await window.unbanIp(endpoint, apikey, ip);
         msg.textContent = `Unbanned ${ip}`;
         msg.className = 'message success';
-        setTimeout(() => document.getElementById('refresh').click(), 500);
+        setTimeout(() => refreshDashboard(), 500);
       } catch (e) {
         msg.textContent = 'Error: ' + e.message;
         msg.className = 'message error';
@@ -2665,46 +2620,6 @@ async function restoreAdminSession() {
   }
 }
 
-document.getElementById('login-btn').onclick = async function() {
-  const msg = document.getElementById('admin-msg');
-  const endpoint = resolveAdminApiEndpoint().endpoint;
-  const apikeyInput = document.getElementById('apikey');
-  if (!endpoint || !apikeyInput) return;
-
-  const apiKey = (apikeyInput.value || '').trim();
-  if (!apiKey) {
-    setFieldError(apikeyInput, 'API key is required.', true);
-    apikeyInput.reportValidity();
-    apikeyInput.focus();
-    return;
-  }
-
-  this.disabled = true;
-  this.textContent = 'Logging in...';
-  try {
-    const resp = await fetch(`${endpoint}/admin/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ api_key: apiKey })
-    });
-    if (!resp.ok) {
-      throw new Error('Login failed. Check your key.');
-    }
-    const data = await resp.json();
-    setAdminSession(true, data.csrf_token || '');
-    msg.textContent = 'Logged in';
-    msg.className = 'message success';
-    document.getElementById('refresh').click();
-  } catch (e) {
-    setAdminSession(false);
-    msg.textContent = `Error: ${e.message}`;
-    msg.className = 'message error';
-  } finally {
-    this.textContent = 'Login';
-    refreshCoreActionButtonsState();
-  }
-};
-
 document.getElementById('logout-btn').onclick = async function() {
   const msg = document.getElementById('admin-msg');
   const endpoint = resolveAdminApiEndpoint().endpoint;
@@ -2723,7 +2638,7 @@ document.getElementById('logout-btn').onclick = async function() {
 };
 
 // Main refresh function
-document.getElementById('refresh').onclick = async function() {
+async function refreshDashboard() {
   const ctx = getAdminContext(document.getElementById('last-updated'));
   if (!ctx) return;
   const { endpoint, apikey } = ctx;
@@ -2776,7 +2691,7 @@ document.getElementById('refresh').onclick = async function() {
     }
 
     if (!analyticsResp.ok || !eventsResp.ok || !bansResp.ok || !cdpResp.ok || !cdpEventsResp.ok) {
-      throw new Error('Failed to fetch data. Check API key and endpoint.');
+      throw new Error('Failed to fetch dashboard data.');
     }
 
     const analytics = await analyticsResp.json();
@@ -2837,7 +2752,7 @@ document.getElementById('refresh').onclick = async function() {
       msg.className = 'message error';
     }
   }
-};
+}
 
 // Admin controls - Ban IP
 document.getElementById('ban-btn').onclick = async function() {
@@ -2858,7 +2773,7 @@ document.getElementById('ban-btn').onclick = async function() {
     msg.textContent = `Banned ${ip} for ${duration}s`;
     msg.className = 'message success';
     document.getElementById('ban-ip').value = '';
-    setTimeout(() => document.getElementById('refresh').click(), 500);
+    setTimeout(() => refreshDashboard(), 500);
   } catch (e) {
     msg.textContent = 'Error: ' + e.message;
     msg.className = 'message error';
@@ -2882,7 +2797,7 @@ document.getElementById('unban-btn').onclick = async function() {
     msg.textContent = `Unbanned ${ip}`;
     msg.className = 'message success';
     document.getElementById('unban-ip').value = '';
-    setTimeout(() => document.getElementById('refresh').click(), 500);
+    setTimeout(() => refreshDashboard(), 500);
   } catch (e) {
     msg.textContent = 'Error: ' + e.message;
     msg.className = 'message error';
@@ -2956,7 +2871,7 @@ restoreAdminSession().then((authenticated) => {
     redirectToLogin();
     return;
   }
-  document.getElementById('refresh').click();
+  refreshDashboard();
 });
 
 // Test Mode Toggle Handler
@@ -2992,7 +2907,7 @@ document.getElementById('test-mode-toggle').addEventListener('change', async fun
     msg.className = 'message success';
     
     // Refresh dashboard to update banner
-    setTimeout(() => document.getElementById('refresh').click(), 500);
+    setTimeout(() => refreshDashboard(), 500);
   } catch (e) {
     msg.textContent = 'Error: ' + e.message;
     msg.className = 'message error';
@@ -3004,6 +2919,6 @@ document.getElementById('test-mode-toggle').addEventListener('change', async fun
 // Auto-refresh every 30 seconds
 setInterval(() => {
   if (hasValidApiContext()) {
-    document.getElementById('refresh').click();
+    refreshDashboard();
   }
 }, 30000);
