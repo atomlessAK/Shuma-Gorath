@@ -1,7 +1,7 @@
 #!/bin/bash
 # verify-setup.sh - Verify setup script logic without installing
 #
-# This script checks what the setup.sh would do on your system
+# This script checks what scripts/bootstrap/setup.sh would do on your system
 # and verifies all dependencies are correctly installed.
 
 set -e

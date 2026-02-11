@@ -60,7 +60,7 @@ If your Spin environment sets `SHUMA_FORWARDED_IP_SECRET`, export it before runn
 export SHUMA_FORWARDED_IP_SECRET="your-forwarded-ip-secret"
 ```
 
-The integration suite is implemented in `test_spin_colored.sh` and is invoked by `make test-integration`.
+The integration suite is implemented in `scripts/tests/integration.sh` and is invoked by `make test-integration`.
 
 Integration coverage includes:
 1. Health endpoint and KV availability

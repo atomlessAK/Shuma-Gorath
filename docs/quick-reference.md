@@ -56,7 +56,7 @@ make test-integration      # In terminal 2
 - `GET /admin/events?hours=24` - Get recent events
 - `GET /admin/config` - Get current configuration
 - `POST /admin/config` - Update configuration (test_mode, ban_durations, robots, CDP, etc.)
-- `GET /admin/maze` - Link maze statistics
+- `GET /admin/maze` - maze statistics
 - `GET /admin/robots` - robots.txt configuration and preview
 - `GET /admin/cdp` - CDP detection configuration and stats
 - `GET /admin` - API help
@@ -215,7 +215,7 @@ src/
 └── *_tests.rs      # Unit tests
 
 dashboard/          # Web dashboard
-test_spin_colored.sh # Integration tests (shell)
+scripts/tests/integration.sh # Integration tests (shell)
 ```
 
 ## 🐙 Security Notes

@@ -1,13 +1,13 @@
 #!/bin/bash
-# test_spin_colored.sh
+# integration.sh
 # Integration test suite for Spin app with colored output
 #
 # ⚠️ IMPORTANT: These tests MUST run in the Spin environment!
 # They require HTTP server, key-value store, and real headers.
 #
 # PREREQUISITES:
-#   1. Start Spin server: spin up
-#   2. Run this script: ./test_spin_colored.sh
+#   1. Start Spin server: make dev
+#   2. Run this script: ./scripts/tests/integration.sh
 #
 # This script runs integration test scenarios:
 #   1. Health check endpoint (GET /health)

@@ -1,7 +1,7 @@
 #!/bin/bash
 # setup.sh - One-command setup for WASM Bot Defence development
 #
-# Usage: ./setup.sh
+# Usage: make setup
 #
 # This script installs all required dependencies for macOS:
 #   - Homebrew (if missing)
@@ -264,11 +264,11 @@ else
             fi
 
             if [[ ! -t 0 ]]; then
-                error "This step needs sudo to move spin into $SPIN_INSTALL_DIR. Please run ./setup.sh in an interactive terminal where you can authorize sudo."
+                error "This step needs sudo to move spin into $SPIN_INSTALL_DIR. Please run make setup in an interactive terminal where you can authorize sudo."
             fi
 
             if ! sudo /bin/mv "$TMP_SPIN_DIR/spin" "$SPIN_INSTALL_DIR/spin"; then
-                error "Failed to move spin into $SPIN_INSTALL_DIR. Please re-run ./setup.sh in an interactive terminal and authorize sudo."
+                error "Failed to move spin into $SPIN_INSTALL_DIR. Please re-run make setup in an interactive terminal and authorize sudo."
             fi
         fi
     )

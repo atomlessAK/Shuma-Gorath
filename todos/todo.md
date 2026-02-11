@@ -31,6 +31,6 @@ This and the SECURITY_REVIEW.md are the single sources of truth for active proje
 
 ## Config and Naming Clarity
 - [ ] Evaluate renaming `SHUMA_CHALLENGE_RISK_THRESHOLD` to `SHUMA_BOTNESS_CHALLENGE_THRESHOLD` to reflect that it is a botness cutoff, not a parallel risk model. (src/config.rs, docs, dashboard)
-- [ ] Standardize terminology across code/UI/docs so `honeypot` and `link maze` are used consistently instead of interchangeably. (src, dashboard, docs)
+- [ ] Standardize terminology across code/UI/docs so `honeypot` and `maze` are used consistently instead of interchangeably. (src, dashboard, docs)
 - [ ] Initialize Ban IP pane duration controls from the current Admin Manual Ban default duration, so Ban IP and Ban Durations panes stay consistent. (dashboard/admin.js, dashboard/index.html, src/admin.rs)
 - [ ] Document setup-time config bootstrapping clearly: how `make setup` creates/populates local env, how env-only vars are sourced, and how KV defaults are seeded and later overridden. (docs/configuration.md, docs/deployment.md, README.md)

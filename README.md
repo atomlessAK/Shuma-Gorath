@@ -5,7 +5,7 @@
 
 # 🐙 Shuma-Gorath
 
-Chaos Dimension Bot Defence for Spin. Shuma-Gorath is a WebAssembly bot defence that detects, blocks, and monitors automated abuse with honeypots, rate limiting, JS challenges, CDP signals, a link maze, and a real-time admin dashboard.
+Chaos Dimension Bot Defence for Spin. Shuma-Gorath is a WebAssembly bot defence that detects, blocks, and monitors automated abuse with honeypots, rate limiting, JS challenges, CDP signals, a maze, and a real-time admin dashboard.
 
 Shuma-Gorath is designed to **complement enterprise bot defenses** (such as [Akamai Bot Manager](https://www.akamai.com/products/bot-manager_) as a second-layer of application-specific protection, but it can also run standalone.
 
@@ -58,7 +58,7 @@ Deployment policy note: `SHUMA_KV_STORE_FAIL_OPEN` is a critical choice (fail-op
 ## 🐙 Documentation
 
 - [`docs/index.md`](docs/index.md) - Docs index
-- [`QUICK_REFERENCE.md`](QUICK_REFERENCE.md) - Command and API cheat sheet
+- [`docs/quick-reference.md`](docs/quick-reference.md) - Command and API cheat sheet
 - [`docs/testing.md`](docs/testing.md) - Testing guide (Makefile-only)
 - [`docs/dashboard.md`](docs/dashboard.md) - Dashboard and admin UI
 - [`docs/deployment.md`](docs/deployment.md) - Production/deploy configuration
@@ -69,8 +69,8 @@ Deployment policy note: `SHUMA_KV_STORE_FAIL_OPEN` is a critical choice (fail-op
 - [`docs/akamai-bot-manager.md`](docs/akamai-bot-manager.md) - Positioning and layered defense
 - [`docs/features.md`](docs/features.md) - Feature list and roadmap
 - [`docs/challenge-verification.md`](docs/challenge-verification.md) - Human verification strategy
-- [`docs/maze.md`](docs/maze.md) - Link maze crawler trap
-- [`SECURITY_REVIEW.md`](SECURITY_REVIEW.md) - Security audit notes
+- [`docs/maze.md`](docs/maze.md) - maze crawler trap
+- [`todos/security-review.md`](todos/security-review.md) - Security audit notes / backlog
 
 ## 🐙 Repository Structure (High Level)
 
