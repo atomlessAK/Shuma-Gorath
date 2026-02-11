@@ -26,10 +26,7 @@ use base64::{engine::general_purpose, Engine as _};
 /// Secret used for HMAC token generation for JS verification cookies.
 /// Pull from env to avoid a repo-known static secret in production.
 fn get_js_secret() -> String {
-    // Prefer dedicated SHUMA_JS_SECRET, fall back to SHUMA_API_KEY for dev convenience.
-    std::env::var("SHUMA_JS_SECRET")
-        .or_else(|_| std::env::var("SHUMA_API_KEY"))
-        .unwrap_or_else(|_| "changeme-js-secret".to_string())
+    crate::config::env_string_required("SHUMA_JS_SECRET")
 }
 
 /// Generates a HMAC-based token for a given IP, used in the js_verified cookie.

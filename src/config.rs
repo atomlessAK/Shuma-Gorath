@@ -270,6 +270,7 @@ fn validate_env_only_impl() -> Result<(), String> {
     validate_non_empty("SHUMA_API_KEY")?;
     validate_non_empty("SHUMA_JS_SECRET")?;
     validate_non_empty("SHUMA_FORWARDED_IP_SECRET")?;
+    validate_u64_var("SHUMA_EVENT_LOG_RETENTION_HOURS")?;
 
     validate_bool_like_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED")?;
     validate_bool_like_var("SHUMA_KV_STORE_FAIL_OPEN")?;
@@ -299,22 +300,24 @@ fn validate_bool_like_var(name: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_u64_var(name: &str) -> Result<(), String> {
+    let value = env::var(name).map_err(|_| format!("Missing required env var {}", name))?;
+    if value.trim().parse::<u64>().is_err() {
+        return Err(format!("Invalid integer env var {}={}", name, value));
+    }
+    Ok(())
+}
+
 pub(crate) fn parse_admin_config_write_enabled(value: Option<&str>) -> bool {
     value.and_then(parse_bool_like).unwrap_or(false)
 }
 
 pub fn admin_config_write_enabled() -> bool {
-    match env::var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED") {
-        Ok(v) => parse_admin_config_write_enabled(Some(v.as_str())),
-        Err(_) => defaults_bool("SHUMA_ADMIN_CONFIG_WRITE_ENABLED"),
-    }
+    env_bool_required("SHUMA_ADMIN_CONFIG_WRITE_ENABLED")
 }
 
 pub fn https_enforced() -> bool {
-    env::var("SHUMA_ENFORCE_HTTPS")
-        .ok()
-        .and_then(|v| parse_bool_like(v.as_str()))
-        .unwrap_or_else(|| defaults_bool("SHUMA_ENFORCE_HTTPS"))
+    env_bool_required("SHUMA_ENFORCE_HTTPS")
 }
 
 pub fn forwarded_header_trust_configured() -> bool {
@@ -325,10 +328,7 @@ pub fn forwarded_header_trust_configured() -> bool {
 }
 
 pub fn kv_store_fail_open() -> bool {
-    env::var("SHUMA_KV_STORE_FAIL_OPEN")
-        .ok()
-        .and_then(|v| parse_bool_like(v.as_str()))
-        .unwrap_or_else(|| defaults_bool("SHUMA_KV_STORE_FAIL_OPEN"))
+    env_bool_required("SHUMA_KV_STORE_FAIL_OPEN")
 }
 
 fn parse_bool_like(value: &str) -> Option<bool> {
@@ -344,10 +344,7 @@ fn parse_bool_env(value: Option<&str>) -> bool {
 }
 
 pub fn pow_config_mutable() -> bool {
-    env::var("SHUMA_POW_CONFIG_MUTABLE")
-        .ok()
-        .and_then(|v| parse_bool_like(v.as_str()))
-        .unwrap_or_else(|| defaults_bool("SHUMA_POW_CONFIG_MUTABLE"))
+    env_bool_required("SHUMA_POW_CONFIG_MUTABLE")
 }
 
 pub(crate) fn challenge_config_mutable_from_env(value: Option<&str>) -> bool {
@@ -355,17 +352,47 @@ pub(crate) fn challenge_config_mutable_from_env(value: Option<&str>) -> bool {
 }
 
 pub fn challenge_config_mutable() -> bool {
-    match env::var("SHUMA_CHALLENGE_CONFIG_MUTABLE") {
-        Ok(v) => challenge_config_mutable_from_env(Some(v.as_str())),
-        Err(_) => defaults_bool("SHUMA_CHALLENGE_CONFIG_MUTABLE"),
-    }
+    env_bool_required("SHUMA_CHALLENGE_CONFIG_MUTABLE")
 }
 
 pub fn botness_config_mutable() -> bool {
-    match env::var("SHUMA_BOTNESS_CONFIG_MUTABLE") {
-        Ok(v) => parse_bool_env(Some(v.as_str())),
-        Err(_) => challenge_config_mutable(),
+    env_bool_required("SHUMA_BOTNESS_CONFIG_MUTABLE")
+}
+
+pub fn event_log_retention_hours() -> u64 {
+    env_u64_required("SHUMA_EVENT_LOG_RETENTION_HOURS")
+}
+
+pub fn env_string_required(name: &str) -> String {
+    if cfg!(test) {
+        return env::var(name).ok().unwrap_or_else(|| defaults_raw(name));
     }
+    env::var(name).unwrap_or_else(|_| panic!("Missing required env var {}", name))
+}
+
+fn env_bool_required(name: &str) -> bool {
+    if cfg!(test) {
+        return env::var(name)
+            .ok()
+            .and_then(|v| parse_bool_like(v.as_str()))
+            .unwrap_or_else(|| defaults_bool(name));
+    }
+    let value = env::var(name).unwrap_or_else(|_| panic!("Missing required env var {}", name));
+    parse_bool_like(&value).unwrap_or_else(|| panic!("Invalid boolean env var {}={}", name, value))
+}
+
+fn env_u64_required(name: &str) -> u64 {
+    if cfg!(test) {
+        return env::var(name)
+            .ok()
+            .and_then(|v| v.trim().parse::<u64>().ok())
+            .unwrap_or_else(|| defaults_u64(name));
+    }
+    let value = env::var(name).unwrap_or_else(|_| panic!("Missing required env var {}", name));
+    value
+        .trim()
+        .parse::<u64>()
+        .unwrap_or_else(|_| panic!("Invalid integer env var {}={}", name, value))
 }
 
 fn clamp_pow_difficulty(value: u8) -> u8 {

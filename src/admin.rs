@@ -1,6 +1,5 @@
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use std::env;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 /// Event types for activity logging
@@ -33,7 +32,6 @@ pub struct EventLogEntry {
 /// - Example: Delete keys matching "eventlog:*" where hour < (now - retention_period)
 const EVENT_PAGE_SIZE: usize = 500; // max entries per page
 const EVENT_MAX_PAGES_PER_HOUR: usize = 256; // safety cap
-const DEFAULT_EVENT_RETENTION_HOURS: u64 = 168; // 7 days
 const POW_DIFFICULTY_MIN: u8 = crate::config::POW_DIFFICULTY_MIN;
 const POW_DIFFICULTY_MAX: u8 = crate::config::POW_DIFFICULTY_MAX;
 const POW_TTL_MIN: u64 = crate::config::POW_TTL_MIN;
@@ -42,10 +40,7 @@ const POW_TTL_MAX: u64 = crate::config::POW_TTL_MAX;
 static LAST_EVENTLOG_CLEANUP_HOUR: Lazy<Mutex<u64>> = Lazy::new(|| Mutex::new(0));
 
 fn event_log_retention_hours() -> u64 {
-    env::var("SHUMA_EVENT_LOG_RETENTION_HOURS")
-        .ok()
-        .and_then(|v| v.parse::<u64>().ok())
-        .unwrap_or(DEFAULT_EVENT_RETENTION_HOURS)
+    crate::config::event_log_retention_hours()
 }
 
 fn maybe_cleanup_event_logs<S: crate::challenge::KeyValueStore>(store: &S, current_hour: u64) {

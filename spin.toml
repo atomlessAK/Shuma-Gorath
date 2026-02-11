@@ -30,7 +30,6 @@ allowed_outbound_hosts = []
 ## Tunables are loaded from KV only (seeded from config/defaults.env by make setup/config-seed).
 ## `SHUMA_FORWARDED_IP_SECRET` should be set in every environment where X-Forwarded-For
 ## is trusted. Requests without a matching X-Shuma-Forwarded-Secret are ignored.
-environment = { SHUMA_EVENT_LOG_RETENTION_HOURS = "168", SHUMA_ADMIN_IP_ALLOWLIST = "", SHUMA_KV_STORE_FAIL_OPEN = "true", SHUMA_ADMIN_CONFIG_WRITE_ENABLED = "false", SHUMA_ENFORCE_HTTPS = "false", SHUMA_DEBUG_HEADERS = "false", SHUMA_DEV_MODE = "false", SHUMA_POW_CONFIG_MUTABLE = "false", SHUMA_CHALLENGE_CONFIG_MUTABLE = "false", SHUMA_BOTNESS_CONFIG_MUTABLE = "false" }
 
 [component.bot-trap.build]
 command = "./scripts/set_crate_type.sh cdylib && cargo build --target wasm32-wasip1 --release && cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm && ./scripts/set_crate_type.sh rlib"

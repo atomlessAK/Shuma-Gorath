@@ -90,9 +90,9 @@ mod tests {
     }
 
     #[test]
-    fn https_enforced_defaults_to_false_and_parses_true() {
+    fn https_enforced_reads_required_env_bool() {
         let _lock = ENV_MUTEX.lock().unwrap();
-        std::env::remove_var("SHUMA_ENFORCE_HTTPS");
+        std::env::set_var("SHUMA_ENFORCE_HTTPS", "false");
         assert!(!crate::config::https_enforced());
 
         std::env::set_var("SHUMA_ENFORCE_HTTPS", "true");

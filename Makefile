@@ -38,41 +38,14 @@ SHUMA_POW_CONFIG_MUTABLE := $(call strip_wrapping_quotes,$(SHUMA_POW_CONFIG_MUTA
 SHUMA_CHALLENGE_CONFIG_MUTABLE := $(call strip_wrapping_quotes,$(SHUMA_CHALLENGE_CONFIG_MUTABLE))
 SHUMA_BOTNESS_CONFIG_MUTABLE := $(call strip_wrapping_quotes,$(SHUMA_BOTNESS_CONFIG_MUTABLE))
 
-# Dev-only default for forwarded IP secret (override with SHUMA_FORWARDED_IP_SECRET=...)
-DEV_FORWARDED_IP_SECRET ?= changeme-dev-only-ip-secret
-SHUMA_FORWARDED_IP_SECRET ?= $(DEV_FORWARDED_IP_SECRET)
-ifeq ($(strip $(SHUMA_FORWARDED_IP_SECRET)),)
-SHUMA_FORWARDED_IP_SECRET := $(DEV_FORWARDED_IP_SECRET)
-endif
-export SHUMA_FORWARDED_IP_SECRET
+# Inject env-only runtime keys into Spin from .env.local / shell env.
+SPIN_ENV_ONLY := --env SHUMA_API_KEY=$(SHUMA_API_KEY) --env SHUMA_JS_SECRET=$(SHUMA_JS_SECRET) --env SHUMA_POW_SECRET=$(SHUMA_POW_SECRET) --env SHUMA_CHALLENGE_SECRET=$(SHUMA_CHALLENGE_SECRET) --env SHUMA_FORWARDED_IP_SECRET=$(SHUMA_FORWARDED_IP_SECRET) --env SHUMA_ADMIN_IP_ALLOWLIST=$(SHUMA_ADMIN_IP_ALLOWLIST) --env SHUMA_EVENT_LOG_RETENTION_HOURS=$(SHUMA_EVENT_LOG_RETENTION_HOURS) --env SHUMA_ADMIN_CONFIG_WRITE_ENABLED=$(SHUMA_ADMIN_CONFIG_WRITE_ENABLED) --env SHUMA_KV_STORE_FAIL_OPEN=$(SHUMA_KV_STORE_FAIL_OPEN) --env SHUMA_ENFORCE_HTTPS=$(SHUMA_ENFORCE_HTTPS) --env SHUMA_DEBUG_HEADERS=$(SHUMA_DEBUG_HEADERS) --env SHUMA_DEV_MODE=$(SHUMA_DEV_MODE) --env SHUMA_POW_CONFIG_MUTABLE=$(SHUMA_POW_CONFIG_MUTABLE) --env SHUMA_CHALLENGE_CONFIG_MUTABLE=$(SHUMA_CHALLENGE_CONFIG_MUTABLE) --env SHUMA_BOTNESS_CONFIG_MUTABLE=$(SHUMA_BOTNESS_CONFIG_MUTABLE)
 
-# Dev-only default for admin API key (override with SHUMA_API_KEY=...)
-DEV_API_KEY ?= changeme-dev-only-api-key
-SHUMA_API_KEY ?= $(DEV_API_KEY)
-ifeq ($(strip $(SHUMA_API_KEY)),)
-SHUMA_API_KEY := $(DEV_API_KEY)
-endif
-export SHUMA_API_KEY
-
-# Dev-only default for JS secret (override with SHUMA_JS_SECRET=...)
-DEV_JS_SECRET ?= changeme-dev-only-js-secret
-SHUMA_JS_SECRET ?= $(DEV_JS_SECRET)
-ifeq ($(strip $(SHUMA_JS_SECRET)),)
-SHUMA_JS_SECRET := $(DEV_JS_SECRET)
-endif
-export SHUMA_JS_SECRET
-
-# Optional header/env for forwarded IP trust (only if SHUMA_FORWARDED_IP_SECRET is set)
+# Optional forwarded-IP trust header for local health/test requests.
 FORWARDED_SECRET_HEADER := $(if $(SHUMA_FORWARDED_IP_SECRET),-H "X-Shuma-Forwarded-Secret: $(SHUMA_FORWARDED_IP_SECRET)",)
-SPIN_FORWARD_SECRET := $(if $(SHUMA_FORWARDED_IP_SECRET),--env SHUMA_FORWARDED_IP_SECRET=$(SHUMA_FORWARDED_IP_SECRET),)
-SPIN_API_KEY := $(if $(SHUMA_API_KEY),--env SHUMA_API_KEY=$(SHUMA_API_KEY),)
-SPIN_JS_SECRET := $(if $(SHUMA_JS_SECRET),--env SHUMA_JS_SECRET=$(SHUMA_JS_SECRET),)
-SPIN_CHALLENGE_MUTABLE := --env SHUMA_CHALLENGE_CONFIG_MUTABLE=true
-SPIN_DEBUG_HEADERS := --env SHUMA_DEBUG_HEADERS=true
-SPIN_DEV_MODE := --env SHUMA_DEV_MODE=true
-SPIN_PROD_HARDEN := --env SHUMA_DEV_MODE=false --env SHUMA_DEBUG_HEADERS=false
 DEV_ADMIN_CONFIG_WRITE_ENABLED ?= true
-SPIN_ADMIN_CONFIG_WRITE_ENABLED_DEV := --env SHUMA_ADMIN_CONFIG_WRITE_ENABLED=$(DEV_ADMIN_CONFIG_WRITE_ENABLED)
+SPIN_DEV_OVERRIDES := --env SHUMA_CHALLENGE_CONFIG_MUTABLE=true --env SHUMA_DEBUG_HEADERS=true --env SHUMA_DEV_MODE=true --env SHUMA_ADMIN_CONFIG_WRITE_ENABLED=$(DEV_ADMIN_CONFIG_WRITE_ENABLED)
+SPIN_PROD_OVERRIDES := --env SHUMA_DEV_MODE=false --env SHUMA_DEBUG_HEADERS=false
 
 #--------------------------
 # Setup (first-time)
@@ -104,7 +77,7 @@ dev: ## Build and run with file watching (auto-rebuild on save)
 	@./scripts/set_crate_type.sh rlib
 	@cargo watch --poll -w src -w dashboard -w spin.toml -i '*.wasm' -i 'src/bot_trap.wasm' -i '.spin/**' \
 		-s 'if [ ! -f target/wasm32-wasip1/release/shuma_gorath.wasm ] || find src -name "*.rs" -newer target/wasm32-wasip1/release/shuma_gorath.wasm -print -quit | grep -q .; then ./scripts/set_crate_type.sh cdylib && cargo build --target wasm32-wasip1 --release && cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm && ./scripts/set_crate_type.sh rlib; else echo "No Rust changes detected; skipping WASM rebuild."; fi' \
-		-s 'pkill -x spin 2>/dev/null || true; SPIN_ALWAYS_BUILD=0 spin up --direct-mounts $(SPIN_API_KEY) $(SPIN_JS_SECRET) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) $(SPIN_DEV_MODE) $(SPIN_ADMIN_CONFIG_WRITE_ENABLED_DEV) --listen 127.0.0.1:3000'
+		-s 'pkill -x spin 2>/dev/null || true; SPIN_ALWAYS_BUILD=0 spin up --direct-mounts $(SPIN_ENV_ONLY) $(SPIN_DEV_OVERRIDES) --listen 127.0.0.1:3000'
 
 dev-closed: ## Build and run with file watching and SHUMA_KV_STORE_FAIL_OPEN=false (fail-closed)
 	@echo "$(CYAN)🚨 Starting development server with SHUMA_KV_STORE_FAIL_OPEN=false (fail-closed)...$(NC)"
@@ -119,7 +92,7 @@ dev-closed: ## Build and run with file watching and SHUMA_KV_STORE_FAIL_OPEN=fal
 	@./scripts/set_crate_type.sh rlib
 	@cargo watch --poll -w src -w dashboard -w spin.toml -i '*.wasm' -i 'src/bot_trap.wasm' -i '.spin/**' \
 		-s 'if [ ! -f target/wasm32-wasip1/release/shuma_gorath.wasm ] || find src -name "*.rs" -newer target/wasm32-wasip1/release/shuma_gorath.wasm -print -quit | grep -q .; then ./scripts/set_crate_type.sh cdylib && cargo build --target wasm32-wasip1 --release && cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_trap.wasm && ./scripts/set_crate_type.sh rlib; else echo "No Rust changes detected; skipping WASM rebuild."; fi' \
-		-s 'pkill -x spin 2>/dev/null || true; SPIN_ALWAYS_BUILD=0 spin up --direct-mounts --env SHUMA_KV_STORE_FAIL_OPEN=false $(SPIN_API_KEY) $(SPIN_JS_SECRET) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) $(SPIN_DEV_MODE) $(SPIN_ADMIN_CONFIG_WRITE_ENABLED_DEV) --listen 127.0.0.1:3000'
+		-s 'pkill -x spin 2>/dev/null || true; SPIN_ALWAYS_BUILD=0 spin up --direct-mounts $(SPIN_ENV_ONLY) $(SPIN_DEV_OVERRIDES) --env SHUMA_KV_STORE_FAIL_OPEN=false --listen 127.0.0.1:3000'
 
 local: dev ## Alias for dev
 
@@ -135,7 +108,7 @@ run: ## Build once and run (no file watching)
 	@echo "$(YELLOW)📊 Dashboard: http://127.0.0.1:3000/dashboard/index.html$(NC)"
 	@echo "$(YELLOW)📈 Metrics:   http://127.0.0.1:3000/metrics$(NC)"
 	@echo "$(YELLOW)❤️  Health:    http://127.0.0.1:3000/health$(NC)"
-	@spin up $(SPIN_API_KEY) $(SPIN_JS_SECRET) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) $(SPIN_DEV_MODE) $(SPIN_ADMIN_CONFIG_WRITE_ENABLED_DEV) --listen 127.0.0.1:3000
+	@spin up $(SPIN_ENV_ONLY) $(SPIN_DEV_OVERRIDES) --listen 127.0.0.1:3000
 
 run-prebuilt: ## Run Spin using prebuilt wasm (CI helper)
 	@echo "$(CYAN)🚀 Starting prebuilt server...$(NC)"
@@ -143,7 +116,7 @@ run-prebuilt: ## Run Spin using prebuilt wasm (CI helper)
 	@echo "$(YELLOW)📊 Dashboard: http://127.0.0.1:3000/dashboard/index.html$(NC)"
 	@echo "$(YELLOW)📈 Metrics:   http://127.0.0.1:3000/metrics$(NC)"
 	@echo "$(YELLOW)❤️  Health:    http://127.0.0.1:3000/health$(NC)"
-	@spin up $(SPIN_API_KEY) $(SPIN_JS_SECRET) $(SPIN_FORWARD_SECRET) $(SPIN_CHALLENGE_MUTABLE) $(SPIN_DEBUG_HEADERS) $(SPIN_DEV_MODE) $(SPIN_ADMIN_CONFIG_WRITE_ENABLED_DEV) --listen 127.0.0.1:3000
+	@spin up $(SPIN_ENV_ONLY) $(SPIN_DEV_OVERRIDES) --listen 127.0.0.1:3000
 
 #--------------------------
 # Production
@@ -160,7 +133,7 @@ build: ## Build release binary only (no server start)
 prod: build ## Build for production and start server
 	@echo "$(CYAN)🚀 Starting production server...$(NC)"
 	@pkill -x spin 2>/dev/null || true
-	@spin up $(SPIN_PROD_HARDEN) --listen 0.0.0.0:3000
+	@spin up $(SPIN_ENV_ONLY) $(SPIN_PROD_OVERRIDES) --listen 0.0.0.0:3000
 
 deploy: build ## Deploy to Fermyon Cloud
 	@$(MAKE) --no-print-directory api-key-validate

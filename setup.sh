@@ -131,6 +131,18 @@ ensure_local_dev_secret() {
     fi
 }
 
+ensure_env_local_default_from_defaults() {
+    local key="$1"
+    local current_value=""
+    local default_value=""
+
+    current_value="$(read_env_local_value "$key")"
+    default_value="${!key:-}"
+    if [[ -z "$current_value" ]]; then
+        upsert_env_local_value "$key" "$default_value"
+    fi
+}
+
 echo -e "${CYAN}"
 echo "╔═══════════════════════════════════════════════════╗"
 echo "║     WASM Bot Trap - Development Setup             ║"
@@ -282,6 +294,18 @@ ensure_env_local_file
 ensure_local_dev_secret "SHUMA_API_KEY" 32
 ensure_local_dev_secret "SHUMA_JS_SECRET" 32
 ensure_local_dev_secret "SHUMA_FORWARDED_IP_SECRET" 32
+ensure_env_local_default_from_defaults "SHUMA_POW_SECRET"
+ensure_env_local_default_from_defaults "SHUMA_CHALLENGE_SECRET"
+ensure_env_local_default_from_defaults "SHUMA_ADMIN_IP_ALLOWLIST"
+ensure_env_local_default_from_defaults "SHUMA_EVENT_LOG_RETENTION_HOURS"
+ensure_env_local_default_from_defaults "SHUMA_ADMIN_CONFIG_WRITE_ENABLED"
+ensure_env_local_default_from_defaults "SHUMA_KV_STORE_FAIL_OPEN"
+ensure_env_local_default_from_defaults "SHUMA_ENFORCE_HTTPS"
+ensure_env_local_default_from_defaults "SHUMA_DEBUG_HEADERS"
+ensure_env_local_default_from_defaults "SHUMA_DEV_MODE"
+ensure_env_local_default_from_defaults "SHUMA_POW_CONFIG_MUTABLE"
+ensure_env_local_default_from_defaults "SHUMA_CHALLENGE_CONFIG_MUTABLE"
+ensure_env_local_default_from_defaults "SHUMA_BOTNESS_CONFIG_MUTABLE"
 success "Local dev secrets are ready in $ENV_LOCAL_FILE"
 
 info "Seeding KV tunables from config/defaults.env (missing values only)..."
