@@ -453,7 +453,12 @@ fn serve_maze_with_tracking(
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
 
-    let _ = store.set(&maze_key, (hits + 1).to_string().as_bytes());
+    if let Err(e) = store.set(&maze_key, (hits + 1).to_string().as_bytes()) {
+        log_line(&format!(
+            "[maze] failed to persist hit counter {}: {:?}",
+            maze_key, e
+        ));
+    }
 
     if hits >= cfg.maze_auto_ban_threshold && cfg.maze_auto_ban {
         ban::ban_ip_with_fingerprint(
@@ -518,9 +523,19 @@ pub fn handle_bot_defence_impl(req: &Request) -> Response {
         let mode = fail_mode_label(fail_open);
         if let Ok(store) = Store::open_default() {
             let test_key = "health:test";
-            let _ = store.set(test_key, b"ok");
+            if let Err(e) = store.set(test_key, b"ok") {
+                log_line(&format!(
+                    "[health] failed to write KV probe key {}: {:?}",
+                    test_key, e
+                ));
+            }
             let ok = store.get(test_key).is_ok();
-            let _ = store.delete(test_key);
+            if let Err(e) = store.delete(test_key) {
+                log_line(&format!(
+                    "[health] failed to cleanup KV probe key {}: {:?}",
+                    test_key, e
+                ));
+            }
             if ok {
                 return response_with_optional_debug_headers(200, "OK", "available", mode);
             }

@@ -89,7 +89,9 @@ fn increment_kv_counter(store: &Store, key: &str) {
         .and_then(|v| String::from_utf8(v).ok())
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(0);
-    let _ = store.set(key, current.saturating_add(1).to_string().as_bytes());
+    if let Err(e) = store.set(key, current.saturating_add(1).to_string().as_bytes()) {
+        eprintln!("[cdp] failed to increment counter {}: {:?}", key, e);
+    }
 }
 
 /// Handles incoming CDP detection reports from client-side JavaScript.

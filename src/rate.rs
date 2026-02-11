@@ -37,7 +37,12 @@ pub fn check_rate_limit<S: KeyValueStore>(store: &S, site_id: &str, ip: &str, li
     if count >= limit {
         return false;
     }
-    let _ = store.set(&window_key, (count + 1).to_string().as_bytes());
+    if let Err(e) = store.set(&window_key, (count + 1).to_string().as_bytes()) {
+        eprintln!(
+            "[rate] failed to persist counter for key {}: {:?}",
+            window_key, e
+        );
+    }
     true
 }
 

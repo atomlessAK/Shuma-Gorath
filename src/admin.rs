@@ -55,7 +55,9 @@ fn maybe_cleanup_event_logs<S: crate::challenge::KeyValueStore>(store: &S, curre
     if let Ok(keys) = store.get_keys() {
         for key in keys {
             if key.starts_with(&v2_prefix) {
-                let _ = store.delete(&key);
+                if let Err(e) = store.delete(&key) {
+                    eprintln!("[eventlog] failed deleting expired key {}: {:?}", key, e);
+                }
             }
         }
     }
@@ -724,7 +726,9 @@ fn handle_admin_logout<S: crate::challenge::KeyValueStore>(req: &Request, store:
         }
     }
 
-    let _ = crate::auth::clear_admin_session(store, req);
+    if let Err(e) = crate::auth::clear_admin_session(store, req) {
+        eprintln!("[admin] failed to clear admin session on logout: {:?}", e);
+    }
     let body = serde_json::to_string(&json!({ "ok": true })).unwrap();
     Response::builder()
         .status(200)

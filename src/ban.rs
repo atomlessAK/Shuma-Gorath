@@ -46,7 +46,10 @@ fn load_ban_index(store: &impl KeyValueStore, site_id: &str) -> Vec<String> {
 
 fn save_ban_index(store: &impl KeyValueStore, site_id: &str, index: &[String]) {
     if let Ok(val) = serde_json::to_vec(index) {
-        let _ = store.set(&ban_index_key(site_id), &val);
+        let key = ban_index_key(site_id);
+        if let Err(e) = store.set(&key, &val) {
+            eprintln!("[ban] failed to save ban index {}: {:?}", key, e);
+        }
     }
 }
 
@@ -85,11 +88,15 @@ pub fn list_active_bans(store: &impl KeyValueStore, site_id: &str) -> Vec<(Strin
                         new_index.push(ip.clone());
                         active.push((ip, entry));
                     } else {
-                        let _ = store.delete(&key);
+                        if let Err(e) = store.delete(&key) {
+                            eprintln!("[ban] failed to delete expired ban {}: {:?}", key, e);
+                        }
                         changed = true;
                     }
                 } else {
-                    let _ = store.delete(&key);
+                    if let Err(e) = store.delete(&key) {
+                        eprintln!("[ban] failed to delete invalid ban {}: {:?}", key, e);
+                    }
                     changed = true;
                 }
             }
@@ -127,10 +134,17 @@ pub fn list_active_bans_with_scan(store: &Store, site_id: &str) -> Vec<(String, 
                                 active.push((ip.to_string(), entry));
                             }
                         } else {
-                            let _ = store.delete(&k);
+                            if let Err(e) = store.delete(&k) {
+                                eprintln!(
+                                    "[ban] failed to delete expired scanned ban {}: {:?}",
+                                    k, e
+                                );
+                            }
                         }
                     } else {
-                        let _ = store.delete(&k);
+                        if let Err(e) = store.delete(&k) {
+                            eprintln!("[ban] failed to delete invalid scanned ban {}: {:?}", k, e);
+                        }
                     }
                 }
             }
@@ -156,10 +170,14 @@ pub fn is_banned(store: &impl KeyValueStore, site_id: &str, ip: &str) -> bool {
                     // log: ban_check
                     return true;
                 } else {
-                    let _ = store.delete(&key);
+                    if let Err(e) = store.delete(&key) {
+                        eprintln!("[ban] failed to delete expired ban {}: {:?}", key, e);
+                    }
                 }
             } else {
-                let _ = store.delete(&key);
+                if let Err(e) = store.delete(&key) {
+                    eprintln!("[ban] failed to delete invalid ban {}: {:?}", key, e);
+                }
             }
             // Keep index clean when we delete here.
             remove_from_ban_index(store, site_id, ip);
@@ -208,16 +226,21 @@ pub fn ban_ip_with_fingerprint(
         fingerprint: normalized_fingerprint,
     };
     if let Ok(val) = serde_json::to_vec(&entry) {
-        let _ = store.set(&key, &val);
-        add_to_ban_index(store, site_id, ip);
-        // log: ban_add
+        if let Err(e) = store.set(&key, &val) {
+            eprintln!("[ban] failed to persist ban {}: {:?}", key, e);
+        } else {
+            add_to_ban_index(store, site_id, ip);
+            // log: ban_add
+        }
     }
 }
 
 /// Unbans an IP for a given site by removing its ban entry from the key-value store.
 pub fn unban_ip(store: &impl KeyValueStore, site_id: &str, ip: &str) {
     let key = format!("ban:{}:{}", site_id, ip);
-    let _ = store.delete(&key);
+    if let Err(e) = store.delete(&key) {
+        eprintln!("[ban] failed to delete ban {}: {:?}", key, e);
+    }
     remove_from_ban_index(store, site_id, ip);
 }
 

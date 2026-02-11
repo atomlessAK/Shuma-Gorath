@@ -928,9 +928,19 @@ pub(crate) fn handle_challenge_submit_with_outcome<S: KeyValueStore>(
                 }
             }
         }
-        let _ = store.delete(&used_key);
+        if let Err(e) = store.delete(&used_key) {
+            eprintln!(
+                "[challenge] failed to delete stale used marker {}: {:?}",
+                used_key, e
+            );
+        }
     }
-    let _ = store.set(&used_key, seed.expires_at.to_string().as_bytes());
+    if let Err(e) = store.set(&used_key, seed.expires_at.to_string().as_bytes()) {
+        eprintln!(
+            "[challenge] failed to persist used marker {}: {:?}",
+            used_key, e
+        );
+    }
     let output = match parse_submission(&output_raw, seed.grid_size as usize) {
         Ok(v) => v,
         Err(_e) => {

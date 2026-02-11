@@ -172,7 +172,12 @@ fn load_session_record<S: KeyValueStore>(
     let raw = store.get(&key).ok()??;
     let parsed = serde_json::from_slice::<AdminSessionRecord>(&raw).ok()?;
     if parsed.expires_at <= now_ts() {
-        let _ = store.delete(&key);
+        if let Err(e) = store.delete(&key) {
+            eprintln!(
+                "[auth] failed to delete expired admin session {}: {:?}",
+                key, e
+            );
+        }
         return None;
     }
     Some(parsed)
