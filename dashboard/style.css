@@ -301,6 +301,8 @@ h1 {
   color: var(--heading-fg);
   margin-bottom: 8px;
   margin-top: -85px;
+  letter-spacing: -0.15rem;
+  font-weight: 900;
 }
 
 .subtitle {
