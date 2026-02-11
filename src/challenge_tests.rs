@@ -256,7 +256,7 @@ mod tests {
     fn render_challenge_includes_output_grid_id() {
         let req = Request::builder()
             .method(Method::Get)
-            .uri("/challenge")
+            .uri("/challenge/puzzle")
             .body(Vec::new())
             .build();
         let resp = render_challenge(&req, 6);
@@ -268,7 +268,7 @@ mod tests {
     fn render_challenge_uses_hidden_output_field() {
         let req = Request::builder()
             .method(Method::Get)
-            .uri("/challenge")
+            .uri("/challenge/puzzle")
             .body(Vec::new())
             .build();
         let resp = render_challenge(&req, 6);
@@ -281,7 +281,7 @@ mod tests {
     fn render_challenge_has_transform_selectors_and_one_example() {
         let req = Request::builder()
             .method(Method::Get)
-            .uri("/challenge")
+            .uri("/challenge/puzzle")
             .body(Vec::new())
             .build();
         let resp = render_challenge(&req, 6);
@@ -316,7 +316,7 @@ mod tests {
     fn render_challenge_hides_debug_transform_text() {
         let req = Request::builder()
             .method(Method::Get)
-            .uri("/challenge")
+            .uri("/challenge/puzzle")
             .body(Vec::new())
             .build();
         let resp = render_challenge(&req, 6);
@@ -328,7 +328,7 @@ mod tests {
     fn serve_challenge_page_requires_test_mode() {
         let req = Request::builder()
             .method(Method::Get)
-            .uri("/challenge")
+            .uri("/challenge/puzzle")
             .body(Vec::new())
             .build();
         let resp = serve_challenge_page(&req, false, 6);
@@ -341,7 +341,7 @@ mod tests {
     fn serve_challenge_page_sets_no_store_cache_control() {
         let req = Request::builder()
             .method(Method::Get)
-            .uri("/challenge")
+            .uri("/challenge/puzzle")
             .body(Vec::new())
             .build();
         let resp = serve_challenge_page(&req, true, 6);
@@ -372,7 +372,7 @@ mod tests {
         let body = format!("seed={}&output={}", seed_token, output);
         let req = Request::builder()
             .method(Method::Post)
-            .uri("/challenge")
+            .uri("/challenge/puzzle")
             .header("content-type", "application/x-www-form-urlencoded")
             .body(body.as_bytes().to_vec())
             .build();
@@ -406,7 +406,7 @@ mod tests {
         let body = format!("seed={}&output={}", seed_token, output);
         let req = Request::builder()
             .method(Method::Post)
-            .uri("/challenge")
+            .uri("/challenge/puzzle")
             .header("content-type", "application/x-www-form-urlencoded")
             .body(body.as_bytes().to_vec())
             .build();
@@ -436,7 +436,7 @@ mod tests {
         let body_wrong = format!("seed={}&output={}", seed_token, wrong);
         let req_wrong = Request::builder()
             .method(Method::Post)
-            .uri("/challenge")
+            .uri("/challenge/puzzle")
             .header("content-type", "application/x-www-form-urlencoded")
             .body(body_wrong.as_bytes().to_vec())
             .build();
@@ -454,7 +454,7 @@ mod tests {
         let body_correct = format!("seed={}&output={}", seed_token, correct);
         let req_correct = Request::builder()
             .method(Method::Post)
-            .uri("/challenge")
+            .uri("/challenge/puzzle")
             .header("content-type", "application/x-www-form-urlencoded")
             .body(body_correct.as_bytes().to_vec())
             .build();
@@ -484,7 +484,7 @@ mod tests {
         let seed_token = make_seed_token(&seed);
         let req = Request::builder()
             .method(Method::Post)
-            .uri("/challenge")
+            .uri("/challenge/puzzle")
             .header("content-type", "application/x-www-form-urlencoded")
             .body(
                 format!("seed={}&output=0000000000000000", seed_token)
@@ -504,7 +504,7 @@ mod tests {
         let store = TestStore::default();
         let req = Request::builder()
             .method(Method::Post)
-            .uri("/challenge")
+            .uri("/challenge/puzzle")
             .header("content-type", "application/x-www-form-urlencoded")
             .body(b"seed=not-a-valid-token&output=0000000000000000".to_vec())
             .build();
@@ -525,7 +525,7 @@ mod tests {
         let oversized = "a".repeat(crate::input_validation::MAX_CHALLENGE_FORM_BYTES + 1);
         let req = Request::builder()
             .method(Method::Post)
-            .uri("/challenge")
+            .uri("/challenge/puzzle")
             .header("content-type", "application/x-www-form-urlencoded")
             .body(oversized.into_bytes())
             .build();

@@ -15,9 +15,9 @@ This document describes the challenge system that is currently implemented.
 
 ## 🐙 Challenge Routes
 
-- `GET /challenge`
+- `GET /challenge/puzzle`
   - Serves the challenge page when `SHUMA_TEST_MODE=true`
-- `POST /challenge`
+- `POST /challenge/puzzle`
   - Submits and verifies the answer
 
 Challenge rendering is also used by runtime routing when policy/botness logic decides to step up to challenge.

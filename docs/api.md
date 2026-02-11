@@ -31,12 +31,12 @@ If `SHUMA_API_KEY` is missing, `/admin/*` endpoints are disabled. Placeholder/in
 - `POST /cdp-report` - Client automation reports (JSON)
 - `GET /robots.txt` - robots.txt (configurable)
 - `GET /dashboard/...` - Dashboard static assets
-- `GET /challenge` - Dev-only challenge page (SHUMA_TEST_MODE only)
-- `POST /challenge` - Challenge answer submission
+- `GET /challenge/puzzle` - Dev-only puzzle challenge page (SHUMA_TEST_MODE only)
+- `POST /challenge/puzzle` - Puzzle challenge answer submission
 
 ### 🐙 Challenge Submission Format
 
-`POST /challenge` expects:
+`POST /challenge/puzzle` expects:
 - `seed` (signed challenge seed)
 - `output` (base-3 string, length 16 for 4x4 grids)
 
@@ -104,7 +104,7 @@ When `SHUMA_DEBUG_HEADERS=true`, the health response includes:
 - `GET /admin/cdp/events?hours=N&limit=M` - CDP-only detections/auto-bans (time-windowed, limit configurable)
 - `GET /admin/config` - Read configuration
 - `POST /admin/config` - Update configuration (partial JSON, disabled when `SHUMA_ADMIN_CONFIG_WRITE_ENABLED=false`)
-- `GET /admin/maze` - Link maze stats
+- `GET /admin/maze` - maze stats
 - `GET /admin/robots` - robots.txt config and preview
 - `GET /admin/cdp` - CDP detection config and stats
 

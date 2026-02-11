@@ -43,7 +43,7 @@ mod honeypot; // Honeypot endpoint logic
 mod input_validation;
 mod ip; // IP bucketing helpers
 mod js; // JS challenge/verification
-mod maze; // Link maze crawler trap
+mod maze; // maze crawler trap
 mod metrics; // Prometheus metrics
 mod pow; // Proof-of-work verification
 mod rate; // Rate limiting
@@ -467,7 +467,7 @@ pub fn handle_bot_defence_impl(req: &Request) -> Response {
     }
 
     // Challenge POST handler
-    if path == "/challenge" && *req.method() == spin_sdk::http::Method::Post {
+    if path == challenge::PUZZLE_PATH && *req.method() == spin_sdk::http::Method::Post {
         if let Ok(store) = Store::open_default() {
             let (response, outcome) = challenge::handle_challenge_submit_with_outcome(&store, req);
             match outcome {
@@ -491,7 +491,7 @@ pub fn handle_bot_defence_impl(req: &Request) -> Response {
         }
         return Response::new(500, "Key-value store error");
     }
-    if path == "/challenge" && *req.method() == spin_sdk::http::Method::Get {
+    if path == challenge::PUZZLE_PATH && *req.method() == spin_sdk::http::Method::Get {
         if let Ok(store) = Store::open_default() {
             let cfg = match load_runtime_config(&store, "default", path) {
                 Ok(cfg) => cfg,
@@ -600,7 +600,7 @@ pub fn handle_bot_defence_impl(req: &Request) -> Response {
     };
     let geo_assessment = assess_geo_request(req, &cfg);
 
-    // Link Maze - trap crawlers in infinite loops (only if enabled)
+    // Maze - trap crawlers in infinite loops (only if enabled)
     if maze::is_maze_path(path) {
         if !cfg.maze_enabled {
             return Response::new(404, "Not Found");

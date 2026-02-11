@@ -10,6 +10,8 @@ pub trait KeyValueStore {
     fn delete(&self, key: &str) -> Result<(), ()>;
 }
 
+pub(crate) const PUZZLE_PATH: &str = "/challenge/puzzle";
+
 impl KeyValueStore for Store {
     fn get(&self, key: &str) -> Result<Option<Vec<u8>>, ()> {
         Store::get(self, key).map_err(|_| ())
@@ -535,7 +537,7 @@ pub(crate) fn render_challenge(req: &Request, transform_count: usize) -> Respons
                       {test_output}
                     </div>
                   </div>
-                  <form method="POST" action="/challenge" class="submit-row">
+                  <form method="POST" action="{puzzle_path}" class="submit-row">
                     <input type="hidden" name="seed" value="{seed_token}" />
                     <input type="hidden" name="output" id="challenge-output" value="{empty_tritstring}" />
                     <button type="submit">Submit</button>
@@ -678,6 +680,7 @@ pub(crate) fn render_challenge(req: &Request, transform_count: usize) -> Respons
         seed_token = seed_token,
         grid_size = grid_size,
         empty_tritstring = grid_to_tritstring(&empty_output),
+        puzzle_path = PUZZLE_PATH,
     );
     challenge_response(200, &html)
 }
@@ -784,9 +787,9 @@ fn render_legend_grid() -> String {
 
 const CHALLENGE_CACHE_CONTROL: &str = "no-store";
 const CHALLENGE_CONTENT_TYPE: &str = "text/html; charset=utf-8";
-const CHALLENGE_FORBIDDEN_BODY: &str = "<html><body><h2 style='color:red;'>Forbidden. Please request a new challenge.</h2><a href='/challenge'>Request new challenge.</a></body></html>";
-const CHALLENGE_EXPIRED_BODY: &str = "<html><body><h2 style='color:red;'>Expired</h2><a href='/challenge'>Request new challenge.</a></body></html>";
-const CHALLENGE_INCORRECT_BODY: &str = "<html><body><h2 style='color:red;'>Incorrect.</h2><a href='/challenge'>Request new challenge.</a></body></html>";
+const CHALLENGE_FORBIDDEN_BODY: &str = "<html><body><h2 style='color:red;'>Forbidden. Please request a new challenge.</h2><a href='/challenge/puzzle'>Request new challenge.</a></body></html>";
+const CHALLENGE_EXPIRED_BODY: &str = "<html><body><h2 style='color:red;'>Expired</h2><a href='/challenge/puzzle'>Request new challenge.</a></body></html>";
+const CHALLENGE_INCORRECT_BODY: &str = "<html><body><h2 style='color:red;'>Incorrect.</h2><a href='/challenge/puzzle'>Request new challenge.</a></body></html>";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ChallengeSubmitOutcome {

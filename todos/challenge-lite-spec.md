@@ -30,9 +30,9 @@ Proposed order:
 
 ## Endpoints
 
-- `GET /challenge-lite`
+- `GET /challenge/not-a-bot-checkbox`
   - Returns the checkbox challenge page with signed nonce payload.
-- `POST /challenge-lite`
+- `POST /challenge/not-a-bot-checkbox`
   - Validates nonce + telemetry summary.
   - Returns routing outcome (`pass`, `escalate_puzzle`, `maze_or_block`).
 

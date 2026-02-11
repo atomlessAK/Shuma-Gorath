@@ -189,7 +189,7 @@ Expected: a success response and a CDP event recorded in analytics.
 ```bash
 challenge_page=$(curl -s -H "X-Forwarded-For: 10.0.0.150" \
   -H "X-Shuma-Forwarded-Secret: $SHUMA_FORWARDED_IP_SECRET" \
-  http://127.0.0.1:3000/challenge)
+  http://127.0.0.1:3000/challenge/puzzle)
 seed=$(python3 -c 'import re,sys; m=re.search(r"name=\"seed\" value=\"([^\"]+)\"", sys.stdin.read()); print(m.group(1) if m else "")' <<< "$challenge_page")
 output=$(python3 -c 'import re,sys; m=re.search(r"name=\"output\"[^>]*value=\"([^\"]+)\"", sys.stdin.read()); print(m.group(1) if m else "")' <<< "$challenge_page")
 curl -s -X POST \
@@ -197,13 +197,13 @@ curl -s -X POST \
   -H "X-Shuma-Forwarded-Secret: $SHUMA_FORWARDED_IP_SECRET" \
   --data-urlencode "seed=$seed" \
   --data-urlencode "output=$output" \
-  http://127.0.0.1:3000/challenge
+  http://127.0.0.1:3000/challenge/puzzle
 curl -s -X POST \
   -H "X-Forwarded-For: 10.0.0.150" \
   -H "X-Shuma-Forwarded-Secret: $SHUMA_FORWARDED_IP_SECRET" \
   --data-urlencode "seed=$seed" \
   --data-urlencode "output=$output" \
-  http://127.0.0.1:3000/challenge
+  http://127.0.0.1:3000/challenge/puzzle
 ```
 Expected: first submit returns `Incorrect.` with a new-challenge link; second submit returns `Expired` with the same link.
 

@@ -27,7 +27,7 @@ This and `todos/security-review.md` are the single sources of truth for active p
 
 ## Challenge
 - [ ] Implement tarpit mode (slow-drip responses) with clear routing policy, metrics, and admin/status visibility. (src/lib.rs, src/metrics.rs, dashboard, docs)
-- [ ] Implement Challenge Lite (`/challenge-lite`) per `todos/challenge-lite-spec.md` with signed short-lived single-use nonce and IP-bucket binding. (src/challenge.rs, src/lib.rs)
+- [ ] Implement Challenge Lite (`/challenge/not-a-bot-checkbox`) per `todos/challenge-lite-spec.md` with signed short-lived single-use nonce and IP-bucket binding. (src/challenge.rs, src/lib.rs)
 - [ ] Implement Challenge Lite telemetry capture/validation and scoring model (`0..10`) with server-side threshold routing (`pass`, `escalate_puzzle`, `maze_or_block`). (src/challenge.rs, src/lib.rs)
 - [ ] Add Challenge Lite verification marker/token issuance after pass and enforce it in routing flow. (src/challenge.rs, src/lib.rs, src/auth.rs)
 - [ ] Add Challenge Lite admin visibility/config controls for thresholds, TTL, and attempt caps (read-only defaults + optional mutability controls). (src/admin.rs, dashboard)

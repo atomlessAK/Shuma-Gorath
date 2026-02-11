@@ -286,12 +286,12 @@ else
 fi
 
 # Test 9: Challenge flow is single-use (incorrect then replay expires)
-info "Testing /challenge single-use flow..."
-challenge_page=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 10.0.0.150" "$BASE_URL/challenge")
+info "Testing /challenge/puzzle single-use flow..."
+challenge_page=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 10.0.0.150" "$BASE_URL/challenge/puzzle")
 if echo "$challenge_page" | grep -q 'Puzzle'; then
-  pass "GET /challenge returns challenge page in test mode"
+  pass "GET /challenge/puzzle returns challenge page in test mode"
 else
-  fail "GET /challenge did not return challenge page in test mode"
+  fail "GET /challenge/puzzle did not return challenge page in test mode"
   echo -e "${YELLOW}DEBUG challenge page:${NC} $challenge_page"
 fi
 
@@ -306,13 +306,13 @@ else
   incorrect_resp=$(curl -s -w "HTTPSTATUS:%{http_code}" "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 10.0.0.150" \
     --data-urlencode "seed=$challenge_seed" \
     --data-urlencode "output=$challenge_output" \
-    -X POST "$BASE_URL/challenge")
+    -X POST "$BASE_URL/challenge/puzzle")
   incorrect_body=$(echo "$incorrect_resp" | sed -e 's/HTTPSTATUS:.*//')
   incorrect_status=$(echo "$incorrect_resp" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
   if [[ "$incorrect_status" == "403" ]] && echo "$incorrect_body" | grep -q 'Incorrect'; then
-    pass "POST /challenge returns Incorrect for wrong answer"
+    pass "POST /challenge/puzzle returns Incorrect for wrong answer"
   else
-    fail "POST /challenge did not return expected Incorrect response"
+    fail "POST /challenge/puzzle did not return expected Incorrect response"
     echo -e "${YELLOW}DEBUG incorrect status:${NC} $incorrect_status"
     echo -e "${YELLOW}DEBUG incorrect body:${NC} $incorrect_body"
   fi
@@ -320,7 +320,7 @@ else
   replay_resp=$(curl -s -w "HTTPSTATUS:%{http_code}" "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 10.0.0.150" \
     --data-urlencode "seed=$challenge_seed" \
     --data-urlencode "output=$challenge_output" \
-    -X POST "$BASE_URL/challenge")
+    -X POST "$BASE_URL/challenge/puzzle")
   replay_body=$(echo "$replay_resp" | sed -e 's/HTTPSTATUS:.*//')
   replay_status=$(echo "$replay_resp" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
   if [[ "$replay_status" == "403" ]] && echo "$replay_body" | grep -q 'Expired'; then
