@@ -11,8 +11,16 @@ jobs:
     continue-on-error: true
     runs-on: ubuntu-latest
     env:
-      SHUMA_API_KEY: changeme-dev-only-api-key
+      SHUMA_API_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      SHUMA_JS_SECRET: 9a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef
       SHUMA_FORWARDED_IP_SECRET: changeme-dev-only-ip-secret
+      SHUMA_EVENT_LOG_RETENTION_HOURS: "168"
+      SHUMA_ADMIN_CONFIG_WRITE_ENABLED: "true"
+      SHUMA_KV_STORE_FAIL_OPEN: "true"
+      SHUMA_ENFORCE_HTTPS: "false"
+      SHUMA_POW_CONFIG_MUTABLE: "true"
+      SHUMA_CHALLENGE_CONFIG_MUTABLE: "true"
+      SHUMA_BOTNESS_CONFIG_MUTABLE: "true"
       DEV_ADMIN_PAGE_CONFIG: "true"
       SHUMA_DEBUG_HEADERS: "true"
     steps:
@@ -34,7 +42,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y curl ca-certificates jq
+          sudo apt-get update && sudo apt-get install -y curl ca-certificates jq sqlite3
 
       - name: Install Spin CLI
         run: |
@@ -51,6 +59,9 @@ jobs:
           cargo build --target wasm32-wasip1 --release
           cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_defence.wasm
           ./scripts/set_crate_type.sh rlib
+
+      - name: Seed KV tunable config
+        run: make config-seed
 
       - name: Start server (background)
         run: |

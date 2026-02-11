@@ -131,9 +131,11 @@ curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -X POST 
   "$BASE_URL/admin/config" > /dev/null || true
 
 info "Clearing bans for integration test IPs..."
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" \
-  -H "Authorization: Bearer $SHUMA_API_KEY" \
-  "$BASE_URL/admin/unban?ip=${TEST_HONEYPOT_IP}" > /dev/null || true
+for ip in "${TEST_HONEYPOT_IP}" 10.0.0.99 10.0.0.100 10.0.0.150 10.0.0.210 10.0.0.211 10.0.0.212; do
+  curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" \
+    -H "Authorization: Bearer $SHUMA_API_KEY" \
+    "$BASE_URL/admin/unban?ip=${ip}" > /dev/null || true
+done
 
 info "Resolving configured honeypot path..."
 config_snapshot=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/config")
@@ -404,7 +406,7 @@ else
 
   info "Testing GEO policy route: maze tier..."
   geo_maze_cfg=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $SHUMA_API_KEY" -H "Content-Type: application/json" \
-    -d '{"geo_risk":[],"geo_allow":[],"geo_challenge":[],"geo_maze":["RU"],"geo_block":[],"maze_enabled":true}' "$BASE_URL/admin/config")
+    -d '{"geo_risk":[],"geo_allow":[],"geo_challenge":[],"geo_maze":["RU"],"geo_block":[],"maze_enabled":true,"maze_auto_ban":false}' "$BASE_URL/admin/config")
   if ! echo "$geo_maze_cfg" | grep -q '"geo_maze":\["RU"\]'; then
     fail "Failed to apply GEO maze policy config"
     echo -e "${YELLOW}DEBUG geo maze config:${NC} $geo_maze_cfg"
