@@ -1,6 +1,6 @@
 # TODO
 
-This and the SECURITY_REVIEW.md are the single sources of truth for active project work.
+This and `todos/security-review.md` are the single sources of truth for active project work.
 ## Testing (recurring)
 - [ ] review unit tests, integrations tests and the e2e and CI flow all pass and complete
 - [ ] identify missing tests and prioritise
@@ -25,9 +25,12 @@ This and the SECURITY_REVIEW.md are the single sources of truth for active proje
 - [ ] Add ASN/network dimensions in GEO policy logic (not just country list). (src/geo.rs, src/config.rs, src/admin.rs)
 - [ ] Add GEO/ASN observability and alerting (metrics + dashboard panels + docs). (src/metrics.rs, dashboard, docs)
 
-## Challenge Roadmap
+## Challenge
 - [ ] Implement tarpit mode (slow-drip responses) with clear routing policy, metrics, and admin/status visibility. (src/lib.rs, src/metrics.rs, dashboard, docs)
 - [ ] Research and design a low-friction checkbox challenge (single-tick "I am not a robot") for lower botness tiers: define best-practice signal capture around the click event, anti-abuse decision flow, and routing outcomes (allow/challenge/maze/block). (research, src/challenge.rs, src/lib.rs, dashboard, docs)
+- [ ] Add an accessibility-equivalent challenge modality with the same verification strength (same expiry, single-use, signature, and IP-bucket checks as the visual puzzle). (src/challenge.rs, docs/challenge-verification.md)
+- [ ] Add post-success human-verification token issuance and enforcement for protected flows. (src/challenge.rs, src/lib.rs, src/auth.rs, docs)
+- [ ] Add challenge operational metrics for abandonment/latency (for example median solve time and incomplete challenge rate). (src/metrics.rs, dashboard, docs/testing.md)
 
 ## Config and Naming Clarity
 - [ ] Evaluate renaming `SHUMA_CHALLENGE_RISK_THRESHOLD` to `SHUMA_BOTNESS_CHALLENGE_THRESHOLD` to reflect that it is a botness cutoff, not a parallel risk model. (src/config.rs, docs, dashboard)
