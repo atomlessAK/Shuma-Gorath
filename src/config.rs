@@ -261,6 +261,9 @@ pub fn defaults() -> &'static Config {
 
 pub fn validate_env_only_once() -> Result<(), String> {
     if cfg!(test) {
+        if validate_env_in_tests_enabled() {
+            return validate_env_only_impl();
+        }
         return Ok(());
     }
     match &*ENV_VALIDATION_RESULT {
@@ -284,6 +287,16 @@ fn validate_env_only_impl() -> Result<(), String> {
     validate_bool_like_var("SHUMA_BOTNESS_CONFIG_MUTABLE")?;
 
     Ok(())
+}
+
+fn validate_env_in_tests_enabled() -> bool {
+    if !cfg!(test) {
+        return false;
+    }
+    env::var("SHUMA_VALIDATE_ENV_IN_TESTS")
+        .ok()
+        .and_then(|v| parse_bool_like(v.as_str()))
+        .unwrap_or(false)
 }
 
 fn validate_non_empty(name: &str) -> Result<(), String> {

@@ -274,3 +274,47 @@ fn geo_headers_are_used_when_forwarding_is_trusted() {
     assert!(assessment.scored_risk);
     std::env::remove_var("SHUMA_FORWARDED_IP_SECRET");
 }
+
+#[test]
+fn invalid_bool_env_returns_500_without_panicking() {
+    let _lock = ENV_MUTEX
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+    std::env::set_var("SHUMA_VALIDATE_ENV_IN_TESTS", "true");
+    std::env::set_var("SHUMA_API_KEY", "test-admin-key");
+    std::env::set_var("SHUMA_JS_SECRET", "test-js-secret");
+    std::env::set_var("SHUMA_FORWARDED_IP_SECRET", "test-forwarded-secret");
+    std::env::set_var("SHUMA_EVENT_LOG_RETENTION_HOURS", "168");
+    std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "false");
+    std::env::set_var("SHUMA_KV_STORE_FAIL_OPEN", "true");
+    std::env::set_var("SHUMA_ENFORCE_HTTPS", "not-a-bool");
+    std::env::set_var("SHUMA_DEBUG_HEADERS", "false");
+    std::env::set_var("SHUMA_POW_CONFIG_MUTABLE", "false");
+    std::env::set_var("SHUMA_CHALLENGE_CONFIG_MUTABLE", "false");
+    std::env::set_var("SHUMA_BOTNESS_CONFIG_MUTABLE", "false");
+
+    let req = request_with_method_and_headers(Method::Get, "/health", &[]);
+    let result = std::panic::catch_unwind(|| crate::handle_bot_defence_impl(&req));
+    assert!(result.is_ok(), "handler panicked on invalid bool env");
+
+    let resp = result.unwrap();
+    assert_eq!(*resp.status(), 500u16);
+    assert_eq!(
+        String::from_utf8(resp.into_body()).unwrap(),
+        "Server configuration error"
+    );
+
+    std::env::remove_var("SHUMA_VALIDATE_ENV_IN_TESTS");
+    std::env::remove_var("SHUMA_API_KEY");
+    std::env::remove_var("SHUMA_JS_SECRET");
+    std::env::remove_var("SHUMA_FORWARDED_IP_SECRET");
+    std::env::remove_var("SHUMA_EVENT_LOG_RETENTION_HOURS");
+    std::env::remove_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED");
+    std::env::remove_var("SHUMA_KV_STORE_FAIL_OPEN");
+    std::env::remove_var("SHUMA_ENFORCE_HTTPS");
+    std::env::remove_var("SHUMA_DEBUG_HEADERS");
+    std::env::remove_var("SHUMA_POW_CONFIG_MUTABLE");
+    std::env::remove_var("SHUMA_CHALLENGE_CONFIG_MUTABLE");
+    std::env::remove_var("SHUMA_BOTNESS_CONFIG_MUTABLE");
+}
