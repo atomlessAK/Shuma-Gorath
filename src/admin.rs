@@ -466,6 +466,94 @@ mod admin_config_tests {
     }
 }
 
+#[cfg(test)]
+mod admin_auth_tests {
+    use super::*;
+    use once_cell::sync::Lazy;
+    use spin_sdk::http::{Method, Request};
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+
+    static ENV_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
+    #[derive(Default)]
+    struct TestStore {
+        map: Mutex<HashMap<String, Vec<u8>>>,
+    }
+
+    impl crate::challenge::KeyValueStore for TestStore {
+        fn get(&self, key: &str) -> Result<Option<Vec<u8>>, ()> {
+            Ok(self.map.lock().unwrap().get(key).cloned())
+        }
+
+        fn set(&self, key: &str, value: &[u8]) -> Result<(), ()> {
+            self.map
+                .lock()
+                .unwrap()
+                .insert(key.to_string(), value.to_vec());
+            Ok(())
+        }
+
+        fn delete(&self, key: &str) -> Result<(), ()> {
+            self.map.lock().unwrap().remove(key);
+            Ok(())
+        }
+    }
+
+    fn login_request(api_key: &str) -> Request {
+        let mut builder = Request::builder();
+        builder
+            .method(Method::Post)
+            .uri("/admin/login")
+            .header("content-type", "application/json")
+            .body(format!(r#"{{"api_key":"{}"}}"#, api_key).into_bytes());
+        builder.build()
+    }
+
+    fn logout_request() -> Request {
+        let mut builder = Request::builder();
+        builder.method(Method::Post).uri("/admin/logout");
+        builder.build()
+    }
+
+    #[test]
+    fn login_invalid_api_key_is_rate_limited() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+        std::env::set_var("SHUMA_API_KEY", "test-admin-key");
+        std::env::set_var("SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE", "2");
+        let store = TestStore::default();
+
+        let req = login_request("wrong-key");
+        let first = handle_admin_login(&req, &store);
+        assert_eq!(*first.status(), 401u16);
+
+        let second = handle_admin_login(&req, &store);
+        assert_eq!(*second.status(), 401u16);
+
+        let third = handle_admin_login(&req, &store);
+        assert_eq!(*third.status(), 429u16);
+
+        std::env::remove_var("SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE");
+        std::env::remove_var("SHUMA_API_KEY");
+    }
+
+    #[test]
+    fn logout_unauthorized_is_rate_limited() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+        std::env::set_var("SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE", "1");
+        let store = TestStore::default();
+        let req = logout_request();
+
+        let first = handle_admin_logout(&req, &store);
+        assert_eq!(*first.status(), 401u16);
+
+        let second = handle_admin_logout(&req, &store);
+        assert_eq!(*second.status(), 429u16);
+
+        std::env::remove_var("SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE");
+    }
+}
+
 /// Utility to get current unix timestamp
 pub fn now_ts() -> u64 {
     SystemTime::now()
@@ -533,6 +621,15 @@ fn clear_session_cookie_value() -> String {
     )
 }
 
+fn too_many_admin_auth_attempts_response() -> Response {
+    Response::builder()
+        .status(429)
+        .header("Retry-After", "60")
+        .header("Cache-Control", "no-store")
+        .body("Too Many Requests")
+        .build()
+}
+
 fn handle_admin_login<S: crate::challenge::KeyValueStore>(req: &Request, store: &S) -> Response {
     if req.method() != &spin_sdk::http::Method::Post {
         return Response::new(405, "Method Not Allowed");
@@ -547,6 +644,13 @@ fn handle_admin_login<S: crate::challenge::KeyValueStore>(req: &Request, store: 
     };
 
     if !crate::auth::verify_admin_api_key_candidate(api_key) {
+        if crate::auth::register_admin_auth_failure(
+            store,
+            req,
+            crate::auth::AdminAuthFailureScope::Login,
+        ) {
+            return too_many_admin_auth_attempts_response();
+        }
         return Response::new(401, "Unauthorized");
     }
 
@@ -604,6 +708,13 @@ fn handle_admin_logout<S: crate::challenge::KeyValueStore>(req: &Request, store:
 
     let auth = crate::auth::authenticate_admin(req, store);
     if !auth.is_authorized() {
+        if crate::auth::register_admin_auth_failure(
+            store,
+            req,
+            crate::auth::AdminAuthFailureScope::Endpoint,
+        ) {
+            return too_many_admin_auth_attempts_response();
+        }
         return Response::new(401, "Unauthorized: Invalid or missing API key");
     }
     if auth.requires_csrf(req) {
@@ -1273,6 +1384,13 @@ pub fn handle_admin(req: &Request) -> Response {
     // Require either a valid bearer token or a valid admin session cookie.
     let auth = crate::auth::authenticate_admin(req, &store);
     if !auth.is_authorized() {
+        if crate::auth::register_admin_auth_failure(
+            &store,
+            req,
+            crate::auth::AdminAuthFailureScope::Endpoint,
+        ) {
+            return too_many_admin_auth_attempts_response();
+        }
         return Response::new(401, "Unauthorized: Invalid or missing API key");
     }
     if auth.requires_csrf(req) {

@@ -81,6 +81,7 @@ SHUMA_POW_SECRET=${SHUMA_POW_SECRET:-}
 SHUMA_CHALLENGE_SECRET=${SHUMA_CHALLENGE_SECRET:-}
 SHUMA_FORWARDED_IP_SECRET=${SHUMA_FORWARDED_IP_SECRET:-}
 SHUMA_ADMIN_IP_ALLOWLIST=${SHUMA_ADMIN_IP_ALLOWLIST:-}
+SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE=${SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE:-}
 SHUMA_EVENT_LOG_RETENTION_HOURS=${SHUMA_EVENT_LOG_RETENTION_HOURS:-}
 SHUMA_ADMIN_CONFIG_WRITE_ENABLED=${SHUMA_ADMIN_CONFIG_WRITE_ENABLED:-}
 SHUMA_KV_STORE_FAIL_OPEN=${SHUMA_KV_STORE_FAIL_OPEN:-}
@@ -140,6 +141,37 @@ ensure_env_local_default_from_defaults() {
     if [[ -z "$current_value" ]]; then
         upsert_env_local_value "$key" "$default_value"
     fi
+}
+
+detect_primary_ipv4() {
+    local iface=""
+    local ip=""
+    if [[ "$(uname)" == "Darwin" ]] && command -v route &> /dev/null && command -v ipconfig &> /dev/null; then
+        iface="$(route -n get default 2>/dev/null | awk '/interface:/{print $2; exit}')"
+        if [[ -n "$iface" ]]; then
+            ip="$(ipconfig getifaddr "$iface" 2>/dev/null || true)"
+        fi
+    fi
+    printf '%s' "$ip"
+}
+
+default_admin_ip_allowlist_value() {
+    local primary_ip=""
+    primary_ip="$(detect_primary_ipv4)"
+    if [[ -n "$primary_ip" ]]; then
+        printf '127.0.0.1,::1,%s' "$primary_ip"
+    else
+        printf '127.0.0.1,::1'
+    fi
+}
+
+ensure_admin_ip_allowlist_local_default() {
+    local current_value=""
+    current_value="$(read_env_local_value "SHUMA_ADMIN_IP_ALLOWLIST")"
+    if [[ -n "$current_value" ]]; then
+        return
+    fi
+    upsert_env_local_value "SHUMA_ADMIN_IP_ALLOWLIST" "$(default_admin_ip_allowlist_value)"
 }
 
 echo -e "${CYAN}"
@@ -295,7 +327,8 @@ ensure_local_dev_secret "SHUMA_JS_SECRET" 32
 ensure_local_dev_secret "SHUMA_FORWARDED_IP_SECRET" 32
 ensure_env_local_default_from_defaults "SHUMA_POW_SECRET"
 ensure_env_local_default_from_defaults "SHUMA_CHALLENGE_SECRET"
-ensure_env_local_default_from_defaults "SHUMA_ADMIN_IP_ALLOWLIST"
+ensure_admin_ip_allowlist_local_default
+ensure_env_local_default_from_defaults "SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE"
 ensure_env_local_default_from_defaults "SHUMA_EVENT_LOG_RETENTION_HOURS"
 ensure_env_local_default_from_defaults "SHUMA_ADMIN_CONFIG_WRITE_ENABLED"
 ensure_env_local_default_from_defaults "SHUMA_KV_STORE_FAIL_OPEN"

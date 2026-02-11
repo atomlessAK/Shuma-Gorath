@@ -9,6 +9,11 @@ const INSECURE_DEFAULT_API_KEY: &str = "changeme-supersecret";
 const ADMIN_SESSION_COOKIE_NAME: &str = "shuma_admin_session";
 const ADMIN_SESSION_KEY_PREFIX: &str = "admin_session:";
 const ADMIN_SESSION_TTL_SECONDS: u64 = 3600;
+const ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE_DEFAULT: u32 = 10;
+const ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE_MIN: u32 = 1;
+const ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE_MAX: u32 = 10_000;
+const ADMIN_AUTH_FAILURE_SITE_LOGIN: &str = "admin-auth-login";
+const ADMIN_AUTH_FAILURE_SITE_ENDPOINT: &str = "admin-auth-endpoint";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct AdminSessionRecord {
@@ -230,6 +235,48 @@ pub fn admin_session_ttl_seconds() -> u64 {
     ADMIN_SESSION_TTL_SECONDS
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AdminAuthFailureScope {
+    Login,
+    Endpoint,
+}
+
+fn parse_admin_auth_failure_limit(value: Option<&str>) -> u32 {
+    value
+        .and_then(|raw| raw.trim().parse::<u32>().ok())
+        .unwrap_or(ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE_DEFAULT)
+        .clamp(
+            ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE_MIN,
+            ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE_MAX,
+        )
+}
+
+pub fn admin_auth_failure_limit_per_minute() -> u32 {
+    parse_admin_auth_failure_limit(
+        std::env::var("SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE")
+            .ok()
+            .as_deref(),
+    )
+}
+
+fn admin_auth_failure_site(scope: AdminAuthFailureScope) -> &'static str {
+    match scope {
+        AdminAuthFailureScope::Login => ADMIN_AUTH_FAILURE_SITE_LOGIN,
+        AdminAuthFailureScope::Endpoint => ADMIN_AUTH_FAILURE_SITE_ENDPOINT,
+    }
+}
+
+/// Records a failed admin auth attempt and returns true when throttled.
+pub fn register_admin_auth_failure<S: KeyValueStore>(
+    store: &S,
+    req: &Request,
+    scope: AdminAuthFailureScope,
+) -> bool {
+    let ip = crate::extract_client_ip(req);
+    let limit = admin_auth_failure_limit_per_minute();
+    !crate::rate::check_rate_limit(store, admin_auth_failure_site(scope), &ip, limit)
+}
+
 /// Returns true if admin access is allowed from this IP.
 /// If SHUMA_ADMIN_IP_ALLOWLIST is unset, all IPs are allowed (auth still required).
 pub fn is_admin_ip_allowed(req: &Request) -> bool {
@@ -295,6 +342,16 @@ mod tests {
         builder.build()
     }
 
+    fn request_with_forwarded_ip(ip: &str, forwarded_secret: &str) -> Request {
+        let mut builder = Request::builder();
+        builder
+            .method(Method::Post)
+            .uri("/admin/login")
+            .header("x-forwarded-for", ip)
+            .header("x-shuma-forwarded-secret", forwarded_secret);
+        builder.build()
+    }
+
     #[test]
     fn unauthorized_when_api_key_missing() {
         let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
@@ -355,5 +412,62 @@ mod tests {
             &req,
             auth.csrf_token.as_deref().unwrap_or("")
         ));
+    }
+
+    #[test]
+    fn admin_auth_failures_are_rate_limited() {
+        let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
+        std::env::set_var("SHUMA_FORWARDED_IP_SECRET", "test-forwarded-secret");
+        std::env::set_var("SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE", "2");
+        let req = request_with_forwarded_ip("1.2.3.4", "test-forwarded-secret");
+        let store = MockStore::default();
+
+        assert!(!register_admin_auth_failure(
+            &store,
+            &req,
+            AdminAuthFailureScope::Login
+        ));
+        assert!(!register_admin_auth_failure(
+            &store,
+            &req,
+            AdminAuthFailureScope::Login
+        ));
+        assert!(register_admin_auth_failure(
+            &store,
+            &req,
+            AdminAuthFailureScope::Login
+        ));
+
+        std::env::remove_var("SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE");
+        std::env::remove_var("SHUMA_FORWARDED_IP_SECRET");
+    }
+
+    #[test]
+    fn admin_auth_failure_scopes_are_independent() {
+        let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
+        std::env::set_var("SHUMA_FORWARDED_IP_SECRET", "test-forwarded-secret");
+        std::env::set_var("SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE", "1");
+        let req = request_with_forwarded_ip("1.2.3.4", "test-forwarded-secret");
+        let store = MockStore::default();
+
+        assert!(!register_admin_auth_failure(
+            &store,
+            &req,
+            AdminAuthFailureScope::Login
+        ));
+        assert!(register_admin_auth_failure(
+            &store,
+            &req,
+            AdminAuthFailureScope::Login
+        ));
+
+        assert!(!register_admin_auth_failure(
+            &store,
+            &req,
+            AdminAuthFailureScope::Endpoint
+        ));
+
+        std::env::remove_var("SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE");
+        std::env::remove_var("SHUMA_FORWARDED_IP_SECRET");
     }
 }
