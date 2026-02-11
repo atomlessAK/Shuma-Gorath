@@ -46,6 +46,54 @@ Validation helper before deploy:
 make deploy-env-validate
 ```
 
+## 🐙 CDN/WAF Rate Limits (Cloudflare + Akamai)
+
+Treat this as first-layer abuse control. Keep app-level auth and rate-limiting logic enabled as a second layer.
+
+Recommended baseline policies:
+
+- `POST /admin/login`: strict limit (start around `5 requests/minute/IP`, burst up to `10`).
+- All other `/admin/*`: moderate limit (start around `60 requests/minute/IP`).
+- Exempt trusted operator and monitoring source IPs/CIDRs to avoid self-lockout.
+
+### 🐙 Cloudflare
+
+Use WAF Rate Limiting rules with client IP as the key characteristic.
+
+Suggested rules:
+
+1. Login endpoint:
+   - Match expression: `http.request.method eq "POST" and http.request.uri.path eq "/admin/login"`
+   - Initial action: `Managed Challenge` (or `Block` for API-only admin workflows)
+2. Admin surface:
+   - Match expression: `starts_with(http.request.uri.path, "/admin/") and http.request.uri.path ne "/admin/login"`
+   - Initial action: `Managed Challenge` or `Block` based on your operator UX requirements
+
+Operational notes:
+
+- Start in monitor/challenge mode, review false positives, then tighten.
+- Ensure Cloudflare uses the real client IP signal from your edge chain.
+- Keep `/admin/*` route protections in place even after app-level distributed limiter work.
+
+### 🐙 Akamai
+
+Use App & API Protector rate controls/rate policies keyed by client IP.
+
+Suggested policies:
+
+1. Login endpoint policy:
+   - Match target: path `/admin/login` + method `POST`
+   - Threshold: strict (same baseline as above; tune with observed traffic)
+2. Admin surface policy:
+   - Match target: path prefix `/admin/` excluding login
+   - Threshold: moderate (same baseline as above; tune with observed traffic)
+
+Operational notes:
+
+- Roll out in alert/monitor mode first, then enforce deny/challenge actions.
+- Confirm client IP restoration (`True-Client-IP`/equivalent) so limits key on users, not intermediate proxies.
+- Keep these policies as a permanent first layer; they are not throwaway once distributed app-level limiting is added.
+
 ## 🐙 Forwarded Header Trust
 
 When `SHUMA_FORWARDED_IP_SECRET` is set, forwarded client/proto headers are trusted only if request includes:
