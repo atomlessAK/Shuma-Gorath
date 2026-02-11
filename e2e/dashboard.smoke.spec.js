@@ -4,19 +4,26 @@ const { seedDashboardData } = require("./seed-dashboard-data");
 const BASE_URL = process.env.SHUMA_BASE_URL || "http://127.0.0.1:3000";
 const API_KEY = process.env.SHUMA_API_KEY || "changeme-dev-only-api-key";
 
+async function openDashboard(page) {
+  await page.goto(`${BASE_URL}/dashboard/index.html`);
+  if (page.url().includes("/dashboard/login.html")) {
+    await page.fill("#login-apikey", API_KEY);
+    await page.click("#login-submit");
+    await expect(page).toHaveURL(/\/dashboard\/index\.html/);
+  }
+  await page.click("#refresh");
+}
+
 test.beforeAll(async () => {
   await seedDashboardData();
 });
 
 test("dashboard loads and shows seeded operational data", async ({ page }) => {
-  await page.goto(`${BASE_URL}/dashboard/index.html`);
+  await openDashboard(page);
 
   await expect(page.locator("h1")).toHaveText("Shuma-Gorath");
-  await page.fill("#endpoint", BASE_URL);
-  await page.fill("#apikey", API_KEY);
-  await page.click("#refresh");
 
-  await expect(page.locator("#last-updated")).toContainText("Last updated:");
+  await expect(page.locator("#last-updated")).toContainText("updated:");
   await expect(page.locator("#config-mode-subtitle")).toContainText("Admin page configuration enabled.");
 
   await expect(page.locator("#total-events")).not.toHaveText("-");
@@ -28,10 +35,7 @@ test("dashboard loads and shows seeded operational data", async ({ page }) => {
 });
 
 test("ban form enforces IP validity and submit state", async ({ page }) => {
-  await page.goto(`${BASE_URL}/dashboard/index.html`);
-  await page.fill("#endpoint", BASE_URL);
-  await page.fill("#apikey", API_KEY);
-  await page.click("#refresh");
+  await openDashboard(page);
 
   const banButton = page.locator("#ban-btn");
   await expect(banButton).toBeDisabled();
@@ -46,10 +50,7 @@ test("ban form enforces IP validity and submit state", async ({ page }) => {
 });
 
 test("maze and duration save buttons use shared dirty-state behavior", async ({ page }) => {
-  await page.goto(`${BASE_URL}/dashboard/index.html`);
-  await page.fill("#endpoint", BASE_URL);
-  await page.fill("#apikey", API_KEY);
-  await page.click("#refresh");
+  await openDashboard(page);
 
   const mazeSave = page.locator("#save-maze-config");
   const durationsSave = page.locator("#save-durations-btn");
@@ -67,9 +68,9 @@ test("maze and duration save buttons use shared dirty-state behavior", async ({ 
   await mazeThreshold.dispatchEvent("input");
   await expect(mazeSave).toBeDisabled();
 
-  const durationField = page.locator("#dur-admin");
+  const durationField = page.locator("#dur-admin-minutes");
   const initialDuration = await durationField.inputValue();
-  const nextDuration = String(Math.min(31536000, Number(initialDuration || "21600") + 60));
+  const nextDuration = String((Number(initialDuration || "0") + 1) % 60);
   await durationField.fill(nextDuration);
   await durationField.dispatchEvent("input");
   await expect(durationsSave).toBeEnabled();
@@ -79,10 +80,7 @@ test("maze and duration save buttons use shared dirty-state behavior", async ({ 
 });
 
 test("dashboard tables keep sticky headers", async ({ page }) => {
-  await page.goto(`${BASE_URL}/dashboard/index.html`);
-  await page.fill("#endpoint", BASE_URL);
-  await page.fill("#apikey", API_KEY);
-  await page.click("#refresh");
+  await openDashboard(page);
 
   const eventsHeaderPosition = await page
     .locator("#events thead th")
