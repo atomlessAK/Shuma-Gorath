@@ -13,7 +13,14 @@ jobs:
       RUST_BACKTRACE: full
       SHUMA_KV_STORE_FAIL_OPEN: "true"
       SHUMA_API_KEY: changeme-dev-only-api-key
+      SHUMA_JS_SECRET: changeme-dev-only-js-secret
       SHUMA_FORWARDED_IP_SECRET: changeme-dev-only-ip-secret
+      SHUMA_EVENT_LOG_RETENTION_HOURS: "168"
+      SHUMA_ADMIN_CONFIG_WRITE_ENABLED: "true"
+      SHUMA_ENFORCE_HTTPS: "false"
+      SHUMA_POW_CONFIG_MUTABLE: "true"
+      SHUMA_CHALLENGE_CONFIG_MUTABLE: "true"
+      SHUMA_BOTNESS_CONFIG_MUTABLE: "true"
       DEV_ADMIN_PAGE_CONFIG: "true"
       SHUMA_DEBUG_HEADERS: "true"
     steps:
