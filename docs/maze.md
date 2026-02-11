@@ -1,12 +1,13 @@
-# 🐙 Link Maze
+# 🐙 Maze
 
-The link maze is a crawler trap that serves a recursive tree of synthetic pages. It is designed to capture bots that follow links aggressively or ignore robots policies.
+The maze is a crawler trap that serves a recursive tree of synthetic pages. It is designed to capture bots that follow links aggressively or ignore robots policies.
 
 ## 🐙 How It Works
 
 - Requests to maze paths return pages that link to more maze pages
 - Each maze hit increments a counter
 - When a crawler crosses the configured threshold, it can be auto-banned
+- `robots.txt` now advertises active trap routes (`/maze/`, `/trap/`) and configured honeypot paths (for example `/instaban`)
 
 ## 🐙 Configuration
 
