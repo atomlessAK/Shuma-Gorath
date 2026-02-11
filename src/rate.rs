@@ -1,8 +1,8 @@
 // src/rate.rs
 // Rate limiting for WASM Bot Defence
 
-use crate::ip;
 use crate::challenge::KeyValueStore;
+use crate::ip;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn current_rate_usage<S: KeyValueStore>(store: &S, site_id: &str, ip: &str) -> u32 {
@@ -27,7 +27,13 @@ pub fn check_rate_limit<S: KeyValueStore>(store: &S, site_id: &str, ip: &str, li
     let now = now_ts();
     let window = now / 60; // 1-minute window
     let window_key = format!("{}:{}", key, window);
-    let count = store.get(&window_key).ok().flatten().and_then(|v| String::from_utf8(v).ok()).and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+    let count = store
+        .get(&window_key)
+        .ok()
+        .flatten()
+        .and_then(|v| String::from_utf8(v).ok())
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(0);
     if count >= limit {
         return false;
     }
@@ -47,7 +53,9 @@ mod tests {
 
     impl MockStore {
         fn new() -> Self {
-            MockStore { map: Mutex::new(HashMap::new()) }
+            MockStore {
+                map: Mutex::new(HashMap::new()),
+            }
         }
     }
 
@@ -96,5 +104,8 @@ mod tests {
 }
 
 fn now_ts() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
 }

@@ -1,8 +1,8 @@
 // src/ip.rs
 // Helper utilities for bucketing/sanitizing IPs to reduce key cardinality
 
-use std::net::IpAddr;
 use std::hash::{Hash, Hasher};
+use std::net::IpAddr;
 
 /// Bucket an IP address to reduce cardinality for KV keys.
 ///
@@ -24,7 +24,10 @@ pub fn bucket_ip_with_buckets(ip: &str, buckets: u64) -> String {
             }
             IpAddr::V6(v6) => {
                 let segs = v6.segments();
-                return format!("{:x}:{:x}:{:x}:{:x}::/64", segs[0], segs[1], segs[2], segs[3]);
+                return format!(
+                    "{:x}:{:x}:{:x}:{:x}::/64",
+                    segs[0], segs[1], segs[2], segs[3]
+                );
             }
         }
     }

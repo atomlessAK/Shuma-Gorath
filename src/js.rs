@@ -1,8 +1,17 @@
 /// Returns true if the request needs JS verification (no valid js_verified cookie),
 /// but bypasses challenge for whitelisted browsers.
-pub fn needs_js_verification_with_whitelist(req: &Request, _store: &Store, _site_id: &str, ip: &str, browser_whitelist: &[(String, u32)]) -> bool {
+pub fn needs_js_verification_with_whitelist(
+    req: &Request,
+    _store: &Store,
+    _site_id: &str,
+    ip: &str,
+    browser_whitelist: &[(String, u32)],
+) -> bool {
     // Check for browser whitelist
-    let ua = req.header("user-agent").map(|v| v.as_str().unwrap_or("")).unwrap_or("");
+    let ua = req
+        .header("user-agent")
+        .map(|v| v.as_str().unwrap_or(""))
+        .unwrap_or("");
     for (name, min_version) in browser_whitelist {
         if let Some(ver) = super::browser::extract_version(ua, name) {
             if ver >= *min_version {
@@ -17,11 +26,11 @@ pub fn needs_js_verification_with_whitelist(req: &Request, _store: &Store, _site
 // JavaScript verification and challenge logic for WASM Bot Defence
 // Handles JS-based bot detection and challenge/response for suspicious clients.
 
-use spin_sdk::http::{Request, Response};
-use spin_sdk::key_value::Store;
+use base64::{engine::general_purpose, Engine as _};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
-use base64::{engine::general_purpose, Engine as _};
+use spin_sdk::http::{Request, Response};
+use spin_sdk::key_value::Store;
 
 /// Secret used for HMAC token generation for JS verification cookies.
 /// Pull from env to avoid a repo-known static secret in production.
@@ -76,7 +85,8 @@ pub fn inject_js_challenge(
 
     if pow_enabled {
         let challenge = crate::pow::issue_pow_challenge(ip, pow_difficulty, pow_ttl_seconds);
-        let html = format!(r#"
+        let html = format!(
+            r#"
         <html><head><script>{cdp_script}</script></head><body>
         <script>
             // Run CDP detection before allowing access
@@ -159,14 +169,15 @@ pub fn inject_js_challenge(
     <noscript>Please enable JS to continue.</noscript>
     </body></html>
     "#,
-        seed = challenge.seed,
-        difficulty = challenge.difficulty
+            seed = challenge.seed,
+            difficulty = challenge.difficulty
         );
         return Response::new(200, html);
     }
 
     let token = make_token(ip);
-    let html = format!(r#"
+    let html = format!(
+        r#"
         <html><head><script>{cdp_script}</script></head><body>
         <script>
             // Run CDP detection before allowing access
@@ -190,6 +201,7 @@ pub fn inject_js_challenge(
     </script>
     <noscript>Please enable JS to continue.</noscript>
     </body></html>
-    "#);
+    "#
+    );
     Response::new(200, html)
 }

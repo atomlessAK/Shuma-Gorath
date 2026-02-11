@@ -35,7 +35,9 @@ impl ConfigLoadError {
     pub fn user_message(&self) -> &'static str {
         match self {
             ConfigLoadError::StoreUnavailable => "Configuration unavailable (KV store error)",
-            ConfigLoadError::MissingConfig => "Configuration unavailable (missing KV config; run setup/config-seed)",
+            ConfigLoadError::MissingConfig => {
+                "Configuration unavailable (missing KV config; run setup/config-seed)"
+            }
             ConfigLoadError::InvalidConfig => "Configuration unavailable (invalid KV config)",
         }
     }
@@ -185,7 +187,8 @@ impl Config {
             .map_err(|_| ConfigLoadError::StoreUnavailable)?
             .ok_or(ConfigLoadError::MissingConfig)?;
 
-        let mut cfg = serde_json::from_slice::<Config>(&val).map_err(|_| ConfigLoadError::InvalidConfig)?;
+        let mut cfg =
+            serde_json::from_slice::<Config>(&val).map_err(|_| ConfigLoadError::InvalidConfig)?;
         clamp_config_values(&mut cfg);
         Ok(cfg)
     }
@@ -478,7 +481,10 @@ fn parse_defaults_env_map(input: &str) -> Result<HashMap<String, String>, String
             .chars()
             .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit() || ch == '_')
         {
-            return Err(format!("Invalid defaults key '{}' on line {}", key, line_no));
+            return Err(format!(
+                "Invalid defaults key '{}' on line {}",
+                key, line_no
+            ));
         }
 
         let mut value = raw_value.trim().to_string();

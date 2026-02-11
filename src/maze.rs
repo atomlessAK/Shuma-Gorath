@@ -34,9 +34,11 @@ struct SeededRng {
 impl SeededRng {
     fn new(seed: u64) -> Self {
         // Ensure non-zero state
-        SeededRng { state: if seed == 0 { 0xDEADBEEF } else { seed } }
+        SeededRng {
+            state: if seed == 0 { 0xDEADBEEF } else { seed },
+        }
     }
-    
+
     fn next(&mut self) -> u64 {
         let mut x = self.state;
         x ^= x << 13;
@@ -45,14 +47,14 @@ impl SeededRng {
         self.state = x;
         x
     }
-    
+
     fn range(&mut self, min: usize, max: usize) -> usize {
         if min >= max {
             return min;
         }
         min + (self.next() as usize % (max - min + 1))
     }
-    
+
     /// Pick a random item from a static string slice
     fn pick(&mut self, items: &[&'static str]) -> &'static str {
         let idx = self.next() as usize % items.len();
@@ -77,32 +79,112 @@ fn generate_path_segment(rng: &mut SeededRng, len: usize) -> String {
 
 /// Word lists for generating fake content
 const NOUNS: &[&str] = &[
-    "system", "data", "server", "network", "client", "database", "file", "user",
-    "admin", "config", "backup", "report", "dashboard", "analytics", "service",
-    "process", "resource", "module", "component", "interface", "protocol", "session",
-    "transaction", "record", "entry", "request", "response", "cache", "storage",
-    "cluster", "node", "instance", "container", "deployment", "pipeline", "workflow",
+    "system",
+    "data",
+    "server",
+    "network",
+    "client",
+    "database",
+    "file",
+    "user",
+    "admin",
+    "config",
+    "backup",
+    "report",
+    "dashboard",
+    "analytics",
+    "service",
+    "process",
+    "resource",
+    "module",
+    "component",
+    "interface",
+    "protocol",
+    "session",
+    "transaction",
+    "record",
+    "entry",
+    "request",
+    "response",
+    "cache",
+    "storage",
+    "cluster",
+    "node",
+    "instance",
+    "container",
+    "deployment",
+    "pipeline",
+    "workflow",
 ];
 
 const VERBS: &[&str] = &[
-    "configure", "manage", "update", "delete", "create", "view", "export", "import",
-    "sync", "backup", "restore", "monitor", "analyze", "optimize", "validate",
-    "process", "submit", "review", "approve", "deploy", "migrate", "transform",
+    "configure",
+    "manage",
+    "update",
+    "delete",
+    "create",
+    "view",
+    "export",
+    "import",
+    "sync",
+    "backup",
+    "restore",
+    "monitor",
+    "analyze",
+    "optimize",
+    "validate",
+    "process",
+    "submit",
+    "review",
+    "approve",
+    "deploy",
+    "migrate",
+    "transform",
 ];
 
 const ADJECTIVES: &[&str] = &[
-    "advanced", "secure", "internal", "external", "primary", "secondary", "legacy",
-    "updated", "archived", "active", "pending", "completed", "failed", "critical",
-    "standard", "custom", "automated", "manual", "scheduled", "temporary", "permanent",
+    "advanced",
+    "secure",
+    "internal",
+    "external",
+    "primary",
+    "secondary",
+    "legacy",
+    "updated",
+    "archived",
+    "active",
+    "pending",
+    "completed",
+    "failed",
+    "critical",
+    "standard",
+    "custom",
+    "automated",
+    "manual",
+    "scheduled",
+    "temporary",
+    "permanent",
 ];
 
 const DEPARTMENTS: &[&str] = &[
-    "Sales", "Marketing", "Engineering", "HR", "Finance", "Operations", "Support",
-    "IT", "Legal", "Compliance", "Security", "Development", "QA", "DevOps",
+    "Sales",
+    "Marketing",
+    "Engineering",
+    "HR",
+    "Finance",
+    "Operations",
+    "Support",
+    "IT",
+    "Legal",
+    "Compliance",
+    "Security",
+    "Development",
+    "QA",
+    "DevOps",
 ];
 
 const MONTHS: &[&str] = &[
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
 /// Capitalize first letter
@@ -262,7 +344,7 @@ pub fn is_maze_path(path: &str) -> bool {
 pub fn handle_maze_request(path: &str) -> http::Response {
     let config = MazeConfig::default();
     let html = generate_maze_page(path, &config);
-    
+
     http::Response::builder()
         .status(200)
         .header("Content-Type", "text/html; charset=utf-8")
@@ -276,19 +358,24 @@ pub fn handle_maze_request(path: &str) -> http::Response {
 pub fn generate_maze_page(path: &str, config: &MazeConfig) -> String {
     let seed = path_to_seed(path);
     let mut rng = SeededRng::new(seed);
-    
+
     let title = generate_title(&mut rng);
     let num_links = rng.range(config.min_links, config.max_links);
     let num_paragraphs = rng.range(config.min_paragraphs, config.max_paragraphs);
-    
+
     // Generate breadcrumb parts
     let dept = rng.pick(DEPARTMENTS);
     let breadcrumb_noun = capitalize(rng.pick(NOUNS));
-    
+
     // Determine the base path (keep /trap/ or /maze/ prefix)
-    let base_prefix = if path.starts_with("/trap/") { "/trap/" } else { "/maze/" };
-    
-    let mut html = format!(r#"<!DOCTYPE html>
+    let base_prefix = if path.starts_with("/trap/") {
+        "/trap/"
+    } else {
+        "/maze/"
+    };
+
+    let mut html = format!(
+        r#"<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -383,8 +470,9 @@ pub fn generate_maze_page(path: &str, config: &MazeConfig) -> String {
             <div class="breadcrumb">Portal &gt; {dept} &gt; {breadcrumb_noun} Management</div>
         </header>
         <div class="content">
-"#);
-    
+"#
+    );
+
     // Add description paragraphs
     for _ in 0..num_paragraphs {
         let para = generate_paragraph(&mut rng);
@@ -393,17 +481,17 @@ pub fn generate_maze_page(path: &str, config: &MazeConfig) -> String {
             para
         ));
     }
-    
+
     // Add navigation grid with links
     html.push_str("            <div class=\"nav-grid\">\n");
-    
+
     for _ in 0..num_links {
         let link_path = format!("{}{}", base_prefix, generate_path_segment(&mut rng, 16));
         let link_text = generate_link_text(&mut rng);
         let link_desc = generate_paragraph(&mut rng);
         // Truncate description
         let short_desc: String = link_desc.chars().take(80).collect();
-        
+
         html.push_str(&format!(
             r#"                <a href="{}" class="nav-card">
                     <h3>{}</h3>
@@ -414,10 +502,10 @@ pub fn generate_maze_page(path: &str, config: &MazeConfig) -> String {
             link_path, link_text, short_desc
         ));
     }
-    
+
     html.push_str("            </div>\n");
     html.push_str("        </div>\n");
-    
+
     // Footer
     let footer_date = generate_fake_date(&mut rng);
     let session_id = generate_path_segment(&mut rng, 8);
@@ -430,14 +518,14 @@ pub fn generate_maze_page(path: &str, config: &MazeConfig) -> String {
 </html>"#,
         footer_date, session_id
     ));
-    
+
     html
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_is_maze_path() {
         assert!(is_maze_path("/trap/abc123"));
@@ -445,7 +533,7 @@ mod tests {
         assert!(!is_maze_path("/admin/config"));
         assert!(!is_maze_path("/api/data"));
     }
-    
+
     #[test]
     fn test_deterministic_generation() {
         let config = MazeConfig::default();
@@ -453,46 +541,61 @@ mod tests {
         let page2 = generate_maze_page("/trap/test123", &config);
         assert_eq!(page1, page2, "Same path should generate identical pages");
     }
-    
+
     #[test]
     fn test_different_paths_different_pages() {
         let config = MazeConfig::default();
         let page1 = generate_maze_page("/trap/path1", &config);
         let page2 = generate_maze_page("/trap/path2", &config);
-        assert_ne!(page1, page2, "Different paths should generate different pages");
+        assert_ne!(
+            page1, page2,
+            "Different paths should generate different pages"
+        );
     }
-    
+
     #[test]
     fn test_page_contains_links() {
         let config = MazeConfig::default();
         let page = generate_maze_page("/trap/test", &config);
-        assert!(page.contains("nav-card"), "Page should contain navigation cards");
-        assert!(page.contains("href=\"/trap/"), "Page should contain trap links");
+        assert!(
+            page.contains("nav-card"),
+            "Page should contain navigation cards"
+        );
+        assert!(
+            page.contains("href=\"/trap/"),
+            "Page should contain trap links"
+        );
     }
-    
+
     #[test]
     fn test_maze_links_stay_in_maze() {
         let config = MazeConfig::default();
         let page = generate_maze_page("/maze/entry", &config);
-        assert!(page.contains("href=\"/maze/"), "Maze pages should link to maze paths");
-        assert!(!page.contains("href=\"/trap/"), "Maze pages should not link to trap paths");
+        assert!(
+            page.contains("href=\"/maze/"),
+            "Maze pages should link to maze paths"
+        );
+        assert!(
+            !page.contains("href=\"/trap/"),
+            "Maze pages should not link to trap paths"
+        );
     }
-    
+
     #[test]
     fn test_seeded_rng_deterministic() {
         let mut rng1 = SeededRng::new(12345);
         let mut rng2 = SeededRng::new(12345);
-        
+
         for _ in 0..10 {
             assert_eq!(rng1.next(), rng2.next());
         }
     }
-    
+
     #[test]
     fn test_seeded_rng_different_seeds() {
         let mut rng1 = SeededRng::new(11111);
         let mut rng2 = SeededRng::new(22222);
-        
+
         // Very unlikely to match
         assert_ne!(rng1.next(), rng2.next());
     }

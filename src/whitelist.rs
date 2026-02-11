@@ -2,9 +2,11 @@
 pub fn is_path_whitelisted(path: &str, path_whitelist: &[String]) -> bool {
     for entry in path_whitelist {
         let entry = entry.split('#').next().unwrap_or("").trim();
-        if entry.is_empty() { continue; }
+        if entry.is_empty() {
+            continue;
+        }
         if entry.ends_with('*') {
-            let prefix = &entry[..entry.len()-1];
+            let prefix = &entry[..entry.len() - 1];
             if path.starts_with(prefix) {
                 return true;
             }
@@ -30,7 +32,9 @@ pub fn is_whitelisted(ip: &str, whitelist: &[String]) -> bool {
     for entry in whitelist {
         // Remove inline comments and trim whitespace
         let entry = entry.split('#').next().unwrap_or("").trim();
-        if entry.is_empty() { continue; }
+        if entry.is_empty() {
+            continue;
+        }
         // Try exact match
         if entry == ip {
             return true;

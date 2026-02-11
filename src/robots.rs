@@ -51,11 +51,11 @@ pub const AI_SEARCH_BOTS: &[&str] = &[
 pub const SEARCH_ENGINE_BOTS: &[&str] = &[
     "Googlebot",
     "Bingbot",
-    "Slurp",           // Yahoo
+    "Slurp", // Yahoo
     "DuckDuckBot",
     "Baiduspider",
     "YandexBot",
-    "facebot",         // Facebook link preview (not training)
+    "facebot", // Facebook link preview (not training)
     "Twitterbot",
     "LinkedInBot",
 ];
@@ -64,20 +64,38 @@ pub const SEARCH_ENGINE_BOTS: &[&str] = &[
 pub fn generate_robots_txt(cfg: &Config) -> String {
     let mut lines: Vec<String> = Vec::new();
     let trap_paths = collect_trap_paths(cfg);
-    
+
     // Header comment with Content-Signal
     lines.push("# Bot Defence - Robots Exclusion Protocol".to_string());
-    lines.push(format!("# Generated dynamically - Policy: {}", get_policy_name(cfg)));
+    lines.push(format!(
+        "# Generated dynamically - Policy: {}",
+        get_policy_name(cfg)
+    ));
     lines.push("#".to_string());
-    
+
     // Add Content-Signal as comment (some crawlers may parse it)
-    let ai_train = if cfg.robots_block_ai_training { "no" } else { "yes" };
-    let ai_input = if cfg.robots_block_ai_search { "no" } else { "yes" };
-    let search = if cfg.robots_allow_search_engines { "yes" } else { "no" };
-    lines.push(format!("# Content-Signal: ai-train={}, search={}, ai-input={}", ai_train, search, ai_input));
+    let ai_train = if cfg.robots_block_ai_training {
+        "no"
+    } else {
+        "yes"
+    };
+    let ai_input = if cfg.robots_block_ai_search {
+        "no"
+    } else {
+        "yes"
+    };
+    let search = if cfg.robots_allow_search_engines {
+        "yes"
+    } else {
+        "no"
+    };
+    lines.push(format!(
+        "# Content-Signal: ai-train={}, search={}, ai-input={}",
+        ai_train, search, ai_input
+    ));
     lines.push("#".to_string());
     lines.push("".to_string());
-    
+
     // Block AI training bots
     if cfg.robots_block_ai_training {
         lines.push("# AI Training Crawlers - BLOCKED".to_string());
@@ -87,7 +105,7 @@ pub fn generate_robots_txt(cfg: &Config) -> String {
             lines.push("".to_string());
         }
     }
-    
+
     // Block AI search/assistant bots
     if cfg.robots_block_ai_search {
         lines.push("# AI Search/Assistant Crawlers - BLOCKED".to_string());
@@ -97,7 +115,7 @@ pub fn generate_robots_txt(cfg: &Config) -> String {
             lines.push("".to_string());
         }
     }
-    
+
     // Allow legitimate search engines with crawl delay
     if cfg.robots_allow_search_engines {
         lines.push("# Search Engine Crawlers - ALLOWED".to_string());
@@ -114,7 +132,7 @@ pub fn generate_robots_txt(cfg: &Config) -> String {
             lines.push("".to_string());
         }
     }
-    
+
     // Default rule for all other bots
     lines.push("# Default rule for all other bots".to_string());
     lines.push("User-agent: *".to_string());
@@ -126,7 +144,7 @@ pub fn generate_robots_txt(cfg: &Config) -> String {
     } else {
         lines.push("Disallow: /".to_string());
     }
-    
+
     // Add trap paths that bad bots might follow.
     if !trap_paths.is_empty() {
         lines.push("".to_string());
@@ -134,7 +152,7 @@ pub fn generate_robots_txt(cfg: &Config) -> String {
         for trap_path in &trap_paths {
             lines.push(format!("Disallow: {}", trap_path));
         }
-        
+
         // Add enticing honeypot links as comments
         // Bad bots often parse these looking for "hidden" paths
         lines.push("".to_string());
@@ -147,18 +165,22 @@ pub fn generate_robots_txt(cfg: &Config) -> String {
             lines.push(format!("# {}", first_honeypot));
         }
     }
-    
+
     // Sitemap reference (if applicable)
     lines.push("".to_string());
     lines.push("# Sitemap".to_string());
     lines.push("# Sitemap: https://example.com/sitemap.xml".to_string());
-    
+
     lines.join("\n")
 }
 
 /// Get a human-readable policy name
 fn get_policy_name(cfg: &Config) -> &'static str {
-    match (cfg.robots_block_ai_training, cfg.robots_block_ai_search, cfg.robots_allow_search_engines) {
+    match (
+        cfg.robots_block_ai_training,
+        cfg.robots_block_ai_search,
+        cfg.robots_allow_search_engines,
+    ) {
         (true, true, true) => "Search Only (Block All AI)",
         (true, true, false) => "Block Everything",
         (true, false, true) => "Block AI Training, Allow AI Search & Search Engines",
@@ -196,10 +218,25 @@ fn collect_trap_paths(cfg: &Config) -> Vec<String> {
 
 /// Generate Content-Signal HTTP header value
 pub fn get_content_signal_header(cfg: &Config) -> String {
-    let ai_train = if cfg.robots_block_ai_training { "no" } else { "yes" };
-    let ai_input = if cfg.robots_block_ai_search { "no" } else { "yes" };
-    let search = if cfg.robots_allow_search_engines { "yes" } else { "no" };
-    format!("ai-train={}, search={}, ai-input={}", ai_train, search, ai_input)
+    let ai_train = if cfg.robots_block_ai_training {
+        "no"
+    } else {
+        "yes"
+    };
+    let ai_input = if cfg.robots_block_ai_search {
+        "no"
+    } else {
+        "yes"
+    };
+    let search = if cfg.robots_allow_search_engines {
+        "yes"
+    } else {
+        "no"
+    };
+    format!(
+        "ai-train={}, search={}, ai-input={}",
+        ai_train, search, ai_input
+    )
 }
 
 #[cfg(test)]
@@ -249,11 +286,11 @@ mod tests {
     fn test_generate_robots_txt_blocks_ai_training() {
         let cfg = test_config();
         let robots = generate_robots_txt(&cfg);
-        
+
         // Should block GPTBot
         assert!(robots.contains("User-agent: GPTBot"));
         assert!(robots.contains("Disallow: /"));
-        
+
         // Should allow Googlebot
         assert!(robots.contains("User-agent: Googlebot"));
         assert!(robots.contains("Allow: /"));
@@ -263,7 +300,7 @@ mod tests {
     fn test_generate_robots_txt_includes_honeypot() {
         let cfg = test_config();
         let robots = generate_robots_txt(&cfg);
-        
+
         // Should align with active trap routes and configured honeypots.
         assert!(robots.contains("Disallow: /maze/"));
         assert!(robots.contains("Disallow: /trap/"));
@@ -275,7 +312,7 @@ mod tests {
     fn test_content_signal_header() {
         let cfg = test_config();
         let header = get_content_signal_header(&cfg);
-        
+
         assert!(header.contains("ai-train=no"));
         assert!(header.contains("search=yes"));
     }
@@ -284,7 +321,7 @@ mod tests {
     fn test_crawl_delay() {
         let cfg = test_config();
         let robots = generate_robots_txt(&cfg);
-        
+
         assert!(robots.contains("Crawl-delay: 2"));
     }
 

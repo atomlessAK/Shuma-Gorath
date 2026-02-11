@@ -6,7 +6,7 @@ use crate::challenge::KeyValueStore;
 use spin_sdk::key_value::Store;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// Structured signal snapshot captured when a ban is created.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -173,7 +173,13 @@ pub fn is_banned(store: &impl KeyValueStore, site_id: &str, ip: &str) -> bool {
 /// Bans an IP for a given site, reason, and duration (in seconds).
 /// Stores the ban entry in the key-value store.
 #[allow(dead_code)]
-pub fn ban_ip(store: &impl KeyValueStore, site_id: &str, ip: &str, reason: &str, duration_secs: u64) {
+pub fn ban_ip(
+    store: &impl KeyValueStore,
+    site_id: &str,
+    ip: &str,
+    reason: &str,
+    duration_secs: u64,
+) {
     ban_ip_with_fingerprint(store, site_id, ip, reason, duration_secs, None);
 }
 
@@ -209,5 +215,8 @@ pub fn unban_ip(store: &impl KeyValueStore, site_id: &str, ip: &str) {
 
 /// Returns the current UNIX timestamp in seconds (used for ban expiry).
 fn now_ts() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
 }

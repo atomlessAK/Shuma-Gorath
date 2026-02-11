@@ -180,7 +180,11 @@ fn config_error_response(err: config::ConfigLoadError, path: &str) -> Response {
     Response::new(500, "Configuration unavailable")
 }
 
-fn load_runtime_config(store: &Store, site_id: &str, path: &str) -> Result<config::Config, Response> {
+fn load_runtime_config(
+    store: &Store,
+    site_id: &str,
+    path: &str,
+) -> Result<config::Config, Response> {
     config::Config::load(store, site_id).map_err(|err| config_error_response(err, path))
 }
 
@@ -497,8 +501,11 @@ pub fn handle_bot_defence_impl(req: &Request) -> Response {
                 Ok(cfg) => cfg,
                 Err(resp) => return resp,
             };
-            let response =
-                challenge::serve_challenge_page(req, cfg.test_mode, cfg.challenge_transform_count as usize);
+            let response = challenge::serve_challenge_page(
+                req,
+                cfg.test_mode,
+                cfg.challenge_transform_count as usize,
+            );
             if *response.status() == 200 {
                 metrics::increment(&store, metrics::MetricName::ChallengeServedTotal, None);
             }
@@ -863,7 +870,12 @@ pub fn handle_bot_defence_impl(req: &Request) -> Response {
         if *req.method() != spin_sdk::http::Method::Get {
             return Response::new(405, "Method Not Allowed");
         }
-        return pow::handle_pow_challenge(&ip, cfg.pow_enabled, cfg.pow_difficulty, cfg.pow_ttl_seconds);
+        return pow::handle_pow_challenge(
+            &ip,
+            cfg.pow_enabled,
+            cfg.pow_difficulty,
+            cfg.pow_ttl_seconds,
+        );
     }
     if path == "/pow/verify" {
         return pow::handle_pow_verify(req, &ip, cfg.pow_enabled);
@@ -1034,7 +1046,12 @@ pub fn handle_bot_defence_impl(req: &Request) -> Response {
                 admin: None,
             },
         );
-        return js::inject_js_challenge(&ip, cfg.pow_enabled, cfg.pow_difficulty, cfg.pow_ttl_seconds);
+        return js::inject_js_challenge(
+            &ip,
+            cfg.pow_enabled,
+            cfg.pow_difficulty,
+            cfg.pow_ttl_seconds,
+        );
     }
     Response::new(200, "OK (passed bot defence)")
 }

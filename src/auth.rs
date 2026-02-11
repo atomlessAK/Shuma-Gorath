@@ -159,7 +159,10 @@ pub fn get_admin_id(req: &Request) -> String {
     }
 }
 
-fn load_session_record<S: KeyValueStore>(store: &S, session_id: &str) -> Option<AdminSessionRecord> {
+fn load_session_record<S: KeyValueStore>(
+    store: &S,
+    session_id: &str,
+) -> Option<AdminSessionRecord> {
     let key = session_store_key(session_id);
     let raw = store.get(&key).ok()??;
     let parsed = serde_json::from_slice::<AdminSessionRecord>(&raw).ok()?;

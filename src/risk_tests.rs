@@ -56,6 +56,9 @@ mod tests {
         let high = crate::compute_botness_assessment(false, false, 70, 80, &cfg);
 
         assert_eq!(medium.score, cfg.botness_weights.rate_medium);
-        assert_eq!(high.score, cfg.botness_weights.rate_medium + cfg.botness_weights.rate_high);
+        assert_eq!(
+            high.score,
+            cfg.botness_weights.rate_medium + cfg.botness_weights.rate_high
+        );
     }
 }

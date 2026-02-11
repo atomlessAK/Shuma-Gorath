@@ -24,12 +24,15 @@ fn request_with_method_and_headers(
 }
 
 fn has_header(resp: &spin_sdk::http::Response, name: &str) -> bool {
-    resp.headers().any(|(key, _)| key.eq_ignore_ascii_case(name))
+    resp.headers()
+        .any(|(key, _)| key.eq_ignore_ascii_case(name))
 }
 
 #[test]
 fn forwarded_headers_are_not_trusted_without_secret() {
-    let _lock = ENV_MUTEX.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = ENV_MUTEX
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     std::env::remove_var("SHUMA_FORWARDED_IP_SECRET");
 
     let req = request_with_headers("/health", &[("x-forwarded-for", "127.0.0.1")]);
@@ -38,7 +41,9 @@ fn forwarded_headers_are_not_trusted_without_secret() {
 
 #[test]
 fn health_internal_headers_hidden_by_default() {
-    let _lock = ENV_MUTEX.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = ENV_MUTEX
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     std::env::remove_var("SHUMA_DEBUG_HEADERS");
 
     let resp = response_with_optional_debug_headers(200, "OK", "available", "open");
@@ -49,7 +54,9 @@ fn health_internal_headers_hidden_by_default() {
 
 #[test]
 fn health_internal_headers_visible_when_enabled() {
-    let _lock = ENV_MUTEX.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = ENV_MUTEX
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     std::env::set_var("SHUMA_DEBUG_HEADERS", "true");
 
     let resp = response_with_optional_debug_headers(200, "OK", "available", "open");
@@ -60,7 +67,9 @@ fn health_internal_headers_visible_when_enabled() {
 
 #[test]
 fn https_enforcement_blocks_insecure_admin_requests() {
-    let _lock = ENV_MUTEX.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = ENV_MUTEX
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     std::env::set_var("SHUMA_ENFORCE_HTTPS", "true");
     std::env::remove_var("SHUMA_FORWARDED_IP_SECRET");
 
@@ -68,14 +77,19 @@ fn https_enforcement_blocks_insecure_admin_requests() {
     let resp = crate::handle_bot_defence_impl(&req);
 
     assert_eq!(*resp.status(), 403u16);
-    assert_eq!(String::from_utf8(resp.into_body()).unwrap(), "HTTPS required");
+    assert_eq!(
+        String::from_utf8(resp.into_body()).unwrap(),
+        "HTTPS required"
+    );
 
     std::env::remove_var("SHUMA_ENFORCE_HTTPS");
 }
 
 #[test]
 fn https_enforcement_allows_trusted_forwarded_https_to_reach_admin_auth() {
-    let _lock = ENV_MUTEX.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = ENV_MUTEX
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     std::env::set_var("SHUMA_ENFORCE_HTTPS", "true");
     std::env::set_var("SHUMA_FORWARDED_IP_SECRET", "test-forwarded-secret");
     std::env::set_var("SHUMA_API_KEY", "test-admin-key");
@@ -99,14 +113,19 @@ fn https_enforcement_allows_trusted_forwarded_https_to_reach_admin_auth() {
 
 #[test]
 fn admin_options_preflight_is_rejected_without_cors_headers() {
-    let _lock = ENV_MUTEX.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = ENV_MUTEX
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let req = request_with_method_and_headers(
         Method::Options,
         "/admin/config",
         &[
             ("origin", "https://example.com"),
             ("access-control-request-method", "POST"),
-            ("access-control-request-headers", "authorization,content-type"),
+            (
+                "access-control-request-headers",
+                "authorization,content-type",
+            ),
         ],
     );
 
@@ -120,7 +139,9 @@ fn admin_options_preflight_is_rejected_without_cors_headers() {
 
 #[test]
 fn forwarded_headers_are_trusted_with_matching_secret() {
-    let _lock = ENV_MUTEX.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = ENV_MUTEX
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     std::env::set_var("SHUMA_FORWARDED_IP_SECRET", "test-forwarded-secret");
     let req = request_with_headers(
         "/health",
@@ -134,7 +155,9 @@ fn forwarded_headers_are_trusted_with_matching_secret() {
 
 #[test]
 fn geo_headers_are_ignored_when_forwarding_not_trusted() {
-    let _lock = ENV_MUTEX.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = ENV_MUTEX
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     std::env::remove_var("SHUMA_FORWARDED_IP_SECRET");
     let req = request_with_headers("/health", &[("x-geo-country", "US")]);
 
@@ -147,7 +170,9 @@ fn geo_headers_are_ignored_when_forwarding_not_trusted() {
 
 #[test]
 fn geo_headers_are_used_when_forwarding_is_trusted() {
-    let _lock = ENV_MUTEX.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = ENV_MUTEX
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     std::env::set_var("SHUMA_FORWARDED_IP_SECRET", "test-forwarded-secret");
     let req = request_with_headers(
         "/health",

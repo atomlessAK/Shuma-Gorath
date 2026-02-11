@@ -16,7 +16,9 @@ mod tests {
             Ok(self.map.borrow().get(key).cloned())
         }
         fn set(&self, key: &str, value: &[u8]) -> Result<(), ()> {
-            self.map.borrow_mut().insert(key.to_string(), value.to_vec());
+            self.map
+                .borrow_mut()
+                .insert(key.to_string(), value.to_vec());
             Ok(())
         }
         fn delete(&self, key: &str) -> Result<(), ()> {
@@ -53,14 +55,20 @@ mod tests {
         let store = TestStore::default();
         let site_id = "testsite";
         let ip = "192.168.1.100";
-        
+
         // Ban an IP
         ban_ip(&store, site_id, ip, "test_reason", 3600);
-        assert!(is_banned(&store, site_id, ip), "IP should be banned after ban_ip");
-        
+        assert!(
+            is_banned(&store, site_id, ip),
+            "IP should be banned after ban_ip"
+        );
+
         // Unban using unban_ip function
         unban_ip(&store, site_id, ip);
-        assert!(!is_banned(&store, site_id, ip), "IP should not be banned after unban_ip");
+        assert!(
+            !is_banned(&store, site_id, ip),
+            "IP should not be banned after unban_ip"
+        );
     }
 
     #[test]
@@ -68,10 +76,13 @@ mod tests {
         let store = TestStore::default();
         let site_id = "testsite";
         let ip = "10.0.0.1";
-        
+
         // Unban a non-existent IP should not panic
         unban_ip(&store, site_id, ip);
-        assert!(!is_banned(&store, site_id, ip), "Non-existent IP should not be banned");
+        assert!(
+            !is_banned(&store, site_id, ip),
+            "Non-existent IP should not be banned"
+        );
     }
 
     #[test]

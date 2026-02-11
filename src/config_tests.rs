@@ -73,20 +73,32 @@ mod tests {
     #[test]
     fn challenge_config_mutable_from_env_parses_values() {
         assert!(crate::config::challenge_config_mutable_from_env(Some("1")));
-        assert!(crate::config::challenge_config_mutable_from_env(Some("true")));
-        assert!(crate::config::challenge_config_mutable_from_env(Some("TRUE")));
+        assert!(crate::config::challenge_config_mutable_from_env(Some(
+            "true"
+        )));
+        assert!(crate::config::challenge_config_mutable_from_env(Some(
+            "TRUE"
+        )));
         assert!(!crate::config::challenge_config_mutable_from_env(Some("0")));
-        assert!(!crate::config::challenge_config_mutable_from_env(Some("false")));
+        assert!(!crate::config::challenge_config_mutable_from_env(Some(
+            "false"
+        )));
         assert!(!crate::config::challenge_config_mutable_from_env(None));
     }
 
     #[test]
     fn parse_admin_config_write_defaults_to_disabled() {
         assert!(!crate::config::parse_admin_config_write_enabled(None));
-        assert!(!crate::config::parse_admin_config_write_enabled(Some("junk")));
-        assert!(crate::config::parse_admin_config_write_enabled(Some("true")));
+        assert!(!crate::config::parse_admin_config_write_enabled(Some(
+            "junk"
+        )));
+        assert!(crate::config::parse_admin_config_write_enabled(Some(
+            "true"
+        )));
         assert!(crate::config::parse_admin_config_write_enabled(Some("1")));
-        assert!(!crate::config::parse_admin_config_write_enabled(Some("false")));
+        assert!(!crate::config::parse_admin_config_write_enabled(Some(
+            "false"
+        )));
     }
 
     #[test]
@@ -140,7 +152,9 @@ mod tests {
         kv_cfg.rate_limit = 111;
         kv_cfg.honeypots = vec!["/kv-trap".to_string()];
         let key = "config:default".to_string();
-        store.set(&key, &serde_json::to_vec(&kv_cfg).unwrap()).unwrap();
+        store
+            .set(&key, &serde_json::to_vec(&kv_cfg).unwrap())
+            .unwrap();
 
         let cfg = crate::config::Config::load(&store, "default").unwrap();
         assert_eq!(cfg.rate_limit, 111);

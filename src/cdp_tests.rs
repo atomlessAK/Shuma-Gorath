@@ -8,27 +8,48 @@ mod tests {
     #[test]
     fn test_get_cdp_detection_script_returns_javascript() {
         let script = get_cdp_detection_script();
-        
+
         // Verify script is not empty
-        assert!(!script.is_empty(), "CDP detection script should not be empty");
-        
+        assert!(
+            !script.is_empty(),
+            "CDP detection script should not be empty"
+        );
+
         // Verify it contains key detection functions
-        assert!(script.contains("_checkCDPAutomation"), "Script should define _checkCDPAutomation function");
-        assert!(script.contains("detectCDP"), "Script should contain detectCDP function");
-        assert!(script.contains("checkWebDriver"), "Script should contain webdriver check");
-        assert!(script.contains("checkAutomationProperties"), "Script should contain automation properties check");
+        assert!(
+            script.contains("_checkCDPAutomation"),
+            "Script should define _checkCDPAutomation function"
+        );
+        assert!(
+            script.contains("detectCDP"),
+            "Script should contain detectCDP function"
+        );
+        assert!(
+            script.contains("checkWebDriver"),
+            "Script should contain webdriver check"
+        );
+        assert!(
+            script.contains("checkAutomationProperties"),
+            "Script should contain automation properties check"
+        );
     }
 
     #[test]
     fn test_get_cdp_report_script_with_endpoint() {
         let endpoint = "/cdp-report";
         let script = get_cdp_report_script(endpoint);
-        
+
         // Verify script contains the endpoint
-        assert!(script.contains(endpoint), "Script should contain the report endpoint");
+        assert!(
+            script.contains(endpoint),
+            "Script should contain the report endpoint"
+        );
         assert!(script.contains("fetch"), "Script should contain fetch call");
         assert!(script.contains("POST"), "Script should use POST method");
-        assert!(script.contains("cdp_detected"), "Script should send cdp_detected field");
+        assert!(
+            script.contains("cdp_detected"),
+            "Script should send cdp_detected field"
+        );
     }
 
     #[test]
@@ -44,15 +65,21 @@ mod tests {
 </html>"#;
 
         let result = inject_cdp_detection(html, None);
-        
+
         // Verify detection script was injected
-        assert!(result.contains("_checkCDPAutomation"), "Injection should add detection script");
+        assert!(
+            result.contains("_checkCDPAutomation"),
+            "Injection should add detection script"
+        );
         assert!(result.contains("</head>"), "Should preserve </head> tag");
-        
+
         // Verify injection happened before </head>
         let head_end_pos = result.find("</head>").unwrap();
         let script_pos = result.find("_checkCDPAutomation").unwrap();
-        assert!(script_pos < head_end_pos, "Script should be injected before </head>");
+        assert!(
+            script_pos < head_end_pos,
+            "Script should be injected before </head>"
+        );
     }
 
     #[test]
@@ -65,9 +92,12 @@ mod tests {
 </html>"#;
 
         let result = inject_cdp_detection(html, None);
-        
+
         // Verify detection script was injected
-        assert!(result.contains("_checkCDPAutomation"), "Injection should add detection script");
+        assert!(
+            result.contains("_checkCDPAutomation"),
+            "Injection should add detection script"
+        );
         assert!(result.contains("</body>"), "Should preserve </body> tag");
     }
 
@@ -75,31 +105,44 @@ mod tests {
     fn test_inject_cdp_detection_with_report_endpoint() {
         let html = r#"<html><head></head><body></body></html>"#;
         let endpoint = "/api/cdp-report";
-        
+
         let result = inject_cdp_detection(html, Some(endpoint));
-        
+
         // Verify both detection and report scripts are present
-        assert!(result.contains("_checkCDPAutomation"), "Should include detection script");
+        assert!(
+            result.contains("_checkCDPAutomation"),
+            "Should include detection script"
+        );
         assert!(result.contains(endpoint), "Should include report endpoint");
-        assert!(result.contains("fetch"), "Should include fetch for reporting");
+        assert!(
+            result.contains("fetch"),
+            "Should include fetch for reporting"
+        );
     }
 
     #[test]
     fn test_inject_cdp_detection_minimal_html() {
         let html = "<p>Just some text</p>";
-        
+
         let result = inject_cdp_detection(html, None);
-        
+
         // Should append script even without head/body tags
-        assert!(result.contains("_checkCDPAutomation"), "Should inject script even for minimal HTML");
-        assert!(result.contains("<p>Just some text</p>"), "Original content should be preserved");
+        assert!(
+            result.contains("_checkCDPAutomation"),
+            "Should inject script even for minimal HTML"
+        );
+        assert!(
+            result.contains("<p>Just some text</p>"),
+            "Original content should be preserved"
+        );
     }
 
     #[test]
     fn test_cdp_report_deserialization() {
-        let json = r#"{"cdp_detected":true,"score":0.95,"checks":["webdriver","automation_props"]}"#;
+        let json =
+            r#"{"cdp_detected":true,"score":0.95,"checks":["webdriver","automation_props"]}"#;
         let report: CdpReport = serde_json::from_str(json).expect("Should deserialize CdpReport");
-        
+
         assert!(report.cdp_detected, "cdp_detected should be true");
         assert!((report.score - 0.95).abs() < 0.01, "score should be 0.95");
         assert_eq!(report.checks.len(), 2, "should have 2 checks");
@@ -114,7 +157,7 @@ mod tests {
             score: 0.85,
             checks: vec!["cdp_timing".to_string()],
         };
-        
+
         let json = serde_json::to_string(&report).expect("Should serialize CdpReport");
         assert!(json.contains("\"cdp_detected\":true"));
         assert!(json.contains("\"score\":0.85") || json.contains("\"score\": 0.85"));
