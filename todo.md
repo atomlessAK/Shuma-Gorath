@@ -1,6 +1,13 @@
 # TODO
 
 This and the SECURITY_REVIEW.md are the single sources of truth for active project work.
+## Testing (recurring)
+- [ ] review unit tests, integrations tests and the e2e and CI flow all pass and complete
+- [ ] identify missing tests and prioritise
+- [ ] cleanup defunct tests 
+
+## Data retention
+- [ ] reason about current data retention policy, identify any weaknesses or potential sources of maintenance problems due to too much data retained or at the other extreme records wiped too frequently
 
 ## Security and Platform
 - [ ] Design strategy for syncing bans/unbans across global edge instances. (architecture, ops)

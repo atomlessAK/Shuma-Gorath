@@ -450,7 +450,7 @@ pub(crate) fn render_challenge(req: &Request, transform_count: usize) -> Respons
               --duo-grid-size: calc((var(--puzzle-grid-size) * 2) + var(--duo-grid-gap));
               --legend-gap: 2px;
             }}
-            body {{ font-family: sans-serif; font-size: 15px; line-height: 1.6; background: var(--color-legend-bg); margin: 24px; color: var(--color-black); }}
+            body {{ font-family: sans-serif; font-size: 15px; line-height: 1.6; background: repeating-linear-gradient(-45deg,#fffafd,#fffafd 10px,#faf2fa 10px,#faf2fa 20px); margin: 24px; color: var(--color-black); }}
             .challenge {{ max-width: 980px; margin: 0 auto; background: var(--color-white); padding: 24px; border: 1px solid var(--color-border); }}
             .challenge h2 {{ width: var(--duo-grid-size); margin: 0 auto 0.6rem; font-size: var(--font-heading); line-height: 1.2; text-align: center; }}
             .grid {{ display: grid; gap: var(--puzzle-gap); }}
