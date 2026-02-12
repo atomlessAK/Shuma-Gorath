@@ -73,6 +73,16 @@ pub fn needs_js_verification(req: &Request, _store: &Store, _site_id: &str, ip: 
     true
 }
 
+pub fn bot_signal(needs_verification: bool, weight: u8) -> crate::signals::botness::BotSignal {
+    let contribution = if needs_verification { weight } else { 0 };
+    crate::signals::botness::BotSignal {
+        key: "js_verification_required",
+        label: "JS verification required",
+        active: needs_verification,
+        contribution,
+    }
+}
+
 /// Returns a Response with a JS challenge page that sets the js_verified cookie for the client IP.
 /// Also injects CDP detection if enabled in the config.
 pub fn inject_js_challenge(

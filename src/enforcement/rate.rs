@@ -46,6 +46,49 @@ pub fn check_rate_limit<S: KeyValueStore>(store: &S, site_id: &str, ip: &str, li
     true
 }
 
+fn rate_proximity_score(rate_count: u32, rate_limit: u32) -> u8 {
+    if rate_limit == 0 {
+        return 0;
+    }
+    let ratio = rate_count as f32 / rate_limit as f32;
+    if ratio >= 0.8 {
+        2
+    } else if ratio >= 0.5 {
+        1
+    } else {
+        0
+    }
+}
+
+pub fn bot_signals(
+    rate_count: u32,
+    rate_limit: u32,
+    medium_weight: u8,
+    high_weight: u8,
+) -> [crate::signals::botness::BotSignal; 2] {
+    let proximity = rate_proximity_score(rate_count, rate_limit);
+    let medium_active = proximity >= 1;
+    let high_active = proximity >= 2;
+
+    let medium_contribution = if medium_active { medium_weight } else { 0 };
+    let high_contribution = if high_active { high_weight } else { 0 };
+
+    [
+        crate::signals::botness::BotSignal {
+            key: "rate_pressure_medium",
+            label: "Rate pressure (>=50%)",
+            active: medium_active,
+            contribution: medium_contribution,
+        },
+        crate::signals::botness::BotSignal {
+            key: "rate_pressure_high",
+            label: "Rate pressure (>=80%)",
+            active: high_active,
+            contribution: high_contribution,
+        },
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,6 +148,21 @@ mod tests {
         store.set(&key, b"7").unwrap();
         let usage = current_rate_usage(&store, site, ip);
         assert_eq!(usage, 7);
+    }
+
+    #[test]
+    fn rate_bot_signals_follow_pressure_bands() {
+        let [medium, high] = bot_signals(40, 80, 2, 3);
+        assert!(medium.active);
+        assert_eq!(medium.contribution, 2);
+        assert!(!high.active);
+        assert_eq!(high.contribution, 0);
+
+        let [medium, high] = bot_signals(70, 80, 2, 3);
+        assert!(medium.active);
+        assert_eq!(medium.contribution, 2);
+        assert!(high.active);
+        assert_eq!(high.contribution, 3);
     }
 }
 

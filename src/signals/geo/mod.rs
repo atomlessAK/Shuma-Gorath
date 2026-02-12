@@ -75,5 +75,15 @@ pub fn evaluate_geo_policy(country: Option<&str>, cfg: &crate::config::Config) -
     GeoPolicyRoute::None
 }
 
+pub fn bot_signal(scored_risk: bool, weight: u8) -> crate::signals::botness::BotSignal {
+    let contribution = if scored_risk { weight } else { 0 };
+    crate::signals::botness::BotSignal {
+        key: "geo_risk",
+        label: "High-risk geography",
+        active: scored_risk,
+        contribution,
+    }
+}
+
 #[cfg(test)]
 mod tests;

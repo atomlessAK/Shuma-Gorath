@@ -1,3 +1,4 @@
+pub(crate) mod botness;
 pub(crate) mod browser;
 pub(crate) mod cdp;
 pub(crate) mod geo;

@@ -264,13 +264,7 @@ pub(crate) fn compute_risk_score(
     score
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct BotnessContribution {
-    pub key: &'static str,
-    pub label: &'static str,
-    pub active: bool,
-    pub contribution: u8,
-}
+pub type BotnessContribution = crate::signals::botness::BotSignal;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct BotnessAssessment {
@@ -313,66 +307,22 @@ pub(crate) fn compute_botness_assessment(
     rate_limit: u32,
     cfg: &config::Config,
 ) -> BotnessAssessment {
-    let rate_proximity = rate_proximity_score(rate_count, rate_limit);
-    let rate_medium_active = rate_proximity >= 1;
-    let rate_high_active = rate_proximity >= 2;
-    let mut score = 0u8;
-    let mut contributions = Vec::with_capacity(4);
+    let mut accumulator = crate::signals::botness::SignalAccumulator::with_capacity(4);
+    accumulator.push(js::bot_signal(js_needed, cfg.botness_weights.js_required));
+    accumulator.push(geo::bot_signal(geo_risk, cfg.botness_weights.geo_risk));
 
-    let js_contribution = if js_needed {
-        cfg.botness_weights.js_required
-    } else {
-        0
-    };
-    score = score.saturating_add(js_contribution);
-    contributions.push(BotnessContribution {
-        key: "js_verification_required",
-        label: "JS verification required",
-        active: js_needed,
-        contribution: js_contribution,
-    });
+    for rate_signal in crate::enforcement::rate::bot_signals(
+        rate_count,
+        rate_limit,
+        cfg.botness_weights.rate_medium,
+        cfg.botness_weights.rate_high,
+    ) {
+        accumulator.push(rate_signal);
+    }
 
-    let geo_contribution = if geo_risk {
-        cfg.botness_weights.geo_risk
-    } else {
-        0
-    };
-    score = score.saturating_add(geo_contribution);
-    contributions.push(BotnessContribution {
-        key: "geo_risk",
-        label: "High-risk geography",
-        active: geo_risk,
-        contribution: geo_contribution,
-    });
-
-    let rate_medium_contribution = if rate_medium_active {
-        cfg.botness_weights.rate_medium
-    } else {
-        0
-    };
-    score = score.saturating_add(rate_medium_contribution);
-    contributions.push(BotnessContribution {
-        key: "rate_pressure_medium",
-        label: "Rate pressure (>=50%)",
-        active: rate_medium_active,
-        contribution: rate_medium_contribution,
-    });
-
-    let rate_high_contribution = if rate_high_active {
-        cfg.botness_weights.rate_high
-    } else {
-        0
-    };
-    score = score.saturating_add(rate_high_contribution);
-    contributions.push(BotnessContribution {
-        key: "rate_pressure_high",
-        label: "Rate pressure (>=80%)",
-        active: rate_high_active,
-        contribution: rate_high_contribution,
-    });
-
+    let (score, contributions) = accumulator.finish();
     BotnessAssessment {
-        score: score.clamp(0, 10),
+        score,
         contributions,
     }
 }
