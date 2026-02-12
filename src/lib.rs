@@ -301,15 +301,25 @@ pub(crate) fn assess_geo_request(req: &Request, cfg: &config::Config) -> GeoAsse
 }
 
 pub(crate) fn compute_botness_assessment(
+    js_enforced: bool,
     js_needed: bool,
+    geo_signal_available: bool,
     geo_risk: bool,
     rate_count: u32,
     rate_limit: u32,
     cfg: &config::Config,
 ) -> BotnessAssessment {
     let mut accumulator = crate::signals::botness::SignalAccumulator::with_capacity(4);
-    accumulator.push(js::bot_signal(js_needed, cfg.botness_weights.js_required));
-    accumulator.push(geo::bot_signal(geo_risk, cfg.botness_weights.geo_risk));
+    accumulator.push(js::bot_signal(
+        js_enforced,
+        js_needed,
+        cfg.botness_weights.js_required,
+    ));
+    accumulator.push(geo::bot_signal(
+        geo_signal_available,
+        geo_risk,
+        cfg.botness_weights.geo_risk,
+    ));
 
     for rate_signal in crate::enforcement::rate::bot_signals(
         rate_count,

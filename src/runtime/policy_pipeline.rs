@@ -243,9 +243,17 @@ pub(crate) fn maybe_handle_botness(
     geo_assessment: &crate::GeoAssessment,
 ) -> Option<Response> {
     let geo_risk = geo_assessment.scored_risk;
+    let geo_signal_available = geo_assessment.headers_trusted && geo_assessment.country.is_some();
     let rate_usage = crate::enforcement::rate::current_rate_usage(store, site_id, ip);
-    let botness =
-        crate::compute_botness_assessment(needs_js, geo_risk, rate_usage, cfg.rate_limit, cfg);
+    let botness = crate::compute_botness_assessment(
+        cfg.js_required_enforced,
+        needs_js,
+        geo_signal_available,
+        geo_risk,
+        rate_usage,
+        cfg.rate_limit,
+        cfg,
+    );
     let botness_summary = crate::botness_signals_summary(&botness);
 
     if cfg.maze_enabled && botness.score >= cfg.botness_maze_threshold {

@@ -73,14 +73,23 @@ pub fn needs_js_verification(req: &Request, _store: &Store, _site_id: &str, ip: 
     true
 }
 
-pub fn bot_signal(needs_verification: bool, weight: u8) -> crate::signals::botness::BotSignal {
-    let contribution = if needs_verification { weight } else { 0 };
-    crate::signals::botness::BotSignal {
-        key: "js_verification_required",
-        label: "JS verification required",
-        active: needs_verification,
-        contribution,
+pub fn bot_signal(
+    js_enforced: bool,
+    needs_verification: bool,
+    weight: u8,
+) -> crate::signals::botness::BotSignal {
+    if !js_enforced {
+        return crate::signals::botness::BotSignal::disabled(
+            "js_verification_required",
+            "JS verification required",
+        );
     }
+    crate::signals::botness::BotSignal::scored(
+        "js_verification_required",
+        "JS verification required",
+        needs_verification,
+        weight,
+    )
 }
 
 /// Returns a Response with a JS challenge page that sets the js_verified cookie for the client IP.

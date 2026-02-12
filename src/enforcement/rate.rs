@@ -66,26 +66,36 @@ pub fn bot_signals(
     medium_weight: u8,
     high_weight: u8,
 ) -> [crate::signals::botness::BotSignal; 2] {
+    if rate_limit == 0 {
+        return [
+            crate::signals::botness::BotSignal::unavailable(
+                "rate_pressure_medium",
+                "Rate pressure (>=50%)",
+            ),
+            crate::signals::botness::BotSignal::unavailable(
+                "rate_pressure_high",
+                "Rate pressure (>=80%)",
+            ),
+        ];
+    }
+
     let proximity = rate_proximity_score(rate_count, rate_limit);
     let medium_active = proximity >= 1;
     let high_active = proximity >= 2;
 
-    let medium_contribution = if medium_active { medium_weight } else { 0 };
-    let high_contribution = if high_active { high_weight } else { 0 };
-
     [
-        crate::signals::botness::BotSignal {
-            key: "rate_pressure_medium",
-            label: "Rate pressure (>=50%)",
-            active: medium_active,
-            contribution: medium_contribution,
-        },
-        crate::signals::botness::BotSignal {
-            key: "rate_pressure_high",
-            label: "Rate pressure (>=80%)",
-            active: high_active,
-            contribution: high_contribution,
-        },
+        crate::signals::botness::BotSignal::scored(
+            "rate_pressure_medium",
+            "Rate pressure (>=50%)",
+            medium_active,
+            medium_weight,
+        ),
+        crate::signals::botness::BotSignal::scored(
+            "rate_pressure_high",
+            "Rate pressure (>=80%)",
+            high_active,
+            high_weight,
+        ),
     ]
 }
 
@@ -163,6 +173,24 @@ mod tests {
         assert_eq!(medium.contribution, 2);
         assert!(high.active);
         assert_eq!(high.contribution, 3);
+    }
+
+    #[test]
+    fn rate_bot_signals_mark_unavailable_when_limit_zero() {
+        let [medium, high] = bot_signals(10, 0, 2, 3);
+        assert!(!medium.active);
+        assert_eq!(
+            medium.availability,
+            crate::signals::botness::SignalAvailability::Unavailable
+        );
+        assert_eq!(medium.contribution, 0);
+
+        assert!(!high.active);
+        assert_eq!(
+            high.availability,
+            crate::signals::botness::SignalAvailability::Unavailable
+        );
+        assert_eq!(high.contribution, 0);
     }
 }
 

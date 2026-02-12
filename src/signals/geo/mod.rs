@@ -75,14 +75,23 @@ pub fn evaluate_geo_policy(country: Option<&str>, cfg: &crate::config::Config) -
     GeoPolicyRoute::None
 }
 
-pub fn bot_signal(scored_risk: bool, weight: u8) -> crate::signals::botness::BotSignal {
-    let contribution = if scored_risk { weight } else { 0 };
-    crate::signals::botness::BotSignal {
-        key: "geo_risk",
-        label: "High-risk geography",
-        active: scored_risk,
-        contribution,
+pub fn bot_signal(
+    signal_available: bool,
+    scored_risk: bool,
+    weight: u8,
+) -> crate::signals::botness::BotSignal {
+    if !signal_available {
+        return crate::signals::botness::BotSignal::unavailable(
+            "geo_risk",
+            "High-risk geography",
+        );
     }
+    crate::signals::botness::BotSignal::scored(
+        "geo_risk",
+        "High-risk geography",
+        scored_risk,
+        weight,
+    )
 }
 
 #[cfg(test)]
