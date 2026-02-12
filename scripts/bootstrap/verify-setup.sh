@@ -94,7 +94,8 @@ if command -v cargo &> /dev/null && rustup target list --installed 2>/dev/null |
     if cargo build --target wasm32-wasip1 --release 2>&1; then
         WASM_SIZE=$(ls -lh target/wasm32-wasip1/release/shuma_gorath.wasm 2>/dev/null | awk '{print $5}')
         pass "WASM build successful ($WASM_SIZE)"
-        cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_defence.wasm 2>/dev/null || true
+        mkdir -p dist/wasm
+        cp target/wasm32-wasip1/release/shuma_gorath.wasm dist/wasm/shuma_gorath.wasm 2>/dev/null || true
     else
         fail "WASM build failed"
     fi

@@ -27,6 +27,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify governance docs exist
+        run: |
+          test -f docs/project-principles.md
+          test -f docs/adr/README.md
+          test -f docs/adr/0000-template.md
+          test -f CONTRIBUTING.md
+          test -f .github/pull_request_template.md
+
       - name: Install Rust toolchain and target
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -49,7 +57,8 @@ jobs:
         run: |
           ./scripts/set_crate_type.sh cdylib
           cargo build --target wasm32-wasip1 --release
-          cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_defence.wasm
+          mkdir -p dist/wasm
+          cp target/wasm32-wasip1/release/shuma_gorath.wasm dist/wasm/shuma_gorath.wasm
           ./scripts/set_crate_type.sh rlib
 
       - name: Seed KV tunable config

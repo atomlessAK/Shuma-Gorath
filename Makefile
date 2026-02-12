@@ -9,6 +9,9 @@ YELLOW := \033[1;33m
 CYAN := \033[0;36m
 NC := \033[0m
 
+WASM_BUILD_OUTPUT := target/wasm32-wasip1/release/shuma_gorath.wasm
+WASM_ARTIFACT := dist/wasm/shuma_gorath.wasm
+
 # Ensure rustup-installed cargo is available in non-interactive shells
 CARGO_HOME ?= $(HOME)/.cargo
 PATH := $(CARGO_HOME)/bin:$(PATH)
@@ -76,10 +79,11 @@ dev: ## Build and run with file watching (auto-rebuild on save)
 	@pkill -x spin 2>/dev/null || true
 	@./scripts/set_crate_type.sh cdylib
 	@cargo build --target wasm32-wasip1 --release
-	@cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_defence.wasm
+	@mkdir -p $(dir $(WASM_ARTIFACT))
+	@cp $(WASM_BUILD_OUTPUT) $(WASM_ARTIFACT)
 	@./scripts/set_crate_type.sh rlib
-	@cargo watch --poll -w src -w dashboard -w spin.toml -i '*.wasm' -i 'src/bot_defence.wasm' -i '.spin/**' \
-		-s 'if [ ! -f target/wasm32-wasip1/release/shuma_gorath.wasm ] || find src -name "*.rs" -newer target/wasm32-wasip1/release/shuma_gorath.wasm -print -quit | grep -q .; then ./scripts/set_crate_type.sh cdylib && cargo build --target wasm32-wasip1 --release && cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_defence.wasm && ./scripts/set_crate_type.sh rlib; else echo "No Rust changes detected; skipping WASM rebuild."; fi' \
+	@cargo watch --poll -w src -w dashboard -w spin.toml -i '*.wasm' -i 'dist/wasm/shuma_gorath.wasm' -i '.spin/**' \
+		-s 'if [ ! -f $(WASM_BUILD_OUTPUT) ] || find src -name "*.rs" -newer $(WASM_BUILD_OUTPUT) -print -quit | grep -q .; then ./scripts/set_crate_type.sh cdylib && cargo build --target wasm32-wasip1 --release && mkdir -p $(dir $(WASM_ARTIFACT)) && cp $(WASM_BUILD_OUTPUT) $(WASM_ARTIFACT) && ./scripts/set_crate_type.sh rlib; else echo "No Rust changes detected; skipping WASM rebuild."; fi' \
 		-s 'pkill -x spin 2>/dev/null || true; SPIN_ALWAYS_BUILD=0 spin up --direct-mounts $(SPIN_ENV_ONLY) $(SPIN_DEV_OVERRIDES) --listen 127.0.0.1:3000'
 
 dev-closed: ## Build and run with file watching and SHUMA_KV_STORE_FAIL_OPEN=false (fail-closed)
@@ -91,10 +95,11 @@ dev-closed: ## Build and run with file watching and SHUMA_KV_STORE_FAIL_OPEN=fal
 	@pkill -x spin 2>/dev/null || true
 	@./scripts/set_crate_type.sh cdylib
 	@cargo build --target wasm32-wasip1 --release
-	@cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_defence.wasm
+	@mkdir -p $(dir $(WASM_ARTIFACT))
+	@cp $(WASM_BUILD_OUTPUT) $(WASM_ARTIFACT)
 	@./scripts/set_crate_type.sh rlib
-	@cargo watch --poll -w src -w dashboard -w spin.toml -i '*.wasm' -i 'src/bot_defence.wasm' -i '.spin/**' \
-		-s 'if [ ! -f target/wasm32-wasip1/release/shuma_gorath.wasm ] || find src -name "*.rs" -newer target/wasm32-wasip1/release/shuma_gorath.wasm -print -quit | grep -q .; then ./scripts/set_crate_type.sh cdylib && cargo build --target wasm32-wasip1 --release && cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_defence.wasm && ./scripts/set_crate_type.sh rlib; else echo "No Rust changes detected; skipping WASM rebuild."; fi' \
+	@cargo watch --poll -w src -w dashboard -w spin.toml -i '*.wasm' -i 'dist/wasm/shuma_gorath.wasm' -i '.spin/**' \
+		-s 'if [ ! -f $(WASM_BUILD_OUTPUT) ] || find src -name "*.rs" -newer $(WASM_BUILD_OUTPUT) -print -quit | grep -q .; then ./scripts/set_crate_type.sh cdylib && cargo build --target wasm32-wasip1 --release && mkdir -p $(dir $(WASM_ARTIFACT)) && cp $(WASM_BUILD_OUTPUT) $(WASM_ARTIFACT) && ./scripts/set_crate_type.sh rlib; else echo "No Rust changes detected; skipping WASM rebuild."; fi' \
 		-s 'pkill -x spin 2>/dev/null || true; SPIN_ALWAYS_BUILD=0 spin up --direct-mounts $(SPIN_ENV_ONLY) $(SPIN_DEV_OVERRIDES) --env SHUMA_KV_STORE_FAIL_OPEN=false --listen 127.0.0.1:3000'
 
 local: dev ## Alias for dev
@@ -105,7 +110,8 @@ run: ## Build once and run (no file watching)
 	@sleep 1
 	@./scripts/set_crate_type.sh cdylib
 	@cargo build --target wasm32-wasip1 --release
-	@cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_defence.wasm
+	@mkdir -p $(dir $(WASM_ARTIFACT))
+	@cp $(WASM_BUILD_OUTPUT) $(WASM_ARTIFACT)
 	@./scripts/set_crate_type.sh rlib
 	@echo "$(GREEN)✅ Build complete. Starting Spin...$(NC)"
 	@echo "$(YELLOW)📊 Dashboard: http://127.0.0.1:3000/dashboard/index.html$(NC)"
@@ -129,8 +135,9 @@ build: ## Build release binary only (no server start)
 	@echo "$(CYAN)🔨 Building release binary...$(NC)"
 	@./scripts/set_crate_type.sh cdylib
 	@cargo build --target wasm32-wasip1 --release
-	@cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_defence.wasm
-	@echo "$(GREEN)✅ Build complete: src/bot_defence.wasm$(NC)"
+	@mkdir -p $(dir $(WASM_ARTIFACT))
+	@cp $(WASM_BUILD_OUTPUT) $(WASM_ARTIFACT)
+	@echo "$(GREEN)✅ Build complete: $(WASM_ARTIFACT)$(NC)"
 	@./scripts/set_crate_type.sh rlib
 
 prod: build ## Build for production and start server
@@ -242,7 +249,10 @@ status: ## Check if Spin server is running
 clean: ## Clean build artifacts
 	@echo "$(CYAN)🧹 Cleaning build artifacts...$(NC)"
 	@cargo clean
+	@rm -rf dist/wasm
 	@rm -rf .spin
+	@rm -rf playwright-report test-results
+	@rm -f src/*.wasm
 	@echo "$(GREEN)✅ Clean complete$(NC)"
 
 logs: ## View Spin component logs

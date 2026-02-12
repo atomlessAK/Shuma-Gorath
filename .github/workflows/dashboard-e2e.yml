@@ -57,7 +57,8 @@ jobs:
         run: |
           ./scripts/set_crate_type.sh cdylib
           cargo build --target wasm32-wasip1 --release
-          cp target/wasm32-wasip1/release/shuma_gorath.wasm src/bot_defence.wasm
+          mkdir -p dist/wasm
+          cp target/wasm32-wasip1/release/shuma_gorath.wasm dist/wasm/shuma_gorath.wasm
           ./scripts/set_crate_type.sh rlib
 
       - name: Seed KV tunable config
