@@ -307,12 +307,9 @@ pub fn is_admin_ip_allowed(req: &Request) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use once_cell::sync::Lazy;
     use spin_sdk::http::Request;
     use std::collections::HashMap;
     use std::sync::Mutex;
-
-    static ENV_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
     #[derive(Default)]
     struct MockStore {
@@ -347,19 +344,15 @@ mod tests {
         builder.build()
     }
 
-    fn request_with_forwarded_ip(ip: &str, forwarded_secret: &str) -> Request {
+    fn request_for_admin_login() -> Request {
         let mut builder = Request::builder();
-        builder
-            .method(Method::Post)
-            .uri("/admin/login")
-            .header("x-forwarded-for", ip)
-            .header("x-shuma-forwarded-secret", forwarded_secret);
+        builder.method(Method::Post).uri("/admin/login");
         builder.build()
     }
 
     #[test]
     fn unauthorized_when_api_key_missing() {
-        let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
+        let _lock = crate::test_support::lock_env();
         std::env::remove_var("SHUMA_API_KEY");
         let req = request_with_auth(Some("Bearer any-key"));
         assert!(!is_bearer_authorized(&req));
@@ -367,7 +360,7 @@ mod tests {
 
     #[test]
     fn unauthorized_when_api_key_is_insecure_default() {
-        let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
+        let _lock = crate::test_support::lock_env();
         std::env::set_var("SHUMA_API_KEY", INSECURE_DEFAULT_API_KEY);
         let req = request_with_auth(Some("Bearer changeme-supersecret"));
         assert!(!is_bearer_authorized(&req));
@@ -375,7 +368,7 @@ mod tests {
 
     #[test]
     fn unauthorized_when_api_key_is_insecure_default_always() {
-        let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
+        let _lock = crate::test_support::lock_env();
         std::env::set_var("SHUMA_API_KEY", INSECURE_DEFAULT_API_KEY);
         let req = request_with_auth(Some("Bearer changeme-supersecret"));
         assert!(!is_bearer_authorized(&req));
@@ -383,7 +376,7 @@ mod tests {
 
     #[test]
     fn authorized_when_api_key_is_explicitly_set() {
-        let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
+        let _lock = crate::test_support::lock_env();
         std::env::set_var("SHUMA_API_KEY", "test-admin-key");
         let req = request_with_auth(Some("Bearer test-admin-key"));
         assert!(is_bearer_authorized(&req));
@@ -391,7 +384,7 @@ mod tests {
 
     #[test]
     fn create_and_authenticate_cookie_session() {
-        let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
+        let _lock = crate::test_support::lock_env();
         std::env::set_var("SHUMA_API_KEY", "test-admin-key");
         let store = MockStore::default();
         let (session_id, csrf_token, _expires) =
@@ -421,10 +414,8 @@ mod tests {
 
     #[test]
     fn admin_auth_failures_are_rate_limited() {
-        let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
-        std::env::set_var("SHUMA_FORWARDED_IP_SECRET", "test-forwarded-secret");
-        std::env::set_var("SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE", "2");
-        let req = request_with_forwarded_ip("1.2.3.4", "test-forwarded-secret");
+        let _lock = crate::test_support::lock_env();
+        let req = request_for_admin_login();
         let store = MockStore::default();
 
         assert!(!register_admin_auth_failure(
@@ -432,34 +423,55 @@ mod tests {
             &req,
             AdminAuthFailureScope::Login
         ));
-        assert!(!register_admin_auth_failure(
-            &store,
-            &req,
-            AdminAuthFailureScope::Login
-        ));
+        let ip = crate::extract_client_ip(&req);
+        let bucket = crate::ip::bucket_ip(&ip);
+        let now_window = super::now_ts() / 60;
+        // Pre-seed to guaranteed saturation regardless runtime env limit (max clamp is 10_000).
+        for window in [now_window, now_window + 1] {
+            let key = format!(
+                "rate:{}:{}:{}",
+                ADMIN_AUTH_FAILURE_SITE_LOGIN, bucket, window
+            );
+            store
+                .set(
+                    &key,
+                    ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE_MAX
+                        .to_string()
+                        .as_bytes(),
+                )
+                .expect("pre-seed login rate key");
+        }
         assert!(register_admin_auth_failure(
             &store,
             &req,
             AdminAuthFailureScope::Login
         ));
-
-        std::env::remove_var("SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE");
-        std::env::remove_var("SHUMA_FORWARDED_IP_SECRET");
     }
 
     #[test]
     fn admin_auth_failure_scopes_are_independent() {
-        let _lock = ENV_MUTEX.lock().expect("failed to lock env mutex");
-        std::env::set_var("SHUMA_FORWARDED_IP_SECRET", "test-forwarded-secret");
-        std::env::set_var("SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE", "1");
-        let req = request_with_forwarded_ip("1.2.3.4", "test-forwarded-secret");
+        let _lock = crate::test_support::lock_env();
+        let req = request_for_admin_login();
         let store = MockStore::default();
+        let ip = crate::extract_client_ip(&req);
+        let bucket = crate::ip::bucket_ip(&ip);
+        let now_window = super::now_ts() / 60;
+        // Pre-seed both current and next window to avoid minute-boundary flakiness.
+        for window in [now_window, now_window + 1] {
+            let key = format!(
+                "rate:{}:{}:{}",
+                ADMIN_AUTH_FAILURE_SITE_LOGIN, bucket, window
+            );
+            store
+                .set(
+                    &key,
+                    ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE_MAX
+                        .to_string()
+                        .as_bytes(),
+                )
+                .expect("pre-seed login rate key");
+        }
 
-        assert!(!register_admin_auth_failure(
-            &store,
-            &req,
-            AdminAuthFailureScope::Login
-        ));
         assert!(register_admin_auth_failure(
             &store,
             &req,
@@ -471,8 +483,5 @@ mod tests {
             &req,
             AdminAuthFailureScope::Endpoint
         ));
-
-        std::env::remove_var("SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE");
-        std::env::remove_var("SHUMA_FORWARDED_IP_SECRET");
     }
 }

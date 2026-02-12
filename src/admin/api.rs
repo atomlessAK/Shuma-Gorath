@@ -595,7 +595,7 @@ fn sanitize_path(path: &str) -> bool {
 }
 
 fn session_cookie_value(session_id: &str) -> String {
-    let max_age = crate::auth::admin_session_ttl_seconds();
+    let max_age = crate::admin::auth::admin_session_ttl_seconds();
     let secure = if crate::config::https_enforced() {
         "; Secure"
     } else {
@@ -603,7 +603,7 @@ fn session_cookie_value(session_id: &str) -> String {
     };
     format!(
         "{}={}; Path=/; HttpOnly; SameSite=Strict; Max-Age={}{}",
-        crate::auth::admin_session_cookie_name(),
+        crate::admin::auth::admin_session_cookie_name(),
         session_id,
         max_age,
         secure
@@ -618,7 +618,7 @@ fn clear_session_cookie_value() -> String {
     };
     format!(
         "{}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0{}",
-        crate::auth::admin_session_cookie_name(),
+        crate::admin::auth::admin_session_cookie_name(),
         secure
     )
 }
@@ -645,18 +645,18 @@ fn handle_admin_login<S: crate::challenge::KeyValueStore>(req: &Request, store: 
         return Response::new(400, "Bad Request: api_key is required");
     };
 
-    if !crate::auth::verify_admin_api_key_candidate(api_key) {
-        if crate::auth::register_admin_auth_failure(
+    if !crate::admin::auth::verify_admin_api_key_candidate(api_key) {
+        if crate::admin::auth::register_admin_auth_failure(
             store,
             req,
-            crate::auth::AdminAuthFailureScope::Login,
+            crate::admin::auth::AdminAuthFailureScope::Login,
         ) {
             return too_many_admin_auth_attempts_response();
         }
         return Response::new(401, "Unauthorized");
     }
 
-    let (session_id, csrf_token, expires_at) = match crate::auth::create_admin_session(store) {
+    let (session_id, csrf_token, expires_at) = match crate::admin::auth::create_admin_session(store) {
         Ok(v) => v,
         Err(_) => return Response::new(500, "Key-value store error"),
     };
@@ -681,12 +681,12 @@ fn handle_admin_session<S: crate::challenge::KeyValueStore>(req: &Request, store
         return Response::new(405, "Method Not Allowed");
     }
 
-    let auth = crate::auth::authenticate_admin(req, store);
+    let auth = crate::admin::auth::authenticate_admin(req, store);
     let (authenticated, method, csrf_token) = match auth.method {
-        Some(crate::auth::AdminAuthMethod::SessionCookie) => {
+        Some(crate::admin::auth::AdminAuthMethod::SessionCookie) => {
             (true, "session", auth.csrf_token.clone())
         }
-        Some(crate::auth::AdminAuthMethod::BearerToken) => (true, "bearer", None),
+        Some(crate::admin::auth::AdminAuthMethod::BearerToken) => (true, "bearer", None),
         None => (false, "none", None),
     };
     let body = serde_json::to_string(&json!({
@@ -708,12 +708,12 @@ fn handle_admin_logout<S: crate::challenge::KeyValueStore>(req: &Request, store:
         return Response::new(405, "Method Not Allowed");
     }
 
-    let auth = crate::auth::authenticate_admin(req, store);
+    let auth = crate::admin::auth::authenticate_admin(req, store);
     if !auth.is_authorized() {
-        if crate::auth::register_admin_auth_failure(
+        if crate::admin::auth::register_admin_auth_failure(
             store,
             req,
-            crate::auth::AdminAuthFailureScope::Endpoint,
+            crate::admin::auth::AdminAuthFailureScope::Endpoint,
         ) {
             return too_many_admin_auth_attempts_response();
         }
@@ -721,12 +721,12 @@ fn handle_admin_logout<S: crate::challenge::KeyValueStore>(req: &Request, store:
     }
     if auth.requires_csrf(req) {
         let expected = auth.csrf_token.as_deref().unwrap_or("");
-        if !crate::auth::validate_session_csrf(req, expected) {
+        if !crate::admin::auth::validate_session_csrf(req, expected) {
             return Response::new(403, "Forbidden");
         }
     }
 
-    if let Err(e) = crate::auth::clear_admin_session(store, req) {
+    if let Err(e) = crate::admin::auth::clear_admin_session(store, req) {
         eprintln!("[admin] failed to clear admin session on logout: {:?}", e);
     }
     let body = serde_json::to_string(&json!({ "ok": true })).unwrap();
@@ -894,7 +894,7 @@ fn handle_admin_config(
                         ip: None,
                         reason: Some("test_mode_toggle".to_string()),
                         outcome: Some(format!("{} -> {}", old_value, test_mode)),
-                        admin: Some(crate::auth::get_admin_id(req)),
+                        admin: Some(crate::admin::auth::get_admin_id(req)),
                     },
                 );
             }
@@ -1094,7 +1094,7 @@ fn handle_admin_config(
                         "difficulty:{}->{} ttl:{}->{}",
                         old_pow_difficulty, cfg.pow_difficulty, old_pow_ttl, cfg.pow_ttl_seconds
                     )),
-                    admin: Some(crate::auth::get_admin_id(req)),
+                    admin: Some(crate::admin::auth::get_admin_id(req)),
                 },
             );
         }
@@ -1188,7 +1188,7 @@ fn handle_admin_config(
                         old_weights.rate_high,
                         cfg.botness_weights.rate_high
                     )),
-                    admin: Some(crate::auth::get_admin_id(req)),
+                    admin: Some(crate::admin::auth::get_admin_id(req)),
                 });
         }
 
@@ -1273,7 +1273,7 @@ fn handle_admin_config(
             ip: None,
             reason: Some("config_view".to_string()),
             outcome: Some(format!("test_mode={}", cfg.test_mode)),
-            admin: Some(crate::auth::get_admin_id(req)),
+            admin: Some(crate::admin::auth::get_admin_id(req)),
         },
     );
     let challenge_default = challenge_threshold_default();
@@ -1351,10 +1351,10 @@ fn handle_admin_config(
 ///   - GET /admin: API help
 pub fn handle_admin(req: &Request) -> Response {
     // Optional admin IP allowlist
-    if !crate::auth::is_admin_ip_allowed(req) {
+    if !crate::admin::auth::is_admin_ip_allowed(req) {
         return Response::new(403, "Forbidden");
     }
-    if !crate::auth::is_admin_api_key_configured() {
+    if !crate::admin::auth::is_admin_api_key_configured() {
         return Response::new(503, "Admin API disabled: key not configured");
     }
 
@@ -1376,8 +1376,8 @@ pub fn handle_admin(req: &Request) -> Response {
         };
     }
 
-    let has_bearer = crate::auth::is_bearer_authorized(req);
-    let has_session_cookie = crate::auth::has_admin_session_cookie(req);
+    let has_bearer = crate::admin::auth::is_bearer_authorized(req);
+    let has_session_cookie = crate::admin::auth::has_admin_session_cookie(req);
     if !has_bearer && !has_session_cookie {
         return Response::new(401, "Unauthorized: Invalid or missing API key");
     }
@@ -1388,12 +1388,12 @@ pub fn handle_admin(req: &Request) -> Response {
     };
 
     // Require either a valid bearer token or a valid admin session cookie.
-    let auth = crate::auth::authenticate_admin(req, &store);
+    let auth = crate::admin::auth::authenticate_admin(req, &store);
     if !auth.is_authorized() {
-        if crate::auth::register_admin_auth_failure(
+        if crate::admin::auth::register_admin_auth_failure(
             &store,
             req,
-            crate::auth::AdminAuthFailureScope::Endpoint,
+            crate::admin::auth::AdminAuthFailureScope::Endpoint,
         ) {
             return too_many_admin_auth_attempts_response();
         }
@@ -1401,7 +1401,7 @@ pub fn handle_admin(req: &Request) -> Response {
     }
     if auth.requires_csrf(req) {
         let expected = auth.csrf_token.as_deref().unwrap_or("");
-        if !crate::auth::validate_session_csrf(req, expected) {
+        if !crate::admin::auth::validate_session_csrf(req, expected) {
             return Response::new(403, "Forbidden");
         }
     }
@@ -1448,7 +1448,7 @@ pub fn handle_admin(req: &Request) -> Response {
                     ip: None,
                     reason: Some("events_view".to_string()),
                     outcome: Some(format!("{} events", events.len())),
-                    admin: Some(crate::auth::get_admin_id(req)),
+                    admin: Some(crate::admin::auth::get_admin_id(req)),
                 },
             );
             Response::new(200, body)
@@ -1508,7 +1508,7 @@ pub fn handle_admin(req: &Request) -> Response {
                         "{} cdp events (hours={}, limit={})",
                         total_matches, hours, limit
                     )),
-                    admin: Some(crate::auth::get_admin_id(req)),
+                    admin: Some(crate::admin::auth::get_admin_id(req)),
                 },
             );
 
@@ -1573,7 +1573,7 @@ pub fn handle_admin(req: &Request) -> Response {
                         ip: Some(ip.clone()),
                         reason: Some(reason.clone()),
                         outcome: Some("banned".to_string()),
-                        admin: Some(crate::auth::get_admin_id(req)),
+                        admin: Some(crate::admin::auth::get_admin_id(req)),
                     },
                 );
                 return Response::new(200, json!({"status": "banned", "ip": ip}).to_string());
@@ -1598,7 +1598,7 @@ pub fn handle_admin(req: &Request) -> Response {
                     ip: None,
                     reason: Some("ban_list".to_string()),
                     outcome: Some(format!("{} bans listed", bans.len())),
-                    admin: Some(crate::auth::get_admin_id(req)),
+                    admin: Some(crate::admin::auth::get_admin_id(req)),
                 },
             );
             let body = serde_json::to_string(&json!({"bans": bans})).unwrap();
@@ -1628,7 +1628,7 @@ pub fn handle_admin(req: &Request) -> Response {
                     ip: Some(ip.to_string()),
                     reason: Some("admin_unban".to_string()),
                     outcome: Some("unbanned".to_string()),
-                    admin: Some(crate::auth::get_admin_id(req)),
+                    admin: Some(crate::admin::auth::get_admin_id(req)),
                 },
             );
             Response::new(200, "Unbanned")
@@ -1654,7 +1654,7 @@ pub fn handle_admin(req: &Request) -> Response {
                     ip: None,
                     reason: Some("analytics_view".to_string()),
                     outcome: Some(format!("ban_count={}", ban_count)),
-                    admin: Some(crate::auth::get_admin_id(req)),
+                    admin: Some(crate::admin::auth::get_admin_id(req)),
                 },
             );
             let body = serde_json::to_string(&json!({
@@ -1678,7 +1678,7 @@ pub fn handle_admin(req: &Request) -> Response {
                     ip: None,
                     reason: Some("help".to_string()),
                     outcome: None,
-                    admin: Some(crate::auth::get_admin_id(req)),
+                    admin: Some(crate::admin::auth::get_admin_id(req)),
                 },
             );
             Response::new(200, "WASM Bot Defence Admin API. Endpoints: /admin/ban, /admin/unban?ip=IP, /admin/analytics, /admin/events, /admin/config, /admin/maze (GET for maze stats), /admin/robots (GET for robots.txt config & preview), /admin/cdp (GET for CDP detection config & stats), /admin/cdp/events (GET for CDP detection and auto-ban events).")
@@ -1738,7 +1738,7 @@ pub fn handle_admin(req: &Request) -> Response {
                     ip: None,
                     reason: Some("maze_stats_view".to_string()),
                     outcome: Some(format!("{} crawlers, {} hits", maze_ips.len(), total_hits)),
-                    admin: Some(crate::auth::get_admin_id(req)),
+                    admin: Some(crate::admin::auth::get_admin_id(req)),
                 },
             );
 
@@ -1772,7 +1772,7 @@ pub fn handle_admin(req: &Request) -> Response {
                     ip: None,
                     reason: Some("robots_config_view".to_string()),
                     outcome: None,
-                    admin: Some(crate::auth::get_admin_id(req)),
+                    admin: Some(crate::admin::auth::get_admin_id(req)),
                 },
             );
 
@@ -1826,7 +1826,7 @@ pub fn handle_admin(req: &Request) -> Response {
                     ip: None,
                     reason: Some("cdp_config_view".to_string()),
                     outcome: None,
-                    admin: Some(crate::auth::get_admin_id(req)),
+                    admin: Some(crate::admin::auth::get_admin_id(req)),
                 },
             );
 

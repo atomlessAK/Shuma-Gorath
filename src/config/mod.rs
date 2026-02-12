@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::challenge::KeyValueStore;
 
-const DEFAULTS_ENV_TEXT: &str = include_str!("../config/defaults.env");
+const DEFAULTS_ENV_TEXT: &str = include_str!("../../config/defaults.env");
 
 pub const POW_DIFFICULTY_MIN: u8 = 12;
 pub const POW_DIFFICULTY_MAX: u8 = 20;
@@ -872,3 +872,6 @@ fn default_botness_weight_rate_medium() -> u8 {
 fn default_botness_weight_rate_high() -> u8 {
     clamp_botness_weight(defaults_u8("SHUMA_BOTNESS_WEIGHT_RATE_HIGH"))
 }
+
+#[cfg(test)]
+mod tests;
