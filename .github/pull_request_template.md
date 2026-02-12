@@ -14,6 +14,7 @@
 - [ ] Relevant test suites executed and passing.
 - [ ] `make test` executed and passing.
 - [ ] Docs updated for behavior/config/deployment/monitoring changes.
+- [ ] Commits are atomic and scoped to logical changes (or rationale provided for batching).
 - [ ] Security impact reviewed (auth, trust boundaries, abuse paths, failure modes).
 - [ ] Human visitor impact reviewed (friction kept low; any added challenge/latency is justified).
 - [ ] Adversary cost asymmetry reviewed (cost burden shifted toward malicious bots where practical).

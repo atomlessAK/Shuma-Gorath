@@ -22,6 +22,13 @@
 5. Consider human-visitor friction impact (challenge frequency, latency, UX impact).
 6. Consider resource efficiency and cost-placement impact (bandwidth/CPU/memory/energy, and whether cost is shifted toward malicious bots).
 
+## Commit and Push Discipline
+
+- Prefer atomic commits: one logical change per commit.
+- Do not mix unrelated work (for example refactors + new behavior + docs cleanups) in a single commit.
+- Run the relevant `make` verification target(s) before each commit.
+- Push after each validated atomic commit unless batching is explicitly requested.
+
 ## Rust Naming and Layout Convention
 
 - Use descriptive `snake_case` module and file names that make responsibility obvious from path + filename.

@@ -35,7 +35,12 @@ This file provides instructions for coding agents working in this repository.
    Direct ad-hoc tool invocations (for example `cargo test`, `cargo build`, `spin up`) are not the canonical verification path for normal contributor/agent workflow.
    For `make test`, integration and dashboard e2e tests are mandatory and must not be skipped: start Spin first with `make dev` (separate terminal/session), then run `make test`.
 7. Before reporting completion, confirm relevant CI status (or state explicitly that CI is pending/unverified).
-8. Document security, operational, and resource implications.
+8. Commit/push in atomic slices by default:
+   - one logical change per commit,
+   - avoid mixing unrelated refactors and feature/bug work in the same commit,
+   - run relevant Makefile verification before each commit,
+   - push after each validated atomic commit unless the user explicitly asks for batching.
+9. Document security, operational, and resource implications.
 
 ## Security and abuse posture
 
