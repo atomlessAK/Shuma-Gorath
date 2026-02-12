@@ -41,6 +41,8 @@ Shuma-Gorath exists to provide layered, practical bot defense that teams can dep
 ### P3. Simplicity of Setup, Dev, and Deploy
 
 - MUST provide one canonical workflow for setup, run, and test (`Makefile` targets).
+- MUST run setup/build/test verification through `Makefile` targets (`make setup`, `make build`, `make test`/`make test-unit`) so shared workflows fail fast when broken.
+- MUST treat direct tool invocations (`cargo`, `spin`, script entrypoints) as implementation details behind `make`, not as the default contributor/agent interface.
 - MUST avoid hidden prerequisites.
 - SHOULD keep dev/prod parity high.
 
