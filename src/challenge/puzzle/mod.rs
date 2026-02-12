@@ -1,7 +1,22 @@
+mod renders;
+mod submit;
+mod token;
+mod types;
+
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 
-use super::types::{ChallengePuzzle, ChallengeSeed, Transform};
+use types::ChallengePuzzle;
+
+pub(crate) use renders::render_challenge;
+#[cfg(test)]
+pub use submit::handle_challenge_submit;
+pub(crate) use submit::{
+    handle_challenge_submit_with_outcome, serve_challenge_page, ChallengeSubmitOutcome,
+};
+#[cfg(test)]
+pub(crate) use token::make_seed_token;
+pub(crate) use types::{ChallengeSeed, Transform};
 
 pub(crate) fn build_puzzle(seed: &ChallengeSeed) -> ChallengePuzzle {
     let size = seed.grid_size as usize;

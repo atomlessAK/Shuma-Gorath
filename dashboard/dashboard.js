@@ -1,49 +1,19 @@
-// Global chart instances
-let eventTypesChart = null;
-let topIpsChart = null;
-let timeSeriesChart = null;
-let currentTimeRange = 'hour';
-
-const CHART_PALETTE = [
-  "rgb(255,205,235)",
-  "rgb(225,175,205)",
-  "rgb(205, 155, 185)",
-  "rgb(190, 140, 170)",
-  "rgb(175, 125, 155)",
-  "rgb(160, 110, 140)",
-  "rgb(147, 97, 127)",
-  "rgb(135, 85, 115)"
-];
-
-const statusPanelState = {
-  failMode: 'unknown',
-  httpsEnforced: false,
-  forwardedHeaderTrustConfigured: false,
-  testMode: false,
-  powEnabled: false,
-  powMutable: false,
-  mazeEnabled: false,
-  mazeAutoBan: false,
-  cdpEnabled: false,
-  cdpAutoBan: false,
-  jsRequiredEnforced: true,
-  challengeThreshold: 3,
-  challengeMutable: false,
-  mazeThreshold: 6,
-  rateLimit: 80,
-  geoRiskCount: 0,
-  geoAllowCount: 0,
-  geoChallengeCount: 0,
-  geoMazeCount: 0,
-  geoBlockCount: 0,
-  botnessMutable: false,
-  botnessWeights: {
-    js_required: 1,
-    geo_risk: 2,
-    rate_medium: 1,
-    rate_high: 2
-  }
-};
+const dashboardCharts = window.ShumaDashboardCharts;
+if (!dashboardCharts) {
+  throw new Error('Missing dashboard charts module (window.ShumaDashboardCharts)');
+}
+const statusPanel = window.ShumaDashboardStatus;
+if (!statusPanel) {
+  throw new Error('Missing dashboard status module (window.ShumaDashboardStatus)');
+}
+const configControls = window.ShumaDashboardConfigControls;
+if (!configControls) {
+  throw new Error('Missing dashboard config-controls module (window.ShumaDashboardConfigControls)');
+}
+const adminSessionModule = window.ShumaDashboardAdminSession;
+if (!adminSessionModule) {
+  throw new Error('Missing dashboard admin-session module (window.ShumaDashboardAdminSession)');
+}
 
 const INTEGER_FIELD_RULES = {
   'ban-duration-days': { min: 0, max: 365, fallback: 0, label: 'Manual ban duration days' },
@@ -118,67 +88,7 @@ const MANUAL_BAN_DURATION_FIELD = {
 const IPV4_SEGMENT_PATTERN = /^\d{1,3}$/;
 const IPV6_INPUT_PATTERN = /^[0-9a-fA-F:.]+$/;
 let adminEndpointContext = null;
-const adminSessionState = {
-  authenticated: false,
-  csrfToken: ''
-};
-
-const nativeFetch = window.fetch.bind(window);
-
-function isWriteMethod(method) {
-  const upper = String(method || 'GET').toUpperCase();
-  return upper === 'POST' || upper === 'PUT' || upper === 'PATCH' || upper === 'DELETE';
-}
-
-function requestUrlOf(input) {
-  if (typeof input === 'string') return input;
-  if (input && typeof input.url === 'string') return input.url;
-  return '';
-}
-
-function requestMethodOf(input, init) {
-  if (init && init.method) return init.method;
-  if (input && input.method) return input.method;
-  return 'GET';
-}
-
-function isAdminRequestUrl(url) {
-  try {
-    const resolved = new URL(url, window.location.origin);
-    return resolved.pathname.startsWith('/admin/');
-  } catch (_e) {
-    return false;
-  }
-}
-
-window.fetch = function patchedFetch(input, init = {}) {
-  const url = requestUrlOf(input);
-  if (!isAdminRequestUrl(url)) {
-    return nativeFetch(input, init);
-  }
-
-  const method = requestMethodOf(input, init);
-  const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
-  const authHeader = headers.get('Authorization') || headers.get('authorization') || '';
-
-  if (/^Bearer\s*$/i.test(authHeader.trim())) {
-    headers.delete('Authorization');
-    headers.delete('authorization');
-  }
-
-  if (adminSessionState.authenticated && isWriteMethod(method) && adminSessionState.csrfToken) {
-    if (!headers.has('X-Shuma-CSRF')) {
-      headers.set('X-Shuma-CSRF', adminSessionState.csrfToken);
-    }
-  }
-
-  const nextInit = {
-    ...init,
-    headers,
-    credentials: 'same-origin'
-  };
-  return nativeFetch(input, nextInit);
-};
+let adminSessionController = null;
 
 function sanitizeIntegerText(value) {
   return (value || '').replace(/[^\d]/g, '');
@@ -544,18 +454,12 @@ function readIpFieldValue(id, required, messageTarget, label) {
 }
 
 function hasValidApiContext() {
-  return adminSessionState.authenticated;
+  return adminSessionController ? adminSessionController.hasValidApiContext() : false;
 }
 
 function redirectToLogin() {
   const next = encodeURIComponent(window.location.pathname + window.location.search);
   window.location.replace(`/dashboard/login.html?next=${next}`);
-}
-
-function setAdminSession(authenticated, csrfToken = '') {
-  adminSessionState.authenticated = Boolean(authenticated);
-  adminSessionState.csrfToken = adminSessionState.authenticated ? String(csrfToken || '') : '';
-  refreshCoreActionButtonsState();
 }
 
 function validateGeoFieldById(id, showInline = false) {
@@ -575,7 +479,7 @@ function refreshCoreActionButtonsState() {
   const apiValid = hasValidApiContext();
   const logoutBtn = document.getElementById('logout-btn');
   if (logoutBtn) {
-    logoutBtn.disabled = !adminSessionState.authenticated;
+    logoutBtn.disabled = !apiValid;
   }
   setValidActionButtonState(
     'ban-btn',
@@ -619,27 +523,8 @@ function refreshCoreActionButtonsState() {
 }
 
 function getAdminContext(messageTarget) {
-  const endpoint = resolveAdminApiEndpoint().endpoint;
-  if (!endpoint) {
-    if (messageTarget) {
-      messageTarget.textContent = 'Unable to resolve admin API endpoint from the current page origin.';
-      messageTarget.className = 'message error';
-    }
-    refreshCoreActionButtonsState();
-    return null;
-  }
-
-  if (!adminSessionState.authenticated) {
-    if (messageTarget) {
-      messageTarget.textContent = 'Login required. Go to /dashboard/login.html.';
-      messageTarget.className = 'message warning';
-    }
-    refreshCoreActionButtonsState();
-    return null;
-  }
-
-  refreshCoreActionButtonsState();
-  return { endpoint, apikey: '', sessionAuth: true, csrfToken: adminSessionState.csrfToken };
+  if (!adminSessionController) return null;
+  return adminSessionController.getAdminContext(messageTarget);
 }
 
 function bindIntegerFieldValidation(id) {
@@ -725,11 +610,13 @@ function adminConfigWriteEnabled(config) {
 
 function updateConfigModeUi(config) {
   const writeEnabled = adminConfigWriteEnabled(config);
-  statusPanelState.httpsEnforced = parseBoolLike(config && config.https_enforced, false);
-  statusPanelState.forwardedHeaderTrustConfigured = parseBoolLike(
-    config && config.forwarded_header_trust_configured,
-    false
-  );
+  statusPanel.update({
+    httpsEnforced: parseBoolLike(config && config.https_enforced, false),
+    forwardedHeaderTrustConfigured: parseBoolLike(
+      config && config.forwarded_header_trust_configured,
+      false
+    )
+  });
   const subtitle = document.getElementById('config-mode-subtitle');
   if (subtitle) {
     if (writeEnabled) {
@@ -744,252 +631,7 @@ function updateConfigModeUi(config) {
   document.querySelectorAll('.config-edit-pane').forEach(el => {
     el.classList.toggle('hidden', !writeEnabled);
   });
-  renderStatusItems();
-}
-
-const STATUS_DEFINITIONS = [
-  {
-    title: 'Fail Mode Policy',
-    description: () => (
-      `Controls request handling when the KV store is unavailable. ${envVar('SHUMA_KV_STORE_FAIL_OPEN')}=<strong>true</strong> allows requests to continue (fail-open); ` +
-      `${envVar('SHUMA_KV_STORE_FAIL_OPEN')}=<strong>false</strong> blocks requests that require KV-backed decisions (fail-closed).`
-    ),
-    status: state => normalizeFailMode(state.failMode).toUpperCase()
-  },
-  {
-    title: 'HTTPS Enforcement',
-    description: state => (
-      `When ${envVar('SHUMA_ENFORCE_HTTPS')} is true, the app rejects non-HTTPS requests with <strong>403 HTTPS required</strong>. ` +
-      `Forwarded proto headers are trusted only when ${envVar('SHUMA_FORWARDED_IP_SECRET')} validation succeeds. ` +
-      `Current forwarded-header trust configuration is <strong>${boolStatus(state.forwardedHeaderTrustConfigured)}</strong>.`
-    ),
-    status: state => boolStatus(state.httpsEnforced)
-  },
-  {
-    title: 'Test Mode',
-    description: () => (
-      `${envVar('SHUMA_TEST_MODE')} controls whether defenses are enforce-only or log-only. When enabled, detections and ban actions are logged but traffic is not blocked. ` +
-      'Use this for safe tuning before turning enforcement on.'
-    ),
-    status: state => boolStatus(state.testMode)
-  },
-  {
-    title: 'Proof-of-Work (PoW)',
-    description: state => (
-      `PoW is applied in the JS verification flow and increases bot cost before <code>js_verified</code> is issued. ` +
-      `Primary controls are ${envVar('SHUMA_POW_ENABLED')}, ${envVar('SHUMA_POW_DIFFICULTY')}, and ${envVar('SHUMA_POW_TTL_SECONDS')}. ` +
-      `Runtime editability is controlled by ${envVar('SHUMA_POW_CONFIG_MUTABLE')} and is currently ${formatMutability(state.powMutable)}. ` +
-      `If ${envVar('SHUMA_JS_REQUIRED_ENFORCED')} is disabled, normal visitor requests bypass this flow.`
-    ),
-    status: state => boolStatus(state.powEnabled)
-  },
-  {
-    title: 'Challenge',
-    description: state => (
-      `Step-up routing sends suspicious traffic to the puzzle challenge when cumulative botness reaches ${envVar('SHUMA_CHALLENGE_RISK_THRESHOLD')} ` +
-      `(current: <strong>${state.challengeThreshold}</strong>). ` +
-      `Puzzle complexity is controlled by ${envVar('SHUMA_CHALLENGE_TRANSFORM_COUNT')}. ` +
-      `Runtime threshold mutability is controlled by ${envVar('SHUMA_CHALLENGE_CONFIG_MUTABLE')} / ${envVar('SHUMA_BOTNESS_CONFIG_MUTABLE')} and is currently ${formatMutability(state.challengeMutable || state.botnessMutable)}.`
-    ),
-    status: state => boolStatus(state.challengeThreshold >= 1)
-  },
-  {
-    title: 'CDP Detection',
-    description: () => (
-      `Detects browser automation from client CDP reports. Primary controls are ${envVar('SHUMA_CDP_DETECTION_ENABLED')}, ${envVar('SHUMA_CDP_AUTO_BAN')}, and ${envVar('SHUMA_CDP_DETECTION_THRESHOLD')}. ` +
-      `Hard checks (for example <code>webdriver</code> or <code>automation_props</code>) are treated as <strong>strong</strong>. ` +
-      `Without hard checks, detections are tiered by score and soft signals using ${envVar('SHUMA_CDP_DETECTION_THRESHOLD')}. ` +
-      `If ${envVar('SHUMA_CDP_AUTO_BAN')} is enabled, only final <strong>strong</strong> CDP detections trigger automatic IP bans.`
-    ),
-    status: state => boolStatus(state.cdpEnabled)
-  },
-  {
-    title: 'Maze',
-    description: () => (
-      `Maze routes suspicious traffic into trap pages when ${envVar('SHUMA_MAZE_ENABLED')} is enabled. ` +
-      `If ${envVar('SHUMA_MAZE_AUTO_BAN')} is enabled, automatic bans trigger when maze hits exceed ${envVar('SHUMA_MAZE_AUTO_BAN_THRESHOLD')}.`
-    ),
-    status: state => boolStatus(state.mazeEnabled)
-  },
-  {
-    title: 'JS Required',
-    description: state => (
-      `When ${envVar('SHUMA_JS_REQUIRED_ENFORCED')} is true, requests without a valid <code>js_verified</code> cookie are sent to the JS verification page. ` +
-      `That flow writes <code>js_verified</code>, reloads the original path, and re-evaluates access. ` +
-      `If ${envVar('SHUMA_POW_ENABLED')} is true, this step includes PoW before the cookie is issued. ` +
-      `Disabling ${envVar('SHUMA_JS_REQUIRED_ENFORCED')} allows non-JS clients but removes PoW from the normal request path. ` +
-      `Its botness contribution is weighted separately by ${envVar('SHUMA_BOTNESS_WEIGHT_JS_REQUIRED')} ` +
-      `(current weight: <strong>${state.botnessWeights.js_required || 0}</strong>). ` +
-      cumulativeBotnessRoutingText(state)
-    ),
-    status: state => boolStatus(state.jsRequiredEnforced)
-  },
-  {
-    title: 'GEO Fencing',
-    description: state => (
-      `Uses trusted upstream GEO headers only (headers are trusted when ${envVar('SHUMA_FORWARDED_IP_SECRET')} validation succeeds). ` +
-      `Scoring countries are configured by ${envVar('SHUMA_GEO_RISK_COUNTRIES')} ` +
-      `(current count: <strong>${state.geoRiskCount}</strong>). ` +
-      `Routing precedence uses ${envVar('SHUMA_GEO_BLOCK_COUNTRIES')} (<strong>${state.geoBlockCount}</strong>), ` +
-      `${envVar('SHUMA_GEO_MAZE_COUNTRIES')} (<strong>${state.geoMazeCount}</strong>), ` +
-      `${envVar('SHUMA_GEO_CHALLENGE_COUNTRIES')} (<strong>${state.geoChallengeCount}</strong>), ` +
-      `and ${envVar('SHUMA_GEO_ALLOW_COUNTRIES')} (<strong>${state.geoAllowCount}</strong>). ` +
-      `Scoring matches contribute via ${envVar('SHUMA_BOTNESS_WEIGHT_GEO_RISK')} ` +
-      `(current weight: <strong>${state.botnessWeights.geo_risk || 0}</strong>). ` +
-      cumulativeBotnessRoutingText(state)
-    ),
-    status: state => boolStatus((state.botnessWeights.geo_risk || 0) > 0)
-  },
-  {
-    title: 'Rate Limiting',
-    description: state => (
-      `Rate pressure is measured against ${envVar('SHUMA_RATE_LIMIT')} (current limit: <strong>${state.rateLimit}</strong> requests/min). ` +
-      `Crossing the hard limit triggers immediate rate-limit enforcement. ` +
-      `Medium pressure (>=50%) contributes ${envVar('SHUMA_BOTNESS_WEIGHT_RATE_MEDIUM')} and high pressure (>=80%) ` +
-      `contributes ${envVar('SHUMA_BOTNESS_WEIGHT_RATE_HIGH')} (current weights: <strong>${state.botnessWeights.rate_medium || 0}</strong> / ` +
-      `<strong>${state.botnessWeights.rate_high || 0}</strong>). ` +
-      cumulativeBotnessRoutingText(state)
-    ),
-    status: state => boolStatus(
-      (state.botnessWeights.rate_medium || 0) > 0 || (state.botnessWeights.rate_high || 0) > 0
-    )
-  }
-];
-
-function normalizeFailMode(value) {
-  const mode = (value || 'unknown').toString().toLowerCase();
-  if (mode === 'open' || mode === 'closed') return mode;
-  return 'unknown';
-}
-
-function formatMutability(isMutable) {
-  return isMutable ? 'EDITABLE' : 'READ_ONLY';
-}
-
-function boolStatus(enabled) {
-  return enabled ? 'ENABLED' : 'DISABLED';
-}
-
-function cumulativeBotnessRoutingText(state) {
-  return (
-    `This contributes to the cumulative <strong>botness</strong> score used for defense routing decisions ` +
-    `(challenge at <strong>${state.challengeThreshold}</strong>, maze at <strong>${state.mazeThreshold}</strong>, ` +
-    `and higher-severity controls such as tar pit or immediate IP ban where configured).`
-  );
-}
-
-function renderStatusItems() {
-  const container = document.getElementById('status-items');
-  if (!container) return;
-
-  container.innerHTML = STATUS_DEFINITIONS.map(definition => `
-    <div class="status-item">
-      <h3>${definition.title}</h3>
-      <p class="control-desc text-muted">${definition.description(statusPanelState)}</p>
-      <div class="status-rows">
-        <div class="info-row">
-          <span class="info-label text-muted">Status:</span>
-          <span class="status-value">${definition.status(statusPanelState)}</span>
-        </div>
-      </div>
-    </div>
-  `).join('');
-}
-
-// Initialize charts
-function initCharts() {
-  const ctx1 = document.getElementById('eventTypesChart').getContext('2d');
-  eventTypesChart = new Chart(ctx1, {
-    type: 'doughnut',
-    data: {
-      labels: [],
-      datasets: [{
-        data: []
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      plugins: {
-        legend: {
-          position: 'bottom'
-        }
-      }
-    }
-  });
-
-  const ctx2 = document.getElementById('topIpsChart').getContext('2d');
-  topIpsChart = new Chart(ctx2, {
-    type: 'bar',
-    data: {
-      labels: [],
-      datasets: [{
-        label: 'Events',
-        data: []
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: {
-            stepSize: 1
-          }
-        }
-      },
-      plugins: {
-        legend: {
-          display: false
-        }
-      }
-    }
-  });
-
-  const ctx3 = document.getElementById('timeSeriesChart').getContext('2d');
-  timeSeriesChart = new Chart(ctx3, {
-    type: 'line',
-    data: {
-      labels: [],
-      datasets: [{
-        label: 'Events',
-        data: [],
-        fill: true,
-        tension: 0.4,
-        borderWidth: 0,
-        pointRadius: 0,
-        pointHoverRadius: 0
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: {
-            stepSize: 1
-          }
-        }
-      },
-      plugins: {
-        legend: {
-          display: false
-        }
-      }
-    }
-  });
-
-  // Setup time range button handlers
-  document.querySelectorAll('.time-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-      document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
-      this.classList.add('active');
-      currentTimeRange = this.dataset.range;
-      updateTimeSeriesChart();
-    });
-  });
+  statusPanel.render();
 }
 
 // Update stat cards
@@ -1017,9 +659,11 @@ function updateStatCards(analytics, events, bans) {
   }
   toggle.checked = testMode;
 
-  statusPanelState.testMode = testMode;
-  statusPanelState.failMode = normalizeFailMode(analytics.fail_mode);
-  renderStatusItems();
+  statusPanel.update({
+    testMode,
+    failMode: statusPanel.normalizeFailMode(analytics.fail_mode)
+  });
+  statusPanel.render();
 }
 
 // Update ban duration fields from config
@@ -1042,131 +686,6 @@ function updateBanDurations(config) {
       btn.textContent = 'Save Durations';
     }
   }
-}
-
-// Update event types chart
-function updateEventTypesChart(eventCounts) {
-  const labels = Object.keys(eventCounts);
-  const data = Object.values(eventCounts);
-  
-  eventTypesChart.data.labels = labels;
-  eventTypesChart.data.datasets[0].data = data;
-  const bg = data.map((_, i) => CHART_PALETTE[i % CHART_PALETTE.length]);
-  eventTypesChart.data.datasets[0].backgroundColor = bg;
-  eventTypesChart.data.datasets[0].borderColor = bg;
-  eventTypesChart.update();
-}
-
-// Update top IPs chart
-function updateTopIpsChart(topIps) {
-  const labels = topIps.map(([ip, _]) => ip);
-  const data = topIps.map(([_, count]) => count);
-  const barColors = data.map((_, i) => CHART_PALETTE[i % CHART_PALETTE.length]);
-
-  topIpsChart.data.labels = labels;
-  topIpsChart.data.datasets[0].data = data;
-  topIpsChart.data.datasets[0].backgroundColor = barColors;
-  topIpsChart.data.datasets[0].borderColor = barColors;
-  topIpsChart.update();
-}
-
-// Update time series chart
-function updateTimeSeriesChart() {
-  const ctx = getAdminContext(document.getElementById('last-updated'));
-  if (!ctx) return;
-  const { endpoint, apikey } = ctx;
-
-  const hours = currentTimeRange === 'hour' ? 1 :
-                currentTimeRange === 'day' ? 24 :
-                currentTimeRange === 'week' ? 168 : 720;
-
-  fetch(`${endpoint}/admin/events?hours=${hours}`, {
-    headers: { 'Authorization': 'Bearer ' + apikey }
-  })
-  .then(r => {
-    if (!r.ok) throw new Error('Failed to fetch events');
-    return r.json();
-  })
-  .then(data => {
-    const now = Date.now();
-    let cutoffTime;
-    
-    switch(currentTimeRange) {
-      case 'hour':
-        cutoffTime = now - (60 * 60 * 1000);
-        break;
-      case 'day':
-        cutoffTime = now - (24 * 60 * 60 * 1000);
-        break;
-      case 'week':
-        cutoffTime = now - (7 * 24 * 60 * 60 * 1000);
-        break;
-      case 'month':
-        cutoffTime = now - (30 * 24 * 60 * 60 * 1000);
-        break;
-    }
-
-    // Filter events by time range
-    const events = data.recent_events || [];
-    const filteredEvents = events.filter(e => {
-      const eventTime = e.ts * 1000; // ts is in seconds, convert to milliseconds
-      return eventTime >= cutoffTime;
-    });
-
-    // Group events by time bucket
-    const buckets = {};
-    const bucketSize = currentTimeRange === 'hour' ? 300000 : // 5 mins for hour
-                       currentTimeRange === 'day' ? 3600000 : // 1 hour for day
-                       currentTimeRange === 'week' ? 86400000 : // 1 day for week
-                       86400000; // 1 day for month
-
-    // Pre-fill buckets to ensure full time range is shown
-    for (let time = cutoffTime; time <= now; time += bucketSize) {
-      const bucketKey = Math.floor(time / bucketSize) * bucketSize;
-      buckets[bucketKey] = 0;
-    }
-
-    // Count events in buckets
-    filteredEvents.forEach(event => {
-      const eventTime = event.ts * 1000; // ts is in seconds, convert to milliseconds
-      const bucketKey = Math.floor(eventTime / bucketSize) * bucketSize;
-      buckets[bucketKey] = (buckets[bucketKey] || 0) + 1;
-    });
-
-    // Sort by time and prepare chart data
-    const sortedBuckets = Object.keys(buckets)
-      .map(k => parseInt(k))
-      .sort((a, b) => a - b);
-
-    const labels = sortedBuckets.map(time => {
-      const date = new Date(time);
-      if (currentTimeRange === 'hour') {
-        // Hour view: just time
-        return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-      } else if (currentTimeRange === 'day') {
-        // Day view: date + time
-        return date.toLocaleString('en-US', { 
-          month: 'short', 
-          day: 'numeric', 
-          hour: 'numeric', 
-          minute: '2-digit' 
-        });
-      } else {
-        // Week/month view: just date
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      }
-    });
-
-    const counts = sortedBuckets.map(time => buckets[time]);
-
-    timeSeriesChart.data.labels = labels;
-    timeSeriesChart.data.datasets[0].data = counts;
-    timeSeriesChart.data.datasets[0].borderColor = 'rgba(0, 0, 0, 0)';
-    timeSeriesChart.data.datasets[0].borderWidth = 0;
-    timeSeriesChart.data.datasets[0].backgroundColor = CHART_PALETTE[0];
-    timeSeriesChart.update();
-  })
-  .catch(err => console.error('Failed to update time series:', err));
 }
 
 // Update bans table
@@ -1379,13 +898,14 @@ function updateMazeStats(data) {
 
 // Update maze config controls from loaded config
 function updateMazeConfig(config) {
+  const statusPatch = {};
   if (config.maze_enabled !== undefined) {
     document.getElementById('maze-enabled-toggle').checked = config.maze_enabled;
-    statusPanelState.mazeEnabled = config.maze_enabled === true;
+    statusPatch.mazeEnabled = config.maze_enabled === true;
   }
   if (config.maze_auto_ban !== undefined) {
     document.getElementById('maze-auto-ban-toggle').checked = config.maze_auto_ban;
-    statusPanelState.mazeAutoBan = config.maze_auto_ban === true;
+    statusPatch.mazeAutoBan = config.maze_auto_ban === true;
   }
   if (config.maze_auto_ban_threshold !== undefined) {
     document.getElementById('maze-threshold').value = config.maze_auto_ban_threshold;
@@ -1401,7 +921,8 @@ function updateMazeConfig(config) {
     btn.disabled = true;
     btn.textContent = 'Save Maze Settings';
   }
-  renderStatusItems();
+  statusPanel.update(statusPatch);
+  statusPanel.render();
 }
 
 function updateGeoConfig(config) {
@@ -1427,12 +948,14 @@ function updateGeoConfig(config) {
     mutable
   };
 
-  statusPanelState.geoRiskCount = Array.isArray(config.geo_risk) ? config.geo_risk.length : 0;
-  statusPanelState.geoAllowCount = Array.isArray(config.geo_allow) ? config.geo_allow.length : 0;
-  statusPanelState.geoChallengeCount = Array.isArray(config.geo_challenge) ? config.geo_challenge.length : 0;
-  statusPanelState.geoMazeCount = Array.isArray(config.geo_maze) ? config.geo_maze.length : 0;
-  statusPanelState.geoBlockCount = Array.isArray(config.geo_block) ? config.geo_block.length : 0;
-  renderStatusItems();
+  statusPanel.update({
+    geoRiskCount: Array.isArray(config.geo_risk) ? config.geo_risk.length : 0,
+    geoAllowCount: Array.isArray(config.geo_allow) ? config.geo_allow.length : 0,
+    geoChallengeCount: Array.isArray(config.geo_challenge) ? config.geo_challenge.length : 0,
+    geoMazeCount: Array.isArray(config.geo_maze) ? config.geo_maze.length : 0,
+    geoBlockCount: Array.isArray(config.geo_block) ? config.geo_block.length : 0
+  });
+  statusPanel.render();
 
   setGeoConfigEditable(mutable);
 
@@ -1695,130 +1218,6 @@ document.getElementById('robots-crawl-delay').addEventListener('input', checkRob
   document.getElementById(id).addEventListener('change', checkMazeConfigChanged);
 });
 
-// Save maze configuration
-document.getElementById('save-maze-config').onclick = async function() {
-  const msg = document.getElementById('admin-msg');
-  const ctx = getAdminContext(msg);
-  if (!ctx) return;
-  const { endpoint, apikey } = ctx;
-  const btn = this;
-  
-  const mazeEnabled = document.getElementById('maze-enabled-toggle').checked;
-  const mazeAutoBan = document.getElementById('maze-auto-ban-toggle').checked;
-  const mazeThreshold = readIntegerFieldValue('maze-threshold', msg);
-  if (mazeThreshold === null) return;
-  
-  btn.textContent = 'Saving...';
-  btn.dataset.saving = 'true';
-  btn.disabled = true;
-  
-  try {
-    const resp = await fetch(endpoint + '/admin/config', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + apikey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        maze_enabled: mazeEnabled,
-        maze_auto_ban: mazeAutoBan,
-        maze_auto_ban_threshold: mazeThreshold
-      })
-    });
-    
-    if (!resp.ok) throw new Error('Failed to save config');
-
-    mazeSavedState = {
-      enabled: mazeEnabled,
-      autoBan: mazeAutoBan,
-      threshold: mazeThreshold
-    };
-    btn.textContent = 'Saved!';
-    setTimeout(() => {
-      btn.dataset.saving = 'false';
-      btn.textContent = 'Save Maze Settings';
-      checkMazeConfigChanged();
-    }, 1500);
-    msg.textContent = 'Maze settings saved';
-    msg.className = 'message success';
-  } catch (e) {
-    msg.textContent = 'Error: ' + e.message;
-    msg.className = 'message error';
-    console.error('Failed to save maze config:', e);
-    btn.dataset.saving = 'false';
-    btn.textContent = 'Save Maze Settings';
-    checkMazeConfigChanged();
-  }
-};
-
-// Save robots.txt configuration
-document.getElementById('save-robots-config').onclick = async function() {
-  const msg = document.getElementById('admin-msg');
-  const ctx = getAdminContext(msg);
-  if (!ctx) return;
-  const { endpoint, apikey } = ctx;
-  const btn = this;
-  
-  const robotsEnabled = document.getElementById('robots-enabled-toggle').checked;
-  const blockTraining = document.getElementById('robots-block-training-toggle').checked;
-  const blockSearch = document.getElementById('robots-block-search-toggle').checked;
-  // Invert: toggle ON = restrict (allow=false), toggle OFF = allow (allow=true)
-  const allowSearchEngines = !document.getElementById('robots-allow-search-toggle').checked;
-  const crawlDelay = readIntegerFieldValue('robots-crawl-delay', msg);
-  if (crawlDelay === null) return;
-  
-  btn.textContent = 'Saving...';
-  btn.dataset.saving = 'true';
-  btn.disabled = true;
-  
-  try {
-    const resp = await fetch(endpoint + '/admin/config', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + apikey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        robots_enabled: robotsEnabled,
-        robots_block_ai_training: blockTraining,
-        robots_block_ai_search: blockSearch,
-        robots_allow_search_engines: allowSearchEngines,
-        robots_crawl_delay: crawlDelay
-      })
-    });
-    
-    if (!resp.ok) throw new Error('Failed to save config');
-
-    btn.textContent = 'Updated!';
-    // Update saved state to current values (store toggle states, not server values)
-    robotsSavedState = {
-      enabled: robotsEnabled,
-      blockTraining: blockTraining,
-      blockSearch: blockSearch,
-      allowSearch: document.getElementById('robots-allow-search-toggle').checked,  // Store toggle state
-      crawlDelay: crawlDelay
-    };
-    // Refresh preview if it's visible
-    const preview = document.getElementById('robots-preview');
-    if (!preview.classList.contains('hidden')) {
-      refreshRobotsPreview();
-    }
-    setTimeout(() => {
-      btn.dataset.saving = 'false';
-      btn.textContent = 'Update Policy';
-      checkRobotsConfigChanged();
-    }, 1500);
-  } catch (e) {
-    btn.dataset.saving = 'false';
-    btn.textContent = 'Error';
-    console.error('Failed to save robots config:', e);
-    setTimeout(() => {
-      btn.textContent = 'Update Policy';
-      checkRobotsConfigChanged();
-    }, 2000);
-  }
-};
-
 // Fetch and update robots.txt preview content
 async function refreshRobotsPreview() {
   const ctx = getAdminContext(document.getElementById('admin-msg'));
@@ -1863,13 +1262,14 @@ document.getElementById('preview-robots').onclick = async function() {
 
 // Update CDP detection config controls from loaded config
 function updateCdpConfig(config) {
+  const statusPatch = {};
   if (config.cdp_detection_enabled !== undefined) {
     document.getElementById('cdp-enabled-toggle').checked = config.cdp_detection_enabled;
-    statusPanelState.cdpEnabled = config.cdp_detection_enabled === true;
+    statusPatch.cdpEnabled = config.cdp_detection_enabled === true;
   }
   if (config.cdp_auto_ban !== undefined) {
     document.getElementById('cdp-auto-ban-toggle').checked = config.cdp_auto_ban;
-    statusPanelState.cdpAutoBan = config.cdp_auto_ban === true;
+    statusPatch.cdpAutoBan = config.cdp_auto_ban === true;
   }
   if (config.cdp_detection_threshold !== undefined) {
     document.getElementById('cdp-threshold-slider').value = config.cdp_detection_threshold;
@@ -1885,7 +1285,8 @@ function updateCdpConfig(config) {
   const btn = document.getElementById('save-cdp-config');
   btn.disabled = true;
   btn.textContent = 'Save CDP Settings';
-  renderStatusItems();
+  statusPanel.update(statusPatch);
+  statusPanel.render();
 }
 
 function updateRateLimitConfig(config) {
@@ -1893,8 +1294,8 @@ function updateRateLimitConfig(config) {
   const field = document.getElementById('rate-limit-threshold');
   field.value = rateLimit;
   rateLimitSavedState = { value: rateLimit };
-  statusPanelState.rateLimit = rateLimit;
-  renderStatusItems();
+  statusPanel.update({ rateLimit });
+  statusPanel.render();
 
   const btn = document.getElementById('save-rate-limit-config');
   if (btn) {
@@ -1908,8 +1309,8 @@ function updateJsRequiredConfig(config) {
   const toggle = document.getElementById('js-required-enforced-toggle');
   toggle.checked = enforced;
   jsRequiredSavedState = { enforced };
-  statusPanelState.jsRequiredEnforced = enforced;
-  renderStatusItems();
+  statusPanel.update({ jsRequiredEnforced: enforced });
+  statusPanel.render();
 
   const btn = document.getElementById('save-js-required-config');
   if (btn) {
@@ -1925,9 +1326,11 @@ function updatePowConfig(config) {
   const difficulty = parseInt(config.pow_difficulty, 10);
   const ttl = parseInt(config.pow_ttl_seconds, 10);
 
-  statusPanelState.powEnabled = powEnabled;
-  statusPanelState.powMutable = powMutable;
-  renderStatusItems();
+  statusPanel.update({
+    powEnabled,
+    powMutable
+  });
+  statusPanel.render();
 
   if (!Number.isNaN(difficulty)) {
     document.getElementById('pow-difficulty').value = difficulty;
@@ -2005,16 +1408,18 @@ function updateChallengeConfig(config) {
   document.getElementById('challenge-default').textContent = Number.isNaN(challengeDefault) ? '--' : challengeDefault;
   document.getElementById('maze-threshold-default').textContent = Number.isNaN(mazeDefault) ? '--' : mazeDefault;
 
-  statusPanelState.challengeThreshold = Number.isNaN(challengeThreshold) ? 3 : challengeThreshold;
-  statusPanelState.mazeThreshold = Number.isNaN(mazeThreshold) ? 6 : mazeThreshold;
-  statusPanelState.challengeMutable = challengeMutable;
-  statusPanelState.botnessMutable = mutable;
-  statusPanelState.botnessWeights = {
-    js_required: parseInt(weights.js_required, 10) || 0,
-    geo_risk: parseInt(weights.geo_risk, 10) || 0,
-    rate_medium: parseInt(weights.rate_medium, 10) || 0,
-    rate_high: parseInt(weights.rate_high, 10) || 0
-  };
+  statusPanel.update({
+    challengeThreshold: Number.isNaN(challengeThreshold) ? 3 : challengeThreshold,
+    mazeThreshold: Number.isNaN(mazeThreshold) ? 6 : mazeThreshold,
+    challengeMutable,
+    botnessMutable: mutable,
+    botnessWeights: {
+      js_required: parseInt(weights.js_required, 10) || 0,
+      geo_risk: parseInt(weights.geo_risk, 10) || 0,
+      rate_medium: parseInt(weights.rate_medium, 10) || 0,
+      rate_high: parseInt(weights.rate_high, 10) || 0
+    }
+  });
 
   const editableFields = [
     'challenge-threshold',
@@ -2043,7 +1448,7 @@ function updateChallengeConfig(config) {
   const btn = document.getElementById('save-botness-config');
   btn.disabled = !mutable;
   btn.textContent = 'Save Botness Settings';
-  renderStatusItems();
+  statusPanel.render();
 }
 
 function checkPowConfigChanged() {
@@ -2162,276 +1567,6 @@ GEO_FIELD_IDS.forEach(id => {
   });
 });
 
-document.getElementById('save-geo-scoring-config').onclick = async function() {
-  const msg = document.getElementById('admin-msg');
-  const ctx = getAdminContext(msg);
-  if (!ctx) return;
-  const { endpoint, apikey } = ctx;
-  const btn = this;
-
-  if (!geoSavedState.mutable) {
-    msg.textContent = 'GEO settings are read-only while SHUMA_ADMIN_CONFIG_WRITE_ENABLED=false.';
-    msg.className = 'message warning';
-    btn.disabled = true;
-    return;
-  }
-
-  let geoRisk;
-  try {
-    geoRisk = parseCountryCodesStrict(document.getElementById('geo-risk-list').value);
-  } catch (e) {
-    msg.textContent = 'Error: ' + e.message;
-    msg.className = 'message error';
-    return;
-  }
-
-  btn.textContent = 'Saving...';
-  btn.dataset.saving = 'true';
-  btn.disabled = true;
-  try {
-    const resp = await fetch(`${endpoint}/admin/config`, {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + apikey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ geo_risk: geoRisk })
-    });
-    if (!resp.ok) {
-      const text = await resp.text();
-      throw new Error(text || 'Failed to save GEO scoring config');
-    }
-    const data = await resp.json();
-    if (data && data.config) {
-      updateGeoConfig(data.config);
-    } else {
-      geoSavedState = {
-        ...geoSavedState,
-        risk: geoRisk.join(','),
-        mutable: true
-      };
-    }
-    msg.textContent = 'GEO scoring saved';
-    msg.className = 'message success';
-    btn.textContent = 'Save GEO Scoring';
-    btn.dataset.saving = 'false';
-    checkGeoConfigChanged();
-  } catch (e) {
-    msg.textContent = 'Error: ' + e.message;
-    msg.className = 'message error';
-    btn.textContent = 'Save GEO Scoring';
-    btn.dataset.saving = 'false';
-    checkGeoConfigChanged();
-  }
-};
-
-document.getElementById('save-geo-routing-config').onclick = async function() {
-  const msg = document.getElementById('admin-msg');
-  const ctx = getAdminContext(msg);
-  if (!ctx) return;
-  const { endpoint, apikey } = ctx;
-  const btn = this;
-
-  if (!geoSavedState.mutable) {
-    msg.textContent = 'GEO settings are read-only while SHUMA_ADMIN_CONFIG_WRITE_ENABLED=false.';
-    msg.className = 'message warning';
-    btn.disabled = true;
-    return;
-  }
-
-  let geoAllow;
-  let geoChallenge;
-  let geoMaze;
-  let geoBlock;
-  try {
-    geoAllow = parseCountryCodesStrict(document.getElementById('geo-allow-list').value);
-    geoChallenge = parseCountryCodesStrict(document.getElementById('geo-challenge-list').value);
-    geoMaze = parseCountryCodesStrict(document.getElementById('geo-maze-list').value);
-    geoBlock = parseCountryCodesStrict(document.getElementById('geo-block-list').value);
-  } catch (e) {
-    msg.textContent = 'Error: ' + e.message;
-    msg.className = 'message error';
-    return;
-  }
-
-  btn.textContent = 'Saving...';
-  btn.dataset.saving = 'true';
-  btn.disabled = true;
-  try {
-    const resp = await fetch(`${endpoint}/admin/config`, {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + apikey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        geo_allow: geoAllow,
-        geo_challenge: geoChallenge,
-        geo_maze: geoMaze,
-        geo_block: geoBlock
-      })
-    });
-    if (!resp.ok) {
-      const text = await resp.text();
-      throw new Error(text || 'Failed to save GEO routing config');
-    }
-    const data = await resp.json();
-    if (data && data.config) {
-      updateGeoConfig(data.config);
-    } else {
-      geoSavedState = {
-        ...geoSavedState,
-        allow: geoAllow.join(','),
-        challenge: geoChallenge.join(','),
-        maze: geoMaze.join(','),
-        block: geoBlock.join(','),
-        mutable: true
-      };
-    }
-    msg.textContent = 'GEO routing saved';
-    msg.className = 'message success';
-    btn.textContent = 'Save GEO Routing';
-    btn.dataset.saving = 'false';
-    checkGeoConfigChanged();
-  } catch (e) {
-    msg.textContent = 'Error: ' + e.message;
-    msg.className = 'message error';
-    btn.textContent = 'Save GEO Routing';
-    btn.dataset.saving = 'false';
-    checkGeoConfigChanged();
-  }
-};
-
-// Save PoW configuration
-document.getElementById('save-pow-config').onclick = async function() {
-  const btn = this;
-  const msg = document.getElementById('admin-msg');
-  const ctx = getAdminContext(msg);
-  if (!ctx) return;
-  const { endpoint, apikey } = ctx;
-
-  const powDifficulty = readIntegerFieldValue('pow-difficulty', msg);
-  const powTtl = readIntegerFieldValue('pow-ttl', msg);
-  if (powDifficulty === null || powTtl === null) return;
-
-  btn.textContent = 'Saving...';
-  btn.dataset.saving = 'true';
-  btn.disabled = true;
-
-  try {
-    const resp = await fetch(`${endpoint}/admin/config`, {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + apikey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        pow_difficulty: powDifficulty,
-        pow_ttl_seconds: powTtl
-      })
-    });
-
-    if (!resp.ok) {
-      const text = await resp.text();
-      throw new Error(text || 'Failed to save PoW config');
-    }
-
-    powSavedState = {
-      difficulty: powDifficulty,
-      ttl: powTtl,
-      mutable: true
-    };
-    msg.textContent = 'PoW settings saved';
-    msg.className = 'message success';
-    btn.textContent = 'Save PoW Settings';
-    btn.dataset.saving = 'false';
-    checkPowConfigChanged();
-  } catch (e) {
-    msg.textContent = 'Error: ' + e.message;
-    msg.className = 'message error';
-    btn.textContent = 'Save PoW Settings';
-    btn.dataset.saving = 'false';
-    checkPowConfigChanged();
-  }
-};
-
-// Save botness scoring configuration
-document.getElementById('save-botness-config').onclick = async function() {
-  const btn = this;
-  const msg = document.getElementById('admin-msg');
-  const ctx = getAdminContext(msg);
-  if (!ctx) return;
-  const { endpoint, apikey } = ctx;
-
-  const challengeThreshold = readIntegerFieldValue('challenge-threshold', msg);
-  const mazeThreshold = readIntegerFieldValue('maze-threshold-score', msg);
-  const weightJsRequired = readIntegerFieldValue('weight-js-required', msg);
-  const weightGeoRisk = readIntegerFieldValue('weight-geo-risk', msg);
-  const weightRateMedium = readIntegerFieldValue('weight-rate-medium', msg);
-  const weightRateHigh = readIntegerFieldValue('weight-rate-high', msg);
-
-  if (
-    challengeThreshold === null ||
-    mazeThreshold === null ||
-    weightJsRequired === null ||
-    weightGeoRisk === null ||
-    weightRateMedium === null ||
-    weightRateHigh === null
-  ) {
-    return;
-  }
-
-  btn.textContent = 'Saving...';
-  btn.dataset.saving = 'true';
-  btn.disabled = true;
-
-  try {
-    const resp = await fetch(`${endpoint}/admin/config`, {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + apikey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        challenge_risk_threshold: challengeThreshold,
-        botness_maze_threshold: mazeThreshold,
-        botness_weights: {
-          js_required: weightJsRequired,
-          geo_risk: weightGeoRisk,
-          rate_medium: weightRateMedium,
-          rate_high: weightRateHigh
-        }
-      })
-    });
-
-    if (!resp.ok) {
-      const text = await resp.text();
-      throw new Error(text || 'Failed to save botness config');
-    }
-
-    botnessSavedState = {
-      challengeThreshold: challengeThreshold,
-      mazeThreshold: mazeThreshold,
-      weightJsRequired: weightJsRequired,
-      weightGeoRisk: weightGeoRisk,
-      weightRateMedium: weightRateMedium,
-      weightRateHigh: weightRateHigh,
-      mutable: true
-    };
-    msg.textContent = 'Botness scoring saved';
-    msg.className = 'message success';
-    btn.textContent = 'Save Botness Settings';
-    btn.dataset.saving = 'false';
-    checkBotnessConfigChanged();
-  } catch (e) {
-    msg.textContent = 'Error: ' + e.message;
-    msg.className = 'message error';
-    btn.textContent = 'Save Botness Settings';
-    btn.dataset.saving = 'false';
-    checkBotnessConfigChanged();
-  }
-};
-
 // Check if CDP config has changed from saved state
 function checkCdpConfigChanged() {
   const apiValid = hasValidApiContext();
@@ -2478,186 +1613,6 @@ document.getElementById('cdp-threshold-slider').addEventListener('input', functi
 ['cdp-enabled-toggle', 'cdp-auto-ban-toggle'].forEach(id => {
   document.getElementById(id).addEventListener('change', checkCdpConfigChanged);
 });
-
-// Save CDP detection configuration
-document.getElementById('save-cdp-config').onclick = async function() {
-  const ctx = getAdminContext(document.getElementById('admin-msg'));
-  if (!ctx) return;
-  const { endpoint, apikey } = ctx;
-  const btn = this;
-  
-  const cdpEnabled = document.getElementById('cdp-enabled-toggle').checked;
-  const cdpAutoBan = document.getElementById('cdp-auto-ban-toggle').checked;
-  const cdpThreshold = parseFloat(document.getElementById('cdp-threshold-slider').value);
-  
-  btn.textContent = 'Saving...';
-  btn.dataset.saving = 'true';
-  btn.disabled = true;
-  
-  try {
-    const resp = await fetch(endpoint + '/admin/config', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + apikey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        cdp_detection_enabled: cdpEnabled,
-        cdp_auto_ban: cdpAutoBan,
-        cdp_detection_threshold: cdpThreshold
-      })
-    });
-    
-    if (!resp.ok) throw new Error('Failed to save config');
-    
-    btn.textContent = 'Saved!';
-    // Update saved state to current values
-    cdpSavedState = {
-      enabled: cdpEnabled,
-      autoBan: cdpAutoBan,
-      threshold: cdpThreshold
-    };
-    setTimeout(() => {
-      btn.dataset.saving = 'false';
-      btn.textContent = 'Save CDP Settings';
-      checkCdpConfigChanged();
-    }, 1500);
-  } catch (e) {
-    btn.dataset.saving = 'false';
-    btn.textContent = 'Error';
-    console.error('Failed to save CDP config:', e);
-    setTimeout(() => {
-      btn.textContent = 'Save CDP Settings';
-      checkCdpConfigChanged();
-    }, 2000);
-  }
-};
-
-document.getElementById('save-rate-limit-config').onclick = async function() {
-  const btn = this;
-  const msg = document.getElementById('admin-msg');
-  const ctx = getAdminContext(msg);
-  if (!ctx) return;
-  const { endpoint, apikey } = ctx;
-  const rateLimit = readIntegerFieldValue('rate-limit-threshold', msg);
-  if (rateLimit === null) return;
-
-  btn.textContent = 'Saving...';
-  btn.dataset.saving = 'true';
-  btn.disabled = true;
-  try {
-    const resp = await fetch(endpoint + '/admin/config', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + apikey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ rate_limit: rateLimit })
-    });
-    if (!resp.ok) {
-      const text = await resp.text();
-      throw new Error(text || 'Failed to save rate limit');
-    }
-    rateLimitSavedState = { value: rateLimit };
-    statusPanelState.rateLimit = rateLimit;
-    renderStatusItems();
-    msg.textContent = 'Rate limit saved';
-    msg.className = 'message success';
-    btn.textContent = 'Save Rate Limit';
-    btn.dataset.saving = 'false';
-    checkRateLimitConfigChanged();
-  } catch (e) {
-    msg.textContent = 'Error: ' + e.message;
-    msg.className = 'message error';
-    btn.textContent = 'Save Rate Limit';
-    btn.dataset.saving = 'false';
-    checkRateLimitConfigChanged();
-  }
-};
-
-document.getElementById('save-js-required-config').onclick = async function() {
-  const btn = this;
-  const msg = document.getElementById('admin-msg');
-  const ctx = getAdminContext(msg);
-  if (!ctx) return;
-  const { endpoint, apikey } = ctx;
-  const enforced = document.getElementById('js-required-enforced-toggle').checked;
-
-  btn.textContent = 'Saving...';
-  btn.dataset.saving = 'true';
-  btn.disabled = true;
-  try {
-    const resp = await fetch(endpoint + '/admin/config', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + apikey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ js_required_enforced: enforced })
-    });
-    if (!resp.ok) {
-      const text = await resp.text();
-      throw new Error(text || 'Failed to save JS Required setting');
-    }
-    jsRequiredSavedState = { enforced };
-    statusPanelState.jsRequiredEnforced = enforced;
-    renderStatusItems();
-    msg.textContent = 'JS Required setting saved';
-    msg.className = 'message success';
-    btn.textContent = 'Save JS Required';
-    btn.dataset.saving = 'false';
-    checkJsRequiredConfigChanged();
-  } catch (e) {
-    msg.textContent = 'Error: ' + e.message;
-    msg.className = 'message error';
-    btn.textContent = 'Save JS Required';
-    btn.dataset.saving = 'false';
-    checkJsRequiredConfigChanged();
-  }
-};
-
-async function restoreAdminSession() {
-  const endpoint = resolveAdminApiEndpoint().endpoint;
-  if (!endpoint) {
-    setAdminSession(false);
-    return false;
-  }
-  try {
-    const resp = await fetch(`${endpoint}/admin/session`);
-    if (!resp.ok) {
-      setAdminSession(false);
-      return false;
-    }
-    const data = await resp.json();
-    if (data && data.authenticated === true && data.method === 'session') {
-      setAdminSession(true, data.csrf_token || '');
-      return true;
-    }
-    setAdminSession(false);
-    return false;
-  } catch (_e) {
-    setAdminSession(false);
-    return false;
-  }
-}
-
-document.getElementById('logout-btn').onclick = async function() {
-  const msg = document.getElementById('admin-msg');
-  const endpoint = resolveAdminApiEndpoint().endpoint;
-  if (!endpoint) return;
-
-  this.disabled = true;
-  this.textContent = 'Logging out...';
-  try {
-    await fetch(`${endpoint}/admin/logout`, { method: 'POST' });
-  } catch (_e) {}
-  setAdminSession(false);
-  msg.textContent = 'Logged out';
-  msg.className = 'message success';
-  this.textContent = 'Logout';
-  refreshCoreActionButtonsState();
-  redirectToLogin();
-};
 
 // Main refresh function
 async function refreshDashboard() {
@@ -2725,9 +1680,9 @@ async function refreshDashboard() {
 
     // Update all sections
     updateStatCards(analytics, events, bansData.bans || []);
-    updateEventTypesChart(events.event_counts || {});
-    updateTopIpsChart(events.top_ips || []);
-    updateTimeSeriesChart();
+    dashboardCharts.updateEventTypesChart(events.event_counts || {});
+    dashboardCharts.updateTopIpsChart(events.top_ips || []);
+    dashboardCharts.updateTimeSeriesChart();
     updateBansTable(bansData.bans || []);
     updateEventsTable(events.recent_events || []);
     updateCdpTotals(cdpData);
@@ -2826,116 +1781,68 @@ document.getElementById('unban-btn').onclick = async function() {
   }
 };
 
-// Save Ban Durations Handler
-document.getElementById('save-durations-btn').onclick = async function() {
-  const msg = document.getElementById('admin-msg');
-  const ctx = getAdminContext(msg);
-  if (!ctx) return;
-  const { endpoint, apikey } = ctx;
-  const btn = this;
-  
-  const ban_durations = {
-    honeypot: readBanDurationSeconds('honeypot'),
-    rate_limit: readBanDurationSeconds('rateLimit'),
-    browser: readBanDurationSeconds('browser'),
-    admin: readBanDurationSeconds('admin')
-  };
-
-  if (
-    ban_durations.honeypot === null ||
-    ban_durations.rate_limit === null ||
-    ban_durations.browser === null ||
-    ban_durations.admin === null
-  ) {
-    return;
-  }
-  
-  msg.textContent = 'Saving ban durations...';
-  msg.className = 'message info';
-  btn.textContent = 'Saving...';
-  btn.dataset.saving = 'true';
-  btn.disabled = true;
-  
-  try {
-    const resp = await fetch(`${endpoint}/admin/config`, {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + apikey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ ban_durations })
-    });
-    
-    if (!resp.ok) {
-      throw new Error('Failed to save config');
-    }
-    
-    const data = await resp.json();
-    const saved = data && data.config && data.config.ban_durations ? data.config.ban_durations : ban_durations;
-    updateBanDurations({ ban_durations: saved });
-    msg.textContent = 'Ban durations saved';
-    msg.className = 'message success';
-  } catch (e) {
-    msg.textContent = 'Error: ' + e.message;
-    msg.className = 'message error';
-    btn.dataset.saving = 'false';
-    btn.textContent = 'Save Durations';
-    checkBanDurationsChanged();
-  }
-};
-
 // Initialize charts and load data on page load
+adminSessionController = adminSessionModule.create({
+  resolveAdminApiEndpoint,
+  refreshCoreActionButtonsState,
+  redirectToLogin
+});
+adminSessionController.bindLogoutButton('logout-btn', 'admin-msg');
+
 initInputValidation();
-initCharts();
-renderStatusItems();
-restoreAdminSession().then((authenticated) => {
+dashboardCharts.init({ getAdminContext });
+statusPanel.render();
+configControls.bind({
+  statusPanel,
+  getAdminContext,
+  readIntegerFieldValue,
+  readBanDurationSeconds,
+  parseCountryCodesStrict,
+  updateBanDurations,
+  updateGeoConfig,
+  refreshRobotsPreview,
+  refreshDashboard,
+  checkMazeConfigChanged,
+  checkRobotsConfigChanged,
+  checkGeoConfigChanged,
+  checkPowConfigChanged,
+  checkBotnessConfigChanged,
+  checkCdpConfigChanged,
+  checkRateLimitConfigChanged,
+  checkJsRequiredConfigChanged,
+  checkBanDurationsChanged,
+  getGeoSavedState: () => geoSavedState,
+  setGeoSavedState: (next) => {
+    geoSavedState = next;
+  },
+  setMazeSavedState: (next) => {
+    mazeSavedState = next;
+  },
+  setRobotsSavedState: (next) => {
+    robotsSavedState = next;
+  },
+  setPowSavedState: (next) => {
+    powSavedState = next;
+  },
+  setBotnessSavedState: (next) => {
+    botnessSavedState = next;
+  },
+  setCdpSavedState: (next) => {
+    cdpSavedState = next;
+  },
+  setRateLimitSavedState: (next) => {
+    rateLimitSavedState = next;
+  },
+  setJsRequiredSavedState: (next) => {
+    jsRequiredSavedState = next;
+  }
+});
+adminSessionController.restoreAdminSession().then((authenticated) => {
   if (!authenticated) {
     redirectToLogin();
     return;
   }
   refreshDashboard();
-});
-
-// Test Mode Toggle Handler
-document.getElementById('test-mode-toggle').addEventListener('change', async function() {
-  const msg = document.getElementById('admin-msg');
-  const ctx = getAdminContext(msg);
-  if (!ctx) {
-    this.checked = !this.checked;
-    return;
-  }
-  const { endpoint, apikey } = ctx;
-  const testMode = this.checked;
-  
-  msg.textContent = `${testMode ? 'Enabling' : 'Disabling'} test mode...`;
-  msg.className = 'message info';
-  
-  try {
-    const resp = await fetch(`${endpoint}/admin/config`, {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + apikey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ test_mode: testMode })
-    });
-    
-    if (!resp.ok) {
-      throw new Error('Failed to update config');
-    }
-    
-    const data = await resp.json();
-    msg.textContent = `Test mode ${data.config.test_mode ? 'enabled' : 'disabled'}`;
-    msg.className = 'message success';
-    
-    // Refresh dashboard to update banner
-    setTimeout(() => refreshDashboard(), 500);
-  } catch (e) {
-    msg.textContent = 'Error: ' + e.message;
-    msg.className = 'message error';
-    // Revert toggle on error
-    this.checked = !testMode;
-  }
 });
 
 // Auto-refresh every 30 seconds

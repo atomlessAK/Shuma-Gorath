@@ -13,7 +13,7 @@ This is the active work queue.
 
 ## Modularization Sprint (Active)
 - [x] Define sprint guardrails: refactor-only, no behavior changes, no new dependencies, tests must pass before each checkoff.
-- [x] M1 Extract inline test-mode block from `src/lib.rs` into dedicated `src/test_mode.rs`.
+- [x] M1 Extract inline test-mode block from `src/lib.rs` into dedicated test-mode module (`src/runtime/test_mode/mod.rs`).
 - [x] M2 Add focused unit tests for extracted test-mode behavior (cover bypass, block, and allow outcomes).
 - [x] M3 Keep `src/lib.rs` behavior identical by routing existing test-mode flow through the new module.
 - [x] M4 Run verification (`cargo test` and integration smoke path) and record result.
@@ -36,9 +36,9 @@ This is the active work queue.
 - [x] M7.5 Keep/extend maze tests after extraction and run verification (`cargo test`, integration smoke).
 - [x] M8 Challenge domain decomposition track (split `src/challenge.rs` into `src/challenge/` submodules: token/crypto, puzzle generation, HTTP handlers, validation/anti-replay).
 - [x] M8.1 Convert `src/challenge.rs` into `src/challenge/mod.rs` while preserving public API used by `src/lib.rs` and tests.
-- [x] M8.2 Extract seed token/HMAC logic into a dedicated `src/challenge/token.rs` module.
-- [x] M8.3 Extract puzzle generation/transform/validation logic into `src/challenge/puzzle.rs`.
-- [x] M8.4 Extract rendering and submit/anti-replay flow into focused HTTP modules (`src/challenge/render.rs`, `src/challenge/submit.rs`).
+- [x] M8.2 Extract seed token/HMAC logic into a dedicated `src/challenge/puzzle/token.rs` module.
+- [x] M8.3 Extract puzzle generation/transform/validation logic into `src/challenge/puzzle/mod.rs`.
+- [x] M8.4 Extract rendering and submit/anti-replay flow into focused HTTP modules (`src/challenge/puzzle/renders.rs`, `src/challenge/puzzle/submit.rs`).
 - [x] M8.5 Run verification (`cargo test`) to confirm no behavior change.
 - [x] M9 Directory structure prep for future repo boundaries (core policy, maze+tarpit, challenge, dashboard adapter) with explicit interface contracts.
 - [x] M9.1 Add explicit Rust boundary contracts for challenge/maze/admin in `src/boundaries/contracts.rs`.
@@ -70,6 +70,9 @@ This is the active work queue.
 - [ ] Inject covert decoy links into eligible HTML responses for medium-confidence suspicious traffic.
 - [ ] Keep decoys invisible to normal users and compliant crawlers; avoid UX/SEO regressions.
 - [ ] Increase maze entropy (template diversity, fake static assets, path diversity) to reduce fingerprintability.
+- [ ] Add pluggable maze content-seed providers (default static corpus + operator-supplied dynamic seeds) to reduce hard-coded vocabulary.
+- [ ] Add a manual/scheduled seed-refresh tool for operator-provided URLs/feeds (for example homepage headlines) with robots/compliance guardrails, caching, and rate limits.
+- [ ] Prefer metadata/keyword extraction over copying article bodies to minimize legal risk, bandwidth, and fingerprintability.
 - [ ] Feed maze interaction behavior back into botness scoring and detection IDs.
 
 ### Stage 3: Bounded slow-drip tarpit
@@ -108,8 +111,8 @@ This is the active work queue.
 - [ ] Add challenge operational metrics for abandonment/latency (for example median solve time and incomplete challenge rate).
 
 ## P2 GEO Defence Maturity
-- [ ] Add ASN/network dimensions in GEO policy logic (not just country list). (`src/geo.rs`, `src/config.rs`, `src/admin.rs`)
-- [ ] Add GEO/ASN observability and alerting (metrics, dashboard panels, docs). (`src/metrics.rs`, dashboard, docs)
+- [ ] Add ASN/network dimensions in GEO policy logic (not just country list). (`src/signals/geo/mod.rs`, `src/config/mod.rs`, `src/admin/api.rs`)
+- [ ] Add GEO/ASN observability and alerting (metrics, dashboard panels, docs). (`src/observability/metrics.rs`, dashboard, docs)
 
 ## P2 Modularization and Future Repository Boundaries
 - [ ] Restructure source into clearer domain modules (policy engine, maze/tarpit, challenges, fingerprint signals, admin adapters).
@@ -157,34 +160,44 @@ This is the active work queue.
 - [x] Define and document the defence taxonomy with an explicit inventory of `signal`, `barrier`, and `hybrid` modules (for example `rate` as hybrid); include ownership and dependency direction. (`docs/module-boundaries.md`, Defence Taxonomy section)
 - [x] Introduce a canonical per-request signal contract (for example `BotSignal` + `SignalAccumulator`) that every signal/hybrid module writes to.
 - [x] Add explicit signal availability semantics (`active`, `disabled`, `unavailable`) so botness logic never treats missing modules as silent zero.
-- [ ] Split hybrid modules into distinct paths:
+- [x] Split hybrid modules into distinct paths:
   rate telemetry signal contribution for scoring,
   hard rate-limit enforcement barrier for immediate protection.
-- [ ] Add composability modes for eligible modules (`off`, `signal`, `enforce`, `both`) while keeping safety-critical controls non-disableable.
-- [ ] Define clear behavior for each mode in config/admin surfaces and runtime flow (including invalid combinations and defaults).
-- [ ] Refactor botness scoring to consume normalized accumulator output rather than direct module internals.
-- [ ] Preserve existing behavior as default mode mapping (no behavior change when operators do not opt in to new modes).
-- [ ] Add unit and integration regression tests for mode matrix behavior and ordering invariants (especially hybrid modules and early-route interactions).
-- [ ] Add observability for mode and signal-state visibility (metrics/log fields indicating enabled/disabled/unavailable contributors).
-- [ ] Update docs (`configuration`, `features`, `observability`, `module-boundaries`) to explain composability semantics and tuning implications.
-- [ ] Keep implementations internal-only for now; defer external provider registry/factory work until signal contract and mode semantics stabilize.
+- [x] Add composability modes for eligible modules (`off`, `signal`, `enforce`, `both`) while keeping safety-critical controls non-disableable.
+- [x] Define clear behavior for each mode in config/admin surfaces and runtime flow (including invalid combinations and defaults).
+- [x] Refactor botness scoring to consume normalized accumulator output rather than direct module internals.
+- [x] Lock explicit pre-launch default mode semantics and enforce via tests (`rate=both`, `geo=both`, `js=both`, with JS still gated by `js_required_enforced`).
+- [x] Add unit and integration regression tests for mode matrix behavior and ordering invariants (especially hybrid modules and early-route interactions).
+- [x] Add observability for mode and signal-state visibility (metrics/log fields indicating enabled/disabled/unavailable contributors).
+- [x] Update docs (`configuration`, `features`, `observability`, `module-boundaries`) to explain composability semantics and tuning implications.
+- [x] Keep implementations internal-only for now; defer external provider registry/factory work until signal contract and mode semantics stabilize.
 - [x] H3.6.1 slice completed: added explicit defence taxonomy + inventory (`signal`, `barrier`, `hybrid`) with ownership and dependency direction in `docs/module-boundaries.md`.
 - [x] H3.6.2 slice completed: introduced `BotSignal`/`SignalAccumulator` in `src/signals/botness.rs` and rewired JS, GEO, and rate-pressure botness scoring paths in `src/lib.rs` to emit normalized signal contributions with no behavior change.
 - [x] H3.6.3 slice completed: added explicit signal availability states (`active`, `disabled`, `unavailable`) across JS/GEO/rate signal emitters and botness assessment flow, with regression tests for non-silent disabled/unavailable handling.
+- [x] H3.6.4 slice completed: split rate hybrid paths into `src/signals/rate_pressure.rs` (telemetry + pressure scoring signals) and `src/enforcement/rate.rs` (hard limit enforcement path), then rewired runtime botness flow accordingly.
+- [x] H3.6.5 slice completed: added per-module composability modes (`off`, `signal`, `enforce`, `both`) for JS/GEO/rate with runtime signal/action gating and admin-config validation, preserving default behavior as `both`.
+- [x] H3.6.6 slice completed: defined explicit mode semantics in runtime/config/admin surfaces, added effective-mode + warning payloads (`defence_modes_effective`, `defence_mode_warnings`), and validated invalid mode key/value combinations.
+- [x] H3.6.7 slice completed: introduced `BotnessSignalContext` and split botness into contribution collection + score finalization (`collect_botness_contributions`, `compute_botness_assessment_from_contributions`) so runtime policy consumes normalized contributions rather than direct scoring internals.
+- [x] H3.6.8 slice completed: locked pre-launch default-mode semantics with explicit config tests and added mode-matrix regression coverage for JS/GEO/rate signal paths (including rate hybrid signal behavior), while retaining early-route ordering integration guards.
+- [x] H3.6.9 slice completed: added botness signal-state and effective defence-mode observability (`botness_signal_state_total`, `defence_mode_effective_total`) plus richer botness log outcomes (`signal_states`, `modes`) for maze/challenge decisions.
+- [x] H3.6.10 slice completed: updated composability/tuning/operator docs (`docs/configuration.md`, `docs/features.md`, `docs/observability.md`, `docs/module-boundaries.md`) with effective-mode semantics and observability guidance.
+- [x] H3.6.11 slice completed: kept implementation internal-only (no provider registry/factory introduced) and explicitly deferred external-provider wiring to H4.
 
 ### H4 Pluggable provider architecture (internal by default, external-capable)
-- [ ] Define provider traits for swappable capabilities:
+- [x] Define provider traits for swappable capabilities:
   rate limiting,
   ban store/sync,
   challenge engine,
   maze/tarpit serving,
   fingerprint signal source.
-- [ ] Add a provider registry/factory that selects implementations from config (compile-time/runtime config, no behavior change by default).
+- [x] Add a provider registry/factory that selects implementations from config (compile-time/runtime config, no behavior change by default).
 - [ ] Implement `Internal*` providers matching current behavior as the default path.
 - [ ] Add explicit `External*` adapter stubs/contracts (for example Redis limiter, upstream fingerprint feed) with clear unsupported-path handling.
 - [ ] Add contract tests that every provider implementation must pass to guarantee semantic parity.
 - [ ] Add observability tags/metrics identifying active provider implementation per capability.
 - [ ] Document provider selection, rollout, and rollback procedures in deployment docs.
+- [x] H4.1 slice completed: formalized provider capability contracts in `src/providers/contracts.rs` (`RateLimiterProvider`, `BanStoreProvider`, `ChallengeEngineProvider`, `MazeTarpitProvider`, `FingerprintSignalProvider`) with stable enum labels and default-behavior regression tests.
+- [x] H4.2 slice completed: added config-backed provider backend selection (`provider_backends` + `SHUMA_PROVIDER_*` defaults), plus `src/providers/registry.rs` factory/registry mapping (`internal`/`external`) with default internal selection and no behavior change to request handling paths.
 
 ### H5 Execution and rollout discipline
 - [ ] Execute this hardening work as small, test-backed slices (one boundary family at a time) to avoid broad regressions.

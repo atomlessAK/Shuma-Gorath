@@ -57,23 +57,23 @@ pub(crate) fn maybe_handle_early_route(req: &Request, path: &str) -> Option<Resp
                 crate::boundaries::handle_challenge_submit_with_outcome(&store, req);
             match outcome {
                 crate::boundaries::ChallengeSubmitOutcome::Solved => {
-                    crate::metrics::increment(
+                    crate::observability::metrics::increment(
                         &store,
-                        crate::metrics::MetricName::ChallengeSolvedTotal,
+                        crate::observability::metrics::MetricName::ChallengeSolvedTotal,
                         None,
                     );
                 }
                 crate::boundaries::ChallengeSubmitOutcome::Incorrect => {
-                    crate::metrics::increment(
+                    crate::observability::metrics::increment(
                         &store,
-                        crate::metrics::MetricName::ChallengeIncorrectTotal,
+                        crate::observability::metrics::MetricName::ChallengeIncorrectTotal,
                         None,
                     );
                 }
                 crate::boundaries::ChallengeSubmitOutcome::ExpiredReplay => {
-                    crate::metrics::increment(
+                    crate::observability::metrics::increment(
                         &store,
-                        crate::metrics::MetricName::ChallengeExpiredReplayTotal,
+                        crate::observability::metrics::MetricName::ChallengeExpiredReplayTotal,
                         None,
                     );
                 }
@@ -96,9 +96,9 @@ pub(crate) fn maybe_handle_early_route(req: &Request, path: &str) -> Option<Resp
                 cfg.challenge_transform_count as usize,
             );
             if *response.status() == 200 {
-                crate::metrics::increment(
+                crate::observability::metrics::increment(
                     &store,
-                    crate::metrics::MetricName::ChallengeServedTotal,
+                    crate::observability::metrics::MetricName::ChallengeServedTotal,
                     None,
                 );
             }
@@ -110,7 +110,7 @@ pub(crate) fn maybe_handle_early_route(req: &Request, path: &str) -> Option<Resp
     // Prometheus metrics endpoint
     if path == "/metrics" {
         if let Ok(store) = Store::open_default() {
-            return Some(crate::metrics::handle_metrics(&store));
+            return Some(crate::observability::metrics::handle_metrics(&store));
         }
         return Some(Response::new(500, "Key-value store error"));
     }
@@ -123,13 +123,13 @@ pub(crate) fn maybe_handle_early_route(req: &Request, path: &str) -> Option<Resp
                 Err(resp) => return Some(resp),
             };
             if cfg.robots_enabled {
-                crate::metrics::increment(
+                crate::observability::metrics::increment(
                     &store,
-                    crate::metrics::MetricName::RequestsTotal,
+                    crate::observability::metrics::MetricName::RequestsTotal,
                     Some("robots_txt"),
                 );
-                let content = crate::robots::generate_robots_txt(&cfg);
-                let content_signal = crate::robots::get_content_signal_header(&cfg);
+                let content = crate::crawler_policy::robots::generate_robots_txt(&cfg);
+                let content_signal = crate::crawler_policy::robots::get_content_signal_header(&cfg);
                 return Some(
                     Response::builder()
                         .status(200)

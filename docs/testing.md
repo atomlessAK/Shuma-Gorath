@@ -3,9 +3,11 @@
 ## 🐙 Quick Commands (Official)
 
 ```bash
-make test             # Unit tests + integration if server running
+make test             # Full umbrella suite: unit + Spin integration + dashboard e2e
 make test-unit        # Unit tests only (native Rust)
+make unit-test        # alias for make test-unit
 make test-integration # Integration tests only (Spin required)
+make integration-test # alias for make test-integration
 make test-coverage    # Unit coverage to lcov.info (requires cargo-llvm-cov)
 make test-dashboard-e2e # Playwright dashboard smoke tests (Spin required)
 make test-dashboard   # Manual dashboard checklist
@@ -13,7 +15,8 @@ make test-dashboard   # Manual dashboard checklist
 
 Notes:
 - Use Makefile commands only (avoid running scripts directly)
-- Integration tests require a running Spin server
+- Integration tests require a running Spin server (`make dev`)
+- `make test` includes Playwright dashboard e2e and fails if any stage cannot run.
 
 ## 🐙 Test Layers
 
@@ -23,6 +26,16 @@ This project uses four distinct test environments, each optimized for its scope:
 2. Integration tests (Spin environment)
 3. Dashboard e2e smoke tests (Playwright)
 4. Dashboard checks (manual)
+
+## 🐙 Test Layout Conventions
+
+Rust test layout is now standardized as follows:
+
+- Unit tests should live with the owning module, wired via `#[cfg(test)] mod tests;`.
+- Module-specific test files should be placed under that module directory (for example `src/ban/tests.rs` or `src/whitelist/path_tests.rs`).
+- Shared unit-test utilities belong in `src/test_support.rs` (request builders, env lock, in-memory KV store fixtures).
+- New black-box integration tests should be added in `tests/` when they can rely on public interfaces only.
+- Cross-module crate-internal suites should live under `src/lib_tests/`.
 
 ## 🐙 Why Two Environments
 
@@ -109,6 +122,18 @@ Notes:
 The Makefile switches crate types between `rlib` (native tests) and `cdylib` (Spin WASM) via `scripts/set_crate_type.sh`.
 Integration tests run `cargo clean` to avoid stale artifacts.
 Use the Makefile targets rather than calling scripts directly.
+
+## 🐙 Generated Directories
+
+These directories are generated locally/CI and should never be committed:
+
+- `dist/wasm/` - built Spin component artifact (`shuma_gorath.wasm`)
+- `target/` - Rust build cache/output
+- `.spin/` - local Spin runtime data/logs
+- `playwright-report/` - Playwright HTML report output
+- `test-results/` - Playwright test result artifacts
+
+`make clean` removes these generated outputs, including stale local `src/*.wasm` artifacts.
 
 ## 🐙 Manual Test Sequence (Optional)
 

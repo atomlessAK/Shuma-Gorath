@@ -14,6 +14,9 @@ pub enum GeoPolicyRoute {
     Block,
 }
 
+const GEO_SIGNAL_KEY: &str = "geo_risk";
+const GEO_SIGNAL_LABEL: &str = "High-risk geography";
+
 /// Extract and normalize country code from trusted edge headers.
 /// Returns None when geo headers are not trusted for this request.
 pub fn extract_geo_country(req: &Request, headers_trusted: bool) -> Option<String> {
@@ -28,7 +31,7 @@ pub fn extract_geo_country(req: &Request, headers_trusted: bool) -> Option<Strin
 
 /// Normalize a country code to two-letter uppercase ISO form.
 pub fn normalize_country_code(value: &str) -> Option<String> {
-    crate::input_validation::normalize_country_code_iso(value)
+    crate::request_validation::normalize_country_code_iso(value)
 }
 
 /// Normalize, deduplicate, and preserve order for configured country lists.
@@ -81,17 +84,13 @@ pub fn bot_signal(
     weight: u8,
 ) -> crate::signals::botness::BotSignal {
     if !signal_available {
-        return crate::signals::botness::BotSignal::unavailable(
-            "geo_risk",
-            "High-risk geography",
-        );
+        return crate::signals::botness::BotSignal::unavailable(GEO_SIGNAL_KEY, GEO_SIGNAL_LABEL);
     }
-    crate::signals::botness::BotSignal::scored(
-        "geo_risk",
-        "High-risk geography",
-        scored_risk,
-        weight,
-    )
+    crate::signals::botness::BotSignal::scored(GEO_SIGNAL_KEY, GEO_SIGNAL_LABEL, scored_risk, weight)
+}
+
+pub fn disabled_bot_signal() -> crate::signals::botness::BotSignal {
+    crate::signals::botness::BotSignal::disabled(GEO_SIGNAL_KEY, GEO_SIGNAL_LABEL)
 }
 
 #[cfg(test)]

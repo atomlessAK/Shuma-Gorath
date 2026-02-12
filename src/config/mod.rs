@@ -71,6 +71,117 @@ impl Default for BotnessWeights {
     }
 }
 
+/// Per-module composability modes for signal and enforcement/action paths.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ComposabilityMode {
+    Off,
+    Signal,
+    Enforce,
+    Both,
+}
+
+impl ComposabilityMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ComposabilityMode::Off => "off",
+            ComposabilityMode::Signal => "signal",
+            ComposabilityMode::Enforce => "enforce",
+            ComposabilityMode::Both => "both",
+        }
+    }
+
+    pub fn signal_enabled(self) -> bool {
+        matches!(self, ComposabilityMode::Signal | ComposabilityMode::Both)
+    }
+
+    pub fn action_enabled(self) -> bool {
+        matches!(self, ComposabilityMode::Enforce | ComposabilityMode::Both)
+    }
+}
+
+/// Composability controls for hybrid/eligible defenses.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DefenceModes {
+    #[serde(default = "default_mode_rate")]
+    pub rate: ComposabilityMode,
+    #[serde(default = "default_mode_geo")]
+    pub geo: ComposabilityMode,
+    #[serde(default = "default_mode_js")]
+    pub js: ComposabilityMode,
+}
+
+impl Default for DefenceModes {
+    fn default() -> Self {
+        Self {
+            rate: default_mode_rate(),
+            geo: default_mode_geo(),
+            js: default_mode_js(),
+        }
+    }
+}
+
+/// Provider backend selection for swappable capabilities.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderBackend {
+    Internal,
+    External,
+}
+
+impl ProviderBackend {
+    #[allow(dead_code)]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ProviderBackend::Internal => "internal",
+            ProviderBackend::External => "external",
+        }
+    }
+}
+
+/// Per-capability provider backend selections.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct ProviderBackends {
+    #[serde(default = "default_provider_rate_limiter")]
+    pub rate_limiter: ProviderBackend,
+    #[serde(default = "default_provider_ban_store")]
+    pub ban_store: ProviderBackend,
+    #[serde(default = "default_provider_challenge_engine")]
+    pub challenge_engine: ProviderBackend,
+    #[serde(default = "default_provider_maze_tarpit")]
+    pub maze_tarpit: ProviderBackend,
+    #[serde(default = "default_provider_fingerprint_signal")]
+    pub fingerprint_signal: ProviderBackend,
+}
+
+impl Default for ProviderBackends {
+    fn default() -> Self {
+        Self {
+            rate_limiter: default_provider_rate_limiter(),
+            ban_store: default_provider_ban_store(),
+            challenge_engine: default_provider_challenge_engine(),
+            maze_tarpit: default_provider_maze_tarpit(),
+            fingerprint_signal: default_provider_fingerprint_signal(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+pub struct DefenceModeEffective {
+    pub configured: ComposabilityMode,
+    pub signal_enabled: bool,
+    pub action_enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+pub struct DefenceModesEffective {
+    pub rate: DefenceModeEffective,
+    pub geo: DefenceModeEffective,
+    pub js: DefenceModeEffective,
+}
+
 /// Ban duration settings per ban type (in seconds)
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BanDurations {
@@ -180,6 +291,10 @@ pub struct Config {
     pub botness_maze_threshold: u8,
     #[serde(default)]
     pub botness_weights: BotnessWeights,
+    #[serde(default)]
+    pub defence_modes: DefenceModes,
+    #[serde(default)]
+    pub provider_backends: ProviderBackends,
 }
 
 #[derive(Debug, Clone)]
@@ -206,6 +321,71 @@ impl Config {
     /// Returns ban duration for a specific ban type.
     pub fn get_ban_duration(&self, ban_type: &str) -> u64 {
         self.ban_durations.get(ban_type)
+    }
+
+    pub fn rate_signal_enabled(&self) -> bool {
+        self.defence_modes.rate.signal_enabled()
+    }
+
+    pub fn rate_action_enabled(&self) -> bool {
+        self.defence_modes.rate.action_enabled()
+    }
+
+    pub fn geo_signal_enabled(&self) -> bool {
+        self.defence_modes.geo.signal_enabled()
+    }
+
+    pub fn geo_action_enabled(&self) -> bool {
+        self.defence_modes.geo.action_enabled()
+    }
+
+    pub fn js_signal_enabled(&self) -> bool {
+        self.js_required_enforced && self.defence_modes.js.signal_enabled()
+    }
+
+    pub fn js_action_enabled(&self) -> bool {
+        self.js_required_enforced && self.defence_modes.js.action_enabled()
+    }
+
+    pub fn defence_mode_warnings(&self) -> Vec<String> {
+        let mut warnings = Vec::new();
+        if !self.js_required_enforced && self.defence_modes.js != ComposabilityMode::Off {
+            warnings.push(
+                "js_required_enforced=false disables JS signal/action regardless of defence_modes.js"
+                    .to_string(),
+            );
+        }
+        warnings
+    }
+
+    pub fn defence_modes_effective(&self) -> DefenceModesEffective {
+        let js_note = if !self.js_required_enforced && self.defence_modes.js != ComposabilityMode::Off
+        {
+            Some("Overridden by js_required_enforced=false".to_string())
+        } else {
+            None
+        };
+
+        DefenceModesEffective {
+            rate: DefenceModeEffective {
+                configured: self.defence_modes.rate,
+                signal_enabled: self.rate_signal_enabled(),
+                action_enabled: self.rate_action_enabled(),
+                note: None,
+            },
+            geo: DefenceModeEffective {
+                configured: self.defence_modes.geo,
+                signal_enabled: self.geo_signal_enabled(),
+                action_enabled: self.geo_action_enabled(),
+                note: None,
+            },
+            js: DefenceModeEffective {
+                configured: self.defence_modes.js,
+                signal_enabled: self.js_signal_enabled(),
+                action_enabled: self.js_action_enabled(),
+                note: js_note,
+            },
+        }
     }
 }
 
@@ -332,6 +512,8 @@ static DEFAULT_CONFIG: Lazy<Config> = Lazy::new(|| {
             rate_medium: defaults_u8("SHUMA_BOTNESS_WEIGHT_RATE_MEDIUM"),
             rate_high: defaults_u8("SHUMA_BOTNESS_WEIGHT_RATE_HIGH"),
         },
+        defence_modes: DefenceModes::default(),
+        provider_backends: ProviderBackends::default(),
     };
     clamp_config_values(&mut cfg);
     cfg
@@ -435,6 +617,24 @@ fn parse_bool_like(value: &str) -> Option<bool> {
     match value.trim().to_ascii_lowercase().as_str() {
         "1" | "true" | "yes" | "on" => Some(true),
         "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
+    }
+}
+
+pub(crate) fn parse_composability_mode(value: &str) -> Option<ComposabilityMode> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "off" => Some(ComposabilityMode::Off),
+        "signal" => Some(ComposabilityMode::Signal),
+        "enforce" => Some(ComposabilityMode::Enforce),
+        "both" => Some(ComposabilityMode::Both),
+        _ => None,
+    }
+}
+
+pub(crate) fn parse_provider_backend(value: &str) -> Option<ProviderBackend> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "internal" => Some(ProviderBackend::Internal),
+        "external" => Some(ProviderBackend::External),
         _ => None,
     }
 }
@@ -871,6 +1071,50 @@ fn default_botness_weight_rate_medium() -> u8 {
 
 fn default_botness_weight_rate_high() -> u8 {
     clamp_botness_weight(defaults_u8("SHUMA_BOTNESS_WEIGHT_RATE_HIGH"))
+}
+
+fn defaults_composability_mode(key: &str) -> ComposabilityMode {
+    let raw = defaults_raw(key);
+    parse_composability_mode(raw.as_str())
+        .unwrap_or_else(|| panic!("Invalid composability mode default for {}={}", key, raw))
+}
+
+fn default_mode_rate() -> ComposabilityMode {
+    defaults_composability_mode("SHUMA_MODE_RATE")
+}
+
+fn default_mode_geo() -> ComposabilityMode {
+    defaults_composability_mode("SHUMA_MODE_GEO")
+}
+
+fn default_mode_js() -> ComposabilityMode {
+    defaults_composability_mode("SHUMA_MODE_JS")
+}
+
+fn defaults_provider_backend(key: &str) -> ProviderBackend {
+    let raw = defaults_raw(key);
+    parse_provider_backend(raw.as_str())
+        .unwrap_or_else(|| panic!("Invalid provider backend default for {}={}", key, raw))
+}
+
+fn default_provider_rate_limiter() -> ProviderBackend {
+    defaults_provider_backend("SHUMA_PROVIDER_RATE_LIMITER")
+}
+
+fn default_provider_ban_store() -> ProviderBackend {
+    defaults_provider_backend("SHUMA_PROVIDER_BAN_STORE")
+}
+
+fn default_provider_challenge_engine() -> ProviderBackend {
+    defaults_provider_backend("SHUMA_PROVIDER_CHALLENGE_ENGINE")
+}
+
+fn default_provider_maze_tarpit() -> ProviderBackend {
+    defaults_provider_backend("SHUMA_PROVIDER_MAZE_TARPIT")
+}
+
+fn default_provider_fingerprint_signal() -> ProviderBackend {
+    defaults_provider_backend("SHUMA_PROVIDER_FINGERPRINT_SIGNAL")
 }
 
 #[cfg(test)]

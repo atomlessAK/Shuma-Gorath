@@ -66,6 +66,14 @@ These keys are seeded into KV and loaded from KV at runtime.
 | --- | --- | --- |
 | `SHUMA_TEST_MODE` | `false` | Enables test-mode behavior for controlled local testing. |
 | `SHUMA_JS_REQUIRED_ENFORCED` | `true` | Enforces JS verification (`js_verified` cookie gate). |
+| `SHUMA_MODE_RATE` | `both` | Rate module mode: `off`, `signal`, `enforce`, `both`. |
+| `SHUMA_MODE_GEO` | `both` | GEO module mode: `off`, `signal`, `enforce`, `both`. |
+| `SHUMA_MODE_JS` | `both` | JS module mode: `off`, `signal`, `enforce`, `both` (still gated by `js_required_enforced`). |
+| `SHUMA_PROVIDER_RATE_LIMITER` | `internal` | Backend selection for rate limiting capability (`internal`, `external`). |
+| `SHUMA_PROVIDER_BAN_STORE` | `internal` | Backend selection for ban store/sync capability (`internal`, `external`). |
+| `SHUMA_PROVIDER_CHALLENGE_ENGINE` | `internal` | Backend selection for challenge engine capability (`internal`, `external`). |
+| `SHUMA_PROVIDER_MAZE_TARPIT` | `internal` | Backend selection for maze/tarpit capability (`internal`, `external`). |
+| `SHUMA_PROVIDER_FINGERPRINT_SIGNAL` | `internal` | Backend selection for fingerprint signal capability (`internal`, `external`). |
 | `SHUMA_POW_ENABLED` | `true` | Enables PoW in JS verification flow. |
 | `SHUMA_POW_DIFFICULTY` | `15` | PoW cost level (clamped to supported range). |
 | `SHUMA_POW_TTL_SECONDS` | `90` | PoW seed lifetime in seconds (clamped). |
@@ -117,6 +125,49 @@ These keys are seeded into KV and loaded from KV at runtime.
 - `js_required_enforced=true` routes visitors without a valid `js_verified` cookie to JS verification.
 - `pow_enabled=true` adds server-verified PoW to that verification flow.
 - `js_required_enforced=false` bypasses JS verification for normal requests (and therefore bypasses PoW on that path).
+
+## 🐙 Composability Modes (`off`/`signal`/`enforce`/`both`)
+
+Mode semantics for eligible modules (`rate`, `geo`, `js`):
+
+- `off`: no scored signal contribution and no enforcement action.
+- `signal`: contribute scored signal only; no direct enforcement action.
+- `enforce`: allow direct enforcement path only; no scored contribution.
+- `both`: enable both scored contribution and enforcement path.
+
+Default seeded modes are `both` for all three modules as the current pre-launch baseline (`rate=both`, `geo=both`, `js=both`).
+
+### Effective mode notes and invalid combinations
+
+- `js_required_enforced` is still a hard gate for JS paths.
+- When `js_required_enforced=false`, JS signal and JS enforcement are both effectively disabled even if `defence_modes.js` is `signal`, `enforce`, or `both`.
+- `/admin/config` surfaces this as:
+  - `defence_modes` (configured modes),
+  - `defence_modes_effective` (runtime-effective signal/action booleans),
+  - `defence_mode_warnings` (configuration conflict notes).
+
+### Tuning implications
+
+- `rate=signal` keeps botness pressure scoring without rate-limit bans; useful for dry-run tuning.
+- `rate=enforce` keeps hard caps/bans but removes rate pressure from botness scoring.
+- `geo=signal` keeps GEO risk scoring while deferring GEO routing actions (`block/challenge/maze`) to other controls.
+- `geo=enforce` keeps explicit GEO routing actions but removes GEO contribution to botness score.
+- `js=signal` or `js=enforce` still require `js_required_enforced=true`; otherwise JS signal/action are both effectively disabled.
+
+## 🐙 Provider Selection (H4 foundation)
+
+- Provider selection is now explicit in config under `provider_backends`.
+- All capabilities default to `internal`.
+- `external` values are accepted at config level to support staged rollout of provider adapters; behavior remains internal until external adapters are wired in later H4 slices.
+
+### Observability surfaces for composability
+
+- `/metrics` includes:
+  - `bot_defence_botness_signal_state_total{signal="...",state="active|disabled|unavailable"}`
+  - `bot_defence_defence_mode_effective_total{module="rate|geo|js",configured="off|signal|enforce|both",signal_enabled="true|false",action_enabled="true|false"}`
+- Botness-driven maze/challenge event outcomes include both:
+  - `signal_states` summary (`key:state:contribution`),
+  - effective mode summary (`module=configured/signal_enabled/action_enabled`).
 
 ## 🐙 GEO Trust Boundary
 

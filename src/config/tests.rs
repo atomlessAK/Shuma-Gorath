@@ -82,6 +82,109 @@ fn parse_botness_weight_clamps_range() {
 }
 
 #[test]
+fn parse_composability_mode_accepts_expected_values() {
+    assert_eq!(
+        parse_composability_mode("off"),
+        Some(ComposabilityMode::Off)
+    );
+    assert_eq!(
+        parse_composability_mode("signal"),
+        Some(ComposabilityMode::Signal)
+    );
+    assert_eq!(
+        parse_composability_mode("enforce"),
+        Some(ComposabilityMode::Enforce)
+    );
+    assert_eq!(
+        parse_composability_mode("both"),
+        Some(ComposabilityMode::Both)
+    );
+    assert_eq!(
+        parse_composability_mode("  BoTh "),
+        Some(ComposabilityMode::Both)
+    );
+    assert_eq!(parse_composability_mode("invalid"), None);
+    assert_eq!(ComposabilityMode::Off.as_str(), "off");
+    assert_eq!(ComposabilityMode::Signal.as_str(), "signal");
+    assert_eq!(ComposabilityMode::Enforce.as_str(), "enforce");
+    assert_eq!(ComposabilityMode::Both.as_str(), "both");
+}
+
+#[test]
+fn parse_provider_backend_accepts_expected_values() {
+    assert_eq!(
+        parse_provider_backend("internal"),
+        Some(ProviderBackend::Internal)
+    );
+    assert_eq!(
+        parse_provider_backend("external"),
+        Some(ProviderBackend::External)
+    );
+    assert_eq!(
+        parse_provider_backend("  ExTeRnAl "),
+        Some(ProviderBackend::External)
+    );
+    assert_eq!(parse_provider_backend("invalid"), None);
+    assert_eq!(ProviderBackend::Internal.as_str(), "internal");
+    assert_eq!(ProviderBackend::External.as_str(), "external");
+}
+
+#[test]
+fn defaults_enable_both_signal_and_action_paths() {
+    let cfg = defaults().clone();
+    assert!(cfg.js_required_enforced);
+    assert_eq!(cfg.defence_modes.js, ComposabilityMode::Both);
+    assert_eq!(cfg.defence_modes.geo, ComposabilityMode::Both);
+    assert_eq!(cfg.defence_modes.rate, ComposabilityMode::Both);
+    assert!(cfg.rate_signal_enabled());
+    assert!(cfg.rate_action_enabled());
+    assert!(cfg.geo_signal_enabled());
+    assert!(cfg.geo_action_enabled());
+    assert!(cfg.js_signal_enabled());
+    assert!(cfg.js_action_enabled());
+
+    let effective = cfg.defence_modes_effective();
+    assert!(effective.rate.signal_enabled);
+    assert!(effective.rate.action_enabled);
+    assert!(effective.geo.signal_enabled);
+    assert!(effective.geo.action_enabled);
+    assert!(effective.js.signal_enabled);
+    assert!(effective.js.action_enabled);
+    assert!(cfg.defence_mode_warnings().is_empty());
+    assert_eq!(cfg.provider_backends.rate_limiter, ProviderBackend::Internal);
+    assert_eq!(cfg.provider_backends.ban_store, ProviderBackend::Internal);
+    assert_eq!(
+        cfg.provider_backends.challenge_engine,
+        ProviderBackend::Internal
+    );
+    assert_eq!(cfg.provider_backends.maze_tarpit, ProviderBackend::Internal);
+    assert_eq!(
+        cfg.provider_backends.fingerprint_signal,
+        ProviderBackend::Internal
+    );
+}
+
+#[test]
+fn js_effective_mode_is_disabled_when_js_required_enforced_is_false() {
+    let mut cfg = defaults().clone();
+    cfg.js_required_enforced = false;
+    cfg.defence_modes.js = ComposabilityMode::Both;
+
+    assert!(!cfg.js_signal_enabled());
+    assert!(!cfg.js_action_enabled());
+
+    let effective = cfg.defence_modes_effective();
+    assert_eq!(effective.js.configured, ComposabilityMode::Both);
+    assert!(!effective.js.signal_enabled);
+    assert!(!effective.js.action_enabled);
+    assert!(effective.js.note.is_some());
+
+    let warnings = cfg.defence_mode_warnings();
+    assert_eq!(warnings.len(), 1);
+    assert!(warnings[0].contains("js_required_enforced=false"));
+}
+
+#[test]
 fn challenge_config_mutable_from_env_parses_values() {
     assert!(challenge_config_mutable_from_env(Some("1")));
     assert!(challenge_config_mutable_from_env(Some("true")));

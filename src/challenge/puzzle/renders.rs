@@ -1,14 +1,14 @@
 use rand::Rng;
 use spin_sdk::http::{Request, Response};
 
-use super::puzzle::{build_puzzle, select_transform_pair, transforms_for_count};
+use super::{build_puzzle, select_transform_pair, transforms_for_count};
 use super::token::make_seed_token;
 use super::types::{ChallengeSeed, Transform};
-use super::{challenge_response, PUZZLE_PATH};
+use super::super::{challenge_response, PUZZLE_PATH};
 
 pub(crate) fn render_challenge(req: &Request, transform_count: usize) -> Response {
     let ip = crate::extract_client_ip(req);
-    let ip_bucket = crate::signals::ip::bucket_ip(&ip);
+    let ip_bucket = crate::signals::ip_identity::bucket_ip(&ip);
     let now = crate::admin::now_ts();
     let mut rng = rand::rng();
     let grid_size = 4u8;

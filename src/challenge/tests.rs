@@ -359,7 +359,7 @@ mod tests {
             seed_id: "seed-2".to_string(),
             issued_at: now,
             expires_at: now + 300,
-            ip_bucket: crate::signals::ip::bucket_ip("unknown"),
+            ip_bucket: crate::signals::ip_identity::bucket_ip("unknown"),
             grid_size: 4,
             active_cells: 4,
             transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
@@ -392,7 +392,7 @@ mod tests {
             seed_id: "seed-3".to_string(),
             issued_at: now,
             expires_at: now + 300,
-            ip_bucket: crate::signals::ip::bucket_ip("unknown"),
+            ip_bucket: crate::signals::ip_identity::bucket_ip("unknown"),
             grid_size: 4,
             active_cells: 4,
             transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
@@ -422,7 +422,7 @@ mod tests {
             seed_id: "seed-once".to_string(),
             issued_at: now,
             expires_at: now + 300,
-            ip_bucket: crate::signals::ip::bucket_ip("unknown"),
+            ip_bucket: crate::signals::ip_identity::bucket_ip("unknown"),
             grid_size: 4,
             active_cells: 7,
             transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
@@ -474,7 +474,7 @@ mod tests {
             seed_id: "seed-expired".to_string(),
             issued_at: now - 1000,
             expires_at: now - 1,
-            ip_bucket: crate::signals::ip::bucket_ip("unknown"),
+            ip_bucket: crate::signals::ip_identity::bucket_ip("unknown"),
             grid_size: 4,
             active_cells: 7,
             transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
@@ -522,7 +522,7 @@ mod tests {
     #[test]
     fn handle_challenge_submit_rejects_oversized_form_body() {
         let store = TestStore::default();
-        let oversized = "a".repeat(crate::input_validation::MAX_CHALLENGE_FORM_BYTES + 1);
+        let oversized = "a".repeat(crate::request_validation::MAX_CHALLENGE_FORM_BYTES + 1);
         let req = Request::builder()
             .method(Method::Post)
             .uri("/challenge/puzzle")

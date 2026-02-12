@@ -1,4 +1,4 @@
-// src/ip.rs
+// src/signals/ip_identity.rs
 // Helper utilities for bucketing/sanitizing IPs to reduce key cardinality
 
 use std::hash::{Hash, Hasher};

@@ -24,12 +24,12 @@ pub(crate) fn maybe_handle_honeypot(
             summary: Some(format!("path={}", path)),
         }),
     );
-    crate::metrics::increment(
+    crate::observability::metrics::increment(
         store,
-        crate::metrics::MetricName::BansTotal,
+        crate::observability::metrics::MetricName::BansTotal,
         Some("honeypot"),
     );
-    crate::metrics::increment(store, crate::metrics::MetricName::BlocksTotal, None);
+    crate::observability::metrics::increment(store, crate::observability::metrics::MetricName::BlocksTotal, None);
     crate::admin::log_event(
         store,
         &crate::admin::EventLogEntry {
@@ -53,6 +53,10 @@ pub(crate) fn maybe_handle_rate_limit(
     site_id: &str,
     ip: &str,
 ) -> Option<Response> {
+    if !cfg.rate_action_enabled() {
+        return None;
+    }
+
     if crate::enforcement::rate::check_rate_limit(store, site_id, ip, cfg.rate_limit) {
         return None;
     }
@@ -69,12 +73,12 @@ pub(crate) fn maybe_handle_rate_limit(
             summary: Some(format!("rate_limit={}", cfg.rate_limit)),
         }),
     );
-    crate::metrics::increment(
+    crate::observability::metrics::increment(
         store,
-        crate::metrics::MetricName::BansTotal,
+        crate::observability::metrics::MetricName::BansTotal,
         Some("rate_limit"),
     );
-    crate::metrics::increment(store, crate::metrics::MetricName::BlocksTotal, None);
+    crate::observability::metrics::increment(store, crate::observability::metrics::MetricName::BlocksTotal, None);
     crate::admin::log_event(
         store,
         &crate::admin::EventLogEntry {
@@ -101,7 +105,7 @@ pub(crate) fn maybe_handle_existing_ban(
         return None;
     }
 
-    crate::metrics::increment(store, crate::metrics::MetricName::BlocksTotal, None);
+    crate::observability::metrics::increment(store, crate::observability::metrics::MetricName::BlocksTotal, None);
     crate::admin::log_event(
         store,
         &crate::admin::EventLogEntry {
@@ -126,9 +130,13 @@ pub(crate) fn maybe_handle_geo_policy(
     ip: &str,
     geo_assessment: &crate::GeoAssessment,
 ) -> Option<Response> {
+    if !cfg.geo_action_enabled() {
+        return None;
+    }
+
     match geo_assessment.route {
         crate::signals::geo::GeoPolicyRoute::Block => {
-            crate::metrics::increment(store, crate::metrics::MetricName::BlocksTotal, None);
+            crate::observability::metrics::increment(store, crate::observability::metrics::MetricName::BlocksTotal, None);
             crate::admin::log_event(
                 store,
                 &crate::admin::EventLogEntry {
@@ -162,10 +170,10 @@ pub(crate) fn maybe_handle_geo_policy(
                     ),
                 ));
             }
-            crate::metrics::increment(store, crate::metrics::MetricName::ChallengesTotal, None);
-            crate::metrics::increment(
+            crate::observability::metrics::increment(store, crate::observability::metrics::MetricName::ChallengesTotal, None);
+            crate::observability::metrics::increment(
                 store,
-                crate::metrics::MetricName::ChallengeServedTotal,
+                crate::observability::metrics::MetricName::ChallengeServedTotal,
                 None,
             );
             crate::admin::log_event(
@@ -185,10 +193,10 @@ pub(crate) fn maybe_handle_geo_policy(
             ))
         }
         crate::signals::geo::GeoPolicyRoute::Challenge => {
-            crate::metrics::increment(store, crate::metrics::MetricName::ChallengesTotal, None);
-            crate::metrics::increment(
+            crate::observability::metrics::increment(store, crate::observability::metrics::MetricName::ChallengesTotal, None);
+            crate::observability::metrics::increment(
                 store,
-                crate::metrics::MetricName::ChallengeServedTotal,
+                crate::observability::metrics::MetricName::ChallengeServedTotal,
                 None,
             );
             crate::admin::log_event(
@@ -222,15 +230,19 @@ pub(crate) fn compute_needs_js(
     path: &str,
     ip: &str,
 ) -> bool {
+    if !cfg.js_signal_enabled() && !cfg.js_action_enabled() {
+        return false;
+    }
+
     let js_missing_verification = path != "/health"
-        && crate::signals::js::needs_js_verification_with_whitelist(
+        && crate::signals::js_verification::needs_js_verification_with_whitelist(
             req,
             store,
             site_id,
             ip,
             &cfg.browser_whitelist,
         );
-    cfg.js_required_enforced && js_missing_verification
+    js_missing_verification
 }
 
 pub(crate) fn maybe_handle_botness(
@@ -244,17 +256,21 @@ pub(crate) fn maybe_handle_botness(
 ) -> Option<Response> {
     let geo_risk = geo_assessment.scored_risk;
     let geo_signal_available = geo_assessment.headers_trusted && geo_assessment.country.is_some();
-    let rate_usage = crate::enforcement::rate::current_rate_usage(store, site_id, ip);
+    let rate_usage = crate::signals::rate_pressure::current_rate_usage(store, site_id, ip);
     let botness = crate::compute_botness_assessment(
-        cfg.js_required_enforced,
-        needs_js,
-        geo_signal_available,
-        geo_risk,
-        rate_usage,
-        cfg.rate_limit,
+        crate::BotnessSignalContext {
+            js_needed: needs_js,
+            geo_signal_available,
+            geo_risk,
+            rate_count: rate_usage,
+            rate_limit: cfg.rate_limit,
+        },
         cfg,
     );
+    crate::observability::metrics::record_botness_visibility(store, cfg, &botness);
     let botness_summary = crate::botness_signals_summary(&botness);
+    let botness_state_summary = crate::botness_signal_states_summary(&botness);
+    let mode_summary = crate::defence_modes_effective_summary(cfg);
 
     if cfg.maze_enabled && botness.score >= cfg.botness_maze_threshold {
         return Some(crate::serve_maze_with_tracking(
@@ -263,15 +279,18 @@ pub(crate) fn maybe_handle_botness(
             ip,
             "/maze/botness-gate",
             "botness_gate_maze",
-            &format!("score={} signals={}", botness.score, botness_summary),
+            &format!(
+                "score={} signals={} signal_states={} modes={}",
+                botness.score, botness_summary, botness_state_summary, mode_summary
+            ),
         ));
     }
 
     if botness.score >= cfg.challenge_risk_threshold {
-        crate::metrics::increment(store, crate::metrics::MetricName::ChallengesTotal, None);
-        crate::metrics::increment(
+        crate::observability::metrics::increment(store, crate::observability::metrics::MetricName::ChallengesTotal, None);
+        crate::observability::metrics::increment(
             store,
-            crate::metrics::MetricName::ChallengeServedTotal,
+            crate::observability::metrics::MetricName::ChallengeServedTotal,
             None,
         );
         crate::admin::log_event(
@@ -282,8 +301,8 @@ pub(crate) fn maybe_handle_botness(
                 ip: Some(ip.to_string()),
                 reason: Some("botness_gate_challenge".to_string()),
                 outcome: Some(format!(
-                    "score={} signals={}",
-                    botness.score, botness_summary
+                    "score={} signals={} signal_states={} modes={}",
+                    botness.score, botness_summary, botness_state_summary, mode_summary
                 )),
                 admin: None,
             },
@@ -303,10 +322,13 @@ pub(crate) fn maybe_handle_js(
     ip: &str,
     needs_js: bool,
 ) -> Option<Response> {
+    if !cfg.js_action_enabled() {
+        return None;
+    }
     if !needs_js {
         return None;
     }
-    crate::metrics::increment(store, crate::metrics::MetricName::ChallengesTotal, None);
+    crate::observability::metrics::increment(store, crate::observability::metrics::MetricName::ChallengesTotal, None);
     crate::admin::log_event(
         store,
         &crate::admin::EventLogEntry {
@@ -318,7 +340,7 @@ pub(crate) fn maybe_handle_js(
             admin: None,
         },
     );
-    Some(crate::signals::js::inject_js_challenge(
+    Some(crate::signals::js_verification::inject_js_challenge(
         ip,
         cfg.pow_enabled,
         cfg.pow_difficulty,

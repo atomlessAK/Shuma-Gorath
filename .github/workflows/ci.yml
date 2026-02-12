@@ -35,6 +35,14 @@ jobs:
           test -f CONTRIBUTING.md
           test -f .github/pull_request_template.md
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Enable corepack
+        run: corepack enable
+
       - name: Install Rust toolchain and target
         uses: dtolnay/rust-toolchain@stable
         with:

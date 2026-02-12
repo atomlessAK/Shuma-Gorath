@@ -110,9 +110,9 @@ pub fn handle_cdp_report(store: &Store, req: &Request) -> Response {
 
     // Parse and validate the report body.
     let body = req.body();
-    if let Err(e) = crate::input_validation::enforce_body_size(
+    if let Err(e) = crate::request_validation::enforce_body_size(
         body,
-        crate::input_validation::MAX_CDP_REPORT_BYTES,
+        crate::request_validation::MAX_CDP_REPORT_BYTES,
     ) {
         return Response::new(400, e);
     }
@@ -128,7 +128,7 @@ pub fn handle_cdp_report(store: &Store, req: &Request) -> Response {
     }
     let mut sanitized_checks = Vec::new();
     for check in report.checks {
-        let Some(clean) = crate::input_validation::sanitize_check_name(check.as_str()) else {
+        let Some(clean) = crate::request_validation::sanitize_check_name(check.as_str()) else {
             return Response::new(400, "Invalid CDP check name");
         };
         if !sanitized_checks.contains(&clean) {
@@ -157,7 +157,7 @@ pub fn handle_cdp_report(store: &Store, req: &Request) -> Response {
     );
 
     // Increment metrics
-    crate::metrics::increment(store, crate::metrics::MetricName::CdpDetections, None);
+    crate::observability::metrics::increment(store, crate::observability::metrics::MetricName::CdpDetections, None);
     increment_kv_counter(store, "cdp:detections");
 
     // Auto-ban only for strong-tier detections when enabled.
@@ -180,9 +180,9 @@ pub fn handle_cdp_report(store: &Store, req: &Request) -> Response {
                 )),
             }),
         );
-        crate::metrics::increment(
+        crate::observability::metrics::increment(
             store,
-            crate::metrics::MetricName::BansTotal,
+            crate::observability::metrics::MetricName::BansTotal,
             Some("cdp_automation"),
         );
         increment_kv_counter(store, "cdp:auto_bans");

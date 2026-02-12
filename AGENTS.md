@@ -14,7 +14,7 @@ This file provides instructions for coding agents working in this repository.
 
 ## Core operating goals
 
-- Keep defense as frictionless as possible for legitimate humans.
+- Keep defense as frictionless as possible for humans and tolerated bots.
 - Make malicious bot behavior progressively more expensive.
 - Prefer asymmetric designs where attacker cost rises faster than defender cost.
 - Prioritize resource efficiency (bandwidth, CPU, memory, energy).
@@ -23,15 +23,19 @@ This file provides instructions for coding agents working in this repository.
 ## Required workflow for non-trivial changes
 
 1. Read relevant docs and touched modules before editing.
-2. Make small, reviewable changes.
-3. Add/update tests for behavior changes.
-4. Update docs for behavior/config/ops changes.
-5. Run verification through `Makefile` targets only:
-   - `make test-unit` / `make test` for Rust verification,
+2. When acting on TODO items, scan the full TODO backlog first (`todos/todo.md` and `todos/security-review.md`) to identify intersecting items and avoid duplicate or conflicting work.
+3. Make small, reviewable changes.
+4. Add/update tests for behavior changes.
+5. Update docs for behavior/config/ops changes.
+6. Run verification through `Makefile` targets only:
+   - `make test` as the umbrella verification path (unit + integration + dashboard e2e),
+   - `make test-unit`, `make test-integration`, and `make test-dashboard-e2e` for focused reruns,
    - `make build` for release build verification,
    - `make setup`/`make verify` when environment/bootstrap behavior is touched.
    Direct ad-hoc tool invocations (for example `cargo test`, `cargo build`, `spin up`) are not the canonical verification path for normal contributor/agent workflow.
-6. Document security, operational, and resource implications.
+   For `make test`, integration and dashboard e2e tests are mandatory and must not be skipped: start Spin first with `make dev` (separate terminal/session), then run `make test`.
+7. Before reporting completion, confirm relevant CI status (or state explicitly that CI is pending/unverified).
+8. Document security, operational, and resource implications.
 
 ## Security and abuse posture
 
@@ -44,6 +48,8 @@ This file provides instructions for coding agents working in this repository.
 - Respect module boundaries documented in `docs/module-boundaries.md`.
 - Use ADRs (`docs/adr/0000-template.md`) for cross-cutting architecture/security/ops decisions.
 - Keep compatibility shims temporary and remove when migrations complete.
+- Use descriptive Rust module/file naming: prefer clear, responsibility-revealing `snake_case` names (for example `request_validation.rs`, `browser_user_agent.rs`) over vague names.
+- Prefer explicit module files (`foo.rs`) over opaque `mod.rs` for new work when practical; keep directory + filename understandable without opening the file.
 
 ## Pull request expectations
 

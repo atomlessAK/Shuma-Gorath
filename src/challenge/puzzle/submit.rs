@@ -1,9 +1,9 @@
 use spin_sdk::http::{Request, Response};
 
-use super::puzzle::{build_puzzle, parse_submission};
-use super::render::render_challenge;
+use super::{build_puzzle, parse_submission};
+use super::renders::render_challenge;
 use super::token::parse_seed_token;
-use super::{challenge_response, KeyValueStore};
+use super::super::{challenge_response, KeyValueStore};
 
 const CHALLENGE_FORBIDDEN_BODY: &str = "<html><body><h2 style='color:red;'>Forbidden. Please request a new challenge.</h2><a href='/challenge/puzzle'>Request new challenge.</a></body></html>";
 const CHALLENGE_EXPIRED_BODY: &str = "<html><body><h2 style='color:red;'>Expired</h2><a href='/challenge/puzzle'>Request new challenge.</a></body></html>";
@@ -45,9 +45,9 @@ pub(crate) fn handle_challenge_submit_with_outcome<S: KeyValueStore>(
     store: &S,
     req: &Request,
 ) -> (Response, ChallengeSubmitOutcome) {
-    if crate::input_validation::enforce_body_size(
+    if crate::request_validation::enforce_body_size(
         req.body(),
-        crate::input_validation::MAX_CHALLENGE_FORM_BYTES,
+        crate::request_validation::MAX_CHALLENGE_FORM_BYTES,
     )
     .is_err()
     {
@@ -74,7 +74,7 @@ pub(crate) fn handle_challenge_submit_with_outcome<S: KeyValueStore>(
             )
         }
     };
-    if !crate::input_validation::validate_seed_token(seed_token.as_str()) {
+    if !crate::request_validation::validate_seed_token(seed_token.as_str()) {
         return (
             challenge_forbidden_response(),
             ChallengeSubmitOutcome::Forbidden,
@@ -112,7 +112,7 @@ pub(crate) fn handle_challenge_submit_with_outcome<S: KeyValueStore>(
         );
     }
     let ip = crate::extract_client_ip(req);
-    let ip_bucket = crate::signals::ip::bucket_ip(&ip);
+    let ip_bucket = crate::signals::ip_identity::bucket_ip(&ip);
     if seed.ip_bucket != ip_bucket {
         return (
             challenge_forbidden_response(),

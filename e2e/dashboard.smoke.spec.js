@@ -61,9 +61,13 @@ test("maze and duration save buttons use shared dirty-state behavior", async ({ 
 
   const mazeSave = page.locator("#save-maze-config");
   const durationsSave = page.locator("#save-durations-btn");
+  const rateLimitSave = page.locator("#save-rate-limit-config");
+  const jsRequiredSave = page.locator("#save-js-required-config");
 
   await expect(mazeSave).toBeDisabled();
   await expect(durationsSave).toBeDisabled();
+  await expect(rateLimitSave).toBeDisabled();
+  await expect(jsRequiredSave).toBeDisabled();
 
   const mazeThreshold = page.locator("#maze-threshold");
   const initialMazeThreshold = await mazeThreshold.inputValue();
@@ -84,6 +88,47 @@ test("maze and duration save buttons use shared dirty-state behavior", async ({ 
   await durationField.fill(initialDuration);
   await durationField.dispatchEvent("input");
   await expect(durationsSave).toBeDisabled();
+
+  const rateLimitField = page.locator("#rate-limit-threshold");
+  const initialRateLimit = await rateLimitField.inputValue();
+  const nextRateLimit = String(Math.max(1, Number(initialRateLimit || "80") + 1));
+  await rateLimitField.fill(nextRateLimit);
+  await rateLimitField.dispatchEvent("input");
+  await expect(rateLimitSave).toBeEnabled();
+  await rateLimitField.fill(initialRateLimit);
+  await rateLimitField.dispatchEvent("input");
+  await expect(rateLimitSave).toBeDisabled();
+
+  const jsRequiredToggle = page.locator("#js-required-enforced-toggle");
+  if (await jsRequiredToggle.isVisible()) {
+    const jsRequiredInitial = await jsRequiredToggle.isChecked();
+    await jsRequiredToggle.click();
+    await expect(jsRequiredSave).toBeEnabled();
+    if (jsRequiredInitial !== await jsRequiredToggle.isChecked()) {
+      await jsRequiredToggle.click();
+    }
+    await expect(jsRequiredSave).toBeDisabled();
+  }
+});
+
+test("session survives reload and time-range controls refresh chart data", async ({ page }) => {
+  await openDashboard(page);
+
+  await page.reload();
+  await expect(page).toHaveURL(/\/dashboard\/index\.html/);
+  await expect(page.locator("#logout-btn")).toBeEnabled();
+
+  await Promise.all([
+    page.waitForResponse((resp) => resp.url().includes("/admin/events?hours=168") && resp.ok()),
+    page.click('.time-btn[data-range="week"]')
+  ]);
+  await expect(page.locator('.time-btn[data-range="week"]')).toHaveClass(/active/);
+
+  await Promise.all([
+    page.waitForResponse((resp) => resp.url().includes("/admin/events?hours=720") && resp.ok()),
+    page.click('.time-btn[data-range="month"]')
+  ]);
+  await expect(page.locator('.time-btn[data-range="month"]')).toHaveClass(/active/);
 });
 
 test("dashboard tables keep sticky headers", async ({ page }) => {

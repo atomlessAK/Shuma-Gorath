@@ -25,6 +25,8 @@ This endpoint is unauthenticated for Prometheus compatibility. Restrict access a
 - `bot_defence_maze_hits_total`
 - `bot_defence_active_bans`
 - `bot_defence_test_mode_enabled`
+- `bot_defence_botness_signal_state_total{signal="...",state="active|disabled|unavailable"}`
+- `bot_defence_defence_mode_effective_total{module="rate|geo|js",configured="off|signal|enforce|both",signal_enabled="true|false",action_enabled="true|false"}`
 
 ## 🐙 Prometheus Scrape Example
 
@@ -39,7 +41,18 @@ scrape_configs:
 ## 🐙 Grafana Integration
 
 1. Add Prometheus as a data source
-2. Build panels for requests total, bans by reason, active bans, challenges/blocks over time, and test mode status
+2. Build panels for requests total, bans by reason, active bans, challenges/blocks over time, test mode status, and composability visibility (signal-state and effective-mode counters)
+
+## 🐙 Botness Visibility
+
+- Botness-driven challenge/maze events include:
+  - active signal summary (`signals=...`)
+  - full state summary (`signal_states=key:state:contribution,...`)
+  - effective mode summary (`modes=rate=... geo=... js=...`)
+- Use this event context with the two composability metrics to distinguish:
+  - intentional disabled signals (`state=disabled`),
+  - unavailable inputs (`state=unavailable`), and
+  - active contributors (`state=active`).
 
 ## 🐙 Spin Cloud Monitoring
 

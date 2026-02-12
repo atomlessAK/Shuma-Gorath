@@ -11,13 +11,24 @@
 
 1. Add/update tests where behavior is affected.
 2. Run verification through `Makefile` targets (do not use direct ad-hoc commands as the canonical path):
-   - `make test-unit` (or `make test`) for Rust changes,
+   - `make test` for the umbrella verification gate (unit + integration + dashboard e2e),
+   - `make test-unit`, `make test-integration`, `make test-dashboard-e2e` for focused reruns,
    - `make build` for release build verification,
    - `make setup`/`make verify` when setup/bootstrap tooling changes.
+   Notes:
+   - `make test` requires Spin running (`make dev`) and fails if integration/e2e cannot run.
 3. Update docs for behavior/config/ops changes.
 4. Note security and operational implications.
 5. Consider human-visitor friction impact (challenge frequency, latency, UX impact).
 6. Consider resource efficiency and cost-placement impact (bandwidth/CPU/memory/energy, and whether cost is shifted toward malicious bots).
+
+## Rust Naming and Layout Convention
+
+- Use descriptive `snake_case` module and file names that make responsibility obvious from path + filename.
+- Avoid vague root-level names (for example `input_validation.rs` at `src/`) when domain context is required; prefer domain-scoped placement and naming.
+- Prefer explicit module files (`foo.rs`) instead of `foo/mod.rs` for new code when practical.
+- Keep naming semantics consistent across domains (`renders.rs` for renderers, `http.rs` for HTTP handlers, `tests.rs` for colocated unit tests).
+- Treat renames as behavior-preserving refactors: update imports/paths and run full `make test`.
 
 ## When an ADR Is Required
 

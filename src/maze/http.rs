@@ -1,6 +1,6 @@
 use spin_sdk::http;
 
-use super::templates::generate_maze_page;
+use super::renders::generate_maze_page;
 use super::types::MazeConfig;
 
 /// Check whether a request path targets a maze entry point.

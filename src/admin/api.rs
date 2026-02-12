@@ -233,12 +233,9 @@ mod tests {
 mod admin_config_tests {
     use super::*;
     use crate::challenge::KeyValueStore;
-    use once_cell::sync::Lazy;
     use spin_sdk::http::{Method, Request};
     use std::collections::HashMap;
     use std::sync::Mutex;
-
-    static ENV_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
     fn make_request(method: Method, path: &str, body: Vec<u8>) -> Request {
         let mut builder = Request::builder();
@@ -287,7 +284,7 @@ mod admin_config_tests {
 
     #[test]
     fn admin_config_includes_challenge_fields() {
-        let _lock = ENV_MUTEX.lock().unwrap();
+        let _lock = crate::test_support::lock_env();
         std::env::remove_var("SHUMA_CHALLENGE_CONFIG_MUTABLE");
         std::env::remove_var("SHUMA_BOTNESS_CONFIG_MUTABLE");
         let req = make_request(Method::Get, "/admin/config", Vec::new());
@@ -301,13 +298,16 @@ mod admin_config_tests {
         assert!(body.get("botness_maze_threshold").is_some());
         assert!(body.get("js_required_enforced").is_some());
         assert!(body.get("botness_weights").is_some());
+        assert!(body.get("defence_modes").is_some());
+        assert!(body.get("defence_modes_effective").is_some());
+        assert!(body.get("defence_mode_warnings").is_some());
         assert!(body.get("botness_config_mutable").is_some());
         assert!(body.get("botness_signal_definitions").is_some());
     }
 
     #[test]
     fn admin_config_rejects_challenge_update_when_immutable() {
-        let _lock = ENV_MUTEX.lock().unwrap();
+        let _lock = crate::test_support::lock_env();
         std::env::set_var("SHUMA_CHALLENGE_CONFIG_MUTABLE", "0");
         let body = br#"{"challenge_risk_threshold":5}"#.to_vec();
         let req = make_request(Method::Post, "/admin/config", body);
@@ -319,7 +319,7 @@ mod admin_config_tests {
 
     #[test]
     fn admin_config_rejects_updates_when_admin_config_write_disabled() {
-        let _lock = ENV_MUTEX.lock().unwrap();
+        let _lock = crate::test_support::lock_env();
         std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "false");
         let body = br#"{"test_mode":true}"#.to_vec();
         let req = make_request(Method::Post, "/admin/config", body);
@@ -333,7 +333,7 @@ mod admin_config_tests {
 
     #[test]
     fn admin_config_updates_geo_policy_lists() {
-        let _lock = ENV_MUTEX.lock().unwrap();
+        let _lock = crate::test_support::lock_env();
         std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
         std::env::remove_var("SHUMA_GEO_RISK_COUNTRIES");
         std::env::remove_var("SHUMA_GEO_ALLOW_COUNTRIES");
@@ -402,7 +402,7 @@ mod admin_config_tests {
 
     #[test]
     fn admin_config_rejects_non_iso_geo_country_codes() {
-        let _lock = ENV_MUTEX.lock().unwrap();
+        let _lock = crate::test_support::lock_env();
         std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
         let store = TestStore::default();
         let body = br#"{"geo_risk": ["US", "ZZ"]}"#.to_vec();
@@ -416,7 +416,7 @@ mod admin_config_tests {
 
     #[test]
     fn admin_config_updates_js_required_enforced_flag() {
-        let _lock = ENV_MUTEX.lock().unwrap();
+        let _lock = crate::test_support::lock_env();
         let prior_js_required_env = std::env::var("SHUMA_JS_REQUIRED_ENFORCED").ok();
         std::env::remove_var("SHUMA_JS_REQUIRED_ENFORCED");
         std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
@@ -450,7 +450,7 @@ mod admin_config_tests {
 
     #[test]
     fn admin_config_rejects_out_of_range_rate_limit() {
-        let _lock = ENV_MUTEX.lock().unwrap();
+        let _lock = crate::test_support::lock_env();
         std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
         let store = TestStore::default();
 
@@ -466,17 +466,93 @@ mod admin_config_tests {
 
         std::env::remove_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED");
     }
+
+    #[test]
+    fn admin_config_updates_defence_modes_when_botness_mutable() {
+        let _lock = crate::test_support::lock_env();
+        std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
+        std::env::set_var("SHUMA_BOTNESS_CONFIG_MUTABLE", "true");
+        let store = TestStore::default();
+
+        let post_req = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{"defence_modes":{"rate":"signal","geo":"enforce","js":"off"}}"#.to_vec(),
+        );
+        let post_resp = handle_admin_config(&post_req, &store, "default");
+        assert_eq!(*post_resp.status(), 200u16);
+        let post_json: serde_json::Value = serde_json::from_slice(post_resp.body()).unwrap();
+        let cfg = post_json.get("config").unwrap();
+        assert_eq!(
+            cfg.get("defence_modes"),
+            Some(&serde_json::json!({"rate":"signal","geo":"enforce","js":"off"}))
+        );
+
+        let saved_bytes = store.get("config:default").unwrap().unwrap();
+        let saved_cfg: crate::config::Config = serde_json::from_slice(&saved_bytes).unwrap();
+        assert_eq!(
+            saved_cfg.defence_modes.rate,
+            crate::config::ComposabilityMode::Signal
+        );
+        assert_eq!(
+            saved_cfg.defence_modes.geo,
+            crate::config::ComposabilityMode::Enforce
+        );
+        assert_eq!(saved_cfg.defence_modes.js, crate::config::ComposabilityMode::Off);
+
+        std::env::remove_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED");
+        std::env::remove_var("SHUMA_BOTNESS_CONFIG_MUTABLE");
+    }
+
+    #[test]
+    fn admin_config_rejects_invalid_defence_mode_value() {
+        let _lock = crate::test_support::lock_env();
+        std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
+        std::env::set_var("SHUMA_BOTNESS_CONFIG_MUTABLE", "true");
+        let store = TestStore::default();
+
+        let post_req = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{"defence_modes":{"rate":"invalid"}}"#.to_vec(),
+        );
+        let post_resp = handle_admin_config(&post_req, &store, "default");
+        assert_eq!(*post_resp.status(), 400u16);
+        let msg = String::from_utf8_lossy(post_resp.body());
+        assert!(msg.contains("defence_modes.rate must be one of"));
+
+        std::env::remove_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED");
+        std::env::remove_var("SHUMA_BOTNESS_CONFIG_MUTABLE");
+    }
+
+    #[test]
+    fn admin_config_rejects_unknown_defence_mode_key() {
+        let _lock = crate::test_support::lock_env();
+        std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
+        std::env::set_var("SHUMA_BOTNESS_CONFIG_MUTABLE", "true");
+        let store = TestStore::default();
+
+        let post_req = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{"defence_modes":{"rate":"both","foo":"off"}}"#.to_vec(),
+        );
+        let post_resp = handle_admin_config(&post_req, &store, "default");
+        assert_eq!(*post_resp.status(), 400u16);
+        let msg = String::from_utf8_lossy(post_resp.body());
+        assert!(msg.contains("defence_modes.foo is not supported"));
+
+        std::env::remove_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED");
+        std::env::remove_var("SHUMA_BOTNESS_CONFIG_MUTABLE");
+    }
 }
 
 #[cfg(test)]
 mod admin_auth_tests {
     use super::*;
-    use once_cell::sync::Lazy;
     use spin_sdk::http::{Method, Request};
     use std::collections::HashMap;
     use std::sync::Mutex;
-
-    static ENV_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
     #[derive(Default)]
     struct TestStore {
@@ -520,7 +596,7 @@ mod admin_auth_tests {
 
     #[test]
     fn login_invalid_api_key_is_rate_limited() {
-        let _lock = ENV_MUTEX.lock().unwrap();
+        let _lock = crate::test_support::lock_env();
         std::env::set_var("SHUMA_API_KEY", "test-admin-key");
         std::env::set_var("SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE", "2");
         let store = TestStore::default();
@@ -541,7 +617,7 @@ mod admin_auth_tests {
 
     #[test]
     fn logout_unauthorized_is_rate_limited() {
-        let _lock = ENV_MUTEX.lock().unwrap();
+        let _lock = crate::test_support::lock_env();
         std::env::set_var("SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE", "1");
         let store = TestStore::default();
         let req = logout_request();
@@ -637,7 +713,7 @@ fn handle_admin_login<S: crate::challenge::KeyValueStore>(req: &Request, store: 
         return Response::new(405, "Method Not Allowed");
     }
 
-    let json = match crate::input_validation::parse_json_body(req.body(), 2048) {
+    let json = match crate::request_validation::parse_json_body(req.body(), 2048) {
         Ok(v) => v,
         Err(msg) => return Response::new(400, msg),
     };
@@ -851,6 +927,17 @@ fn parse_country_list_json(field: &str, value: &serde_json::Value) -> Result<Vec
     Ok(crate::signals::geo::normalize_country_list(&parsed))
 }
 
+fn parse_composability_mode_json(
+    field: &str,
+    value: &serde_json::Value,
+) -> Result<crate::config::ComposabilityMode, String> {
+    let raw = value
+        .as_str()
+        .ok_or_else(|| format!("{} must be one of: off, signal, enforce, both", field))?;
+    crate::config::parse_composability_mode(raw)
+        .ok_or_else(|| format!("{} must be one of: off, signal, enforce, both", field))
+}
+
 fn handle_admin_config(
     req: &Request,
     store: &impl crate::challenge::KeyValueStore,
@@ -865,9 +952,9 @@ fn handle_admin_config(
                 "Config updates are disabled when SHUMA_ADMIN_CONFIG_WRITE_ENABLED=false",
             );
         }
-        let json = match crate::input_validation::parse_json_body(
+        let json = match crate::request_validation::parse_json_body(
             req.body(),
-            crate::input_validation::MAX_ADMIN_JSON_BYTES,
+            crate::request_validation::MAX_ADMIN_JSON_BYTES,
         ) {
             Ok(v) => v,
             Err(e) => return Response::new(400, e),
@@ -1104,9 +1191,11 @@ fn handle_admin_config(
         let old_challenge_threshold = cfg.challenge_risk_threshold;
         let old_maze_threshold = cfg.botness_maze_threshold;
         let old_weights = cfg.botness_weights.clone();
+        let old_modes = cfg.defence_modes.clone();
         let botness_update_requested = json.get("challenge_risk_threshold").is_some()
             || json.get("botness_maze_threshold").is_some()
-            || json.get("botness_weights").is_some();
+            || json.get("botness_weights").is_some()
+            || json.get("defence_modes").is_some();
         if botness_update_requested && !botness_mutable {
             return Response::new(
                     403,
@@ -1166,6 +1255,47 @@ fn handle_admin_config(
                 botness_changed = true;
             }
         }
+        if let Some(defence_modes) = json.get("defence_modes") {
+            let Some(modes_obj) = defence_modes.as_object() else {
+                return Response::new(
+                    400,
+                    "defence_modes must be an object with optional keys: rate, geo, js",
+                );
+            };
+            for key in modes_obj.keys() {
+                if !matches!(key.as_str(), "rate" | "geo" | "js") {
+                    return Response::new(400, format!("defence_modes.{} is not supported", key));
+                }
+            }
+
+            if let Some(value) = modes_obj.get("rate") {
+                cfg.defence_modes.rate =
+                    match parse_composability_mode_json("defence_modes.rate", value) {
+                        Ok(mode) => mode,
+                        Err(msg) => return Response::new(400, msg),
+                    };
+                changed = true;
+                botness_changed = true;
+            }
+            if let Some(value) = modes_obj.get("geo") {
+                cfg.defence_modes.geo =
+                    match parse_composability_mode_json("defence_modes.geo", value) {
+                        Ok(mode) => mode,
+                        Err(msg) => return Response::new(400, msg),
+                    };
+                changed = true;
+                botness_changed = true;
+            }
+            if let Some(value) = modes_obj.get("js") {
+                cfg.defence_modes.js =
+                    match parse_composability_mode_json("defence_modes.js", value) {
+                        Ok(mode) => mode,
+                        Err(msg) => return Response::new(400, msg),
+                    };
+                changed = true;
+                botness_changed = true;
+            }
+        }
 
         if botness_changed {
             log_event(store, &EventLogEntry {
@@ -1174,7 +1304,7 @@ fn handle_admin_config(
                     ip: None,
                     reason: Some("botness_config_update".to_string()),
                     outcome: Some(format!(
-                        "challenge:{}->{} maze:{}->{} weights(js:{}->{} geo:{}->{} rate_med:{}->{} rate_high:{}->{})",
+                        "challenge:{}->{} maze:{}->{} weights(js:{}->{} geo:{}->{} rate_med:{}->{} rate_high:{}->{}) modes(rate:{:?}->{:?} geo:{:?}->{:?} js:{:?}->{:?})",
                         old_challenge_threshold,
                         cfg.challenge_risk_threshold,
                         old_maze_threshold,
@@ -1186,7 +1316,13 @@ fn handle_admin_config(
                         old_weights.rate_medium,
                         cfg.botness_weights.rate_medium,
                         old_weights.rate_high,
-                        cfg.botness_weights.rate_high
+                        cfg.botness_weights.rate_high,
+                        old_modes.rate,
+                        cfg.defence_modes.rate,
+                        old_modes.geo,
+                        cfg.defence_modes.geo,
+                        old_modes.js,
+                        cfg.defence_modes.js
                     )),
                     admin: Some(crate::admin::auth::get_admin_id(req)),
                 });
@@ -1253,6 +1389,13 @@ fn handle_admin_config(
                     "rate_medium": cfg.botness_weights.rate_medium,
                     "rate_high": cfg.botness_weights.rate_high
                 },
+                "defence_modes": {
+                    "rate": cfg.defence_modes.rate,
+                    "geo": cfg.defence_modes.geo,
+                    "js": cfg.defence_modes.js
+                },
+                "defence_modes_effective": cfg.defence_modes_effective(),
+                "defence_mode_warnings": cfg.defence_mode_warnings(),
                 "botness_config_mutable": botness_mutable,
                 "botness_signal_definitions": botness_signal_definitions(&cfg)
             }
@@ -1328,6 +1471,13 @@ fn handle_admin_config(
             "rate_medium": cfg.botness_weights.rate_medium,
             "rate_high": cfg.botness_weights.rate_high
         },
+        "defence_modes": {
+            "rate": cfg.defence_modes.rate,
+            "geo": cfg.defence_modes.geo,
+            "js": cfg.defence_modes.js
+        },
+        "defence_modes_effective": cfg.defence_modes_effective(),
+        "defence_mode_warnings": cfg.defence_mode_warnings(),
         "botness_config_mutable": crate::config::botness_config_mutable(),
         "botness_signal_definitions": botness_signal_definitions(&cfg)
     }))
@@ -1528,9 +1678,9 @@ pub fn handle_admin(req: &Request) -> Response {
         "/admin/ban" => {
             // POST: Manually ban an IP
             if *req.method() == spin_sdk::http::Method::Post {
-                let json = match crate::input_validation::parse_json_body(
+                let json = match crate::request_validation::parse_json_body(
                     req.body(),
-                    crate::input_validation::MAX_ADMIN_JSON_BYTES,
+                    crate::request_validation::MAX_ADMIN_JSON_BYTES,
                 ) {
                     Ok(v) => v,
                     Err(e) => return Response::new(400, e),
@@ -1540,7 +1690,7 @@ pub fn handle_admin(req: &Request) -> Response {
                     Some(v) => v,
                     None => return Response::new(400, "Missing 'ip' field in request body"),
                 };
-                let ip = match crate::input_validation::parse_ip_addr(ip_raw) {
+                let ip = match crate::request_validation::parse_ip_addr(ip_raw) {
                     Some(v) => v,
                     None => return Response::new(400, "Invalid IP address"),
                 };
@@ -1606,11 +1756,11 @@ pub fn handle_admin(req: &Request) -> Response {
         }
         "/admin/unban" => {
             // Unban IP (expects ?ip=...)
-            let ip_raw = match crate::input_validation::query_param(req.query(), "ip") {
+            let ip_raw = match crate::request_validation::query_param(req.query(), "ip") {
                 Some(v) => v,
                 None => return Response::new(400, "Missing ip param"),
             };
-            let ip = match crate::input_validation::parse_ip_addr(&ip_raw) {
+            let ip = match crate::request_validation::parse_ip_addr(&ip_raw) {
                 Some(v) => v,
                 None => return Response::new(400, "Invalid IP address"),
             };
@@ -1760,8 +1910,8 @@ pub fn handle_admin(req: &Request) -> Response {
             };
 
             // Generate preview of robots.txt content
-            let preview = crate::robots::generate_robots_txt(&cfg);
-            let content_signal = crate::robots::get_content_signal_header(&cfg);
+            let preview = crate::crawler_policy::robots::generate_robots_txt(&cfg);
+            let content_signal = crate::crawler_policy::robots::get_content_signal_header(&cfg);
 
             // Log admin action
             log_event(
@@ -1785,9 +1935,9 @@ pub fn handle_admin(req: &Request) -> Response {
                     "crawl_delay": cfg.robots_crawl_delay
                 },
                 "content_signal_header": content_signal,
-                "ai_training_bots": crate::robots::AI_TRAINING_BOTS,
-                "ai_search_bots": crate::robots::AI_SEARCH_BOTS,
-                "search_engine_bots": crate::robots::SEARCH_ENGINE_BOTS,
+                "ai_training_bots": crate::crawler_policy::robots::AI_TRAINING_BOTS,
+                "ai_search_bots": crate::crawler_policy::robots::AI_SEARCH_BOTS,
+                "search_engine_bots": crate::crawler_policy::robots::SEARCH_ENGINE_BOTS,
                 "preview": preview
             }))
             .unwrap();

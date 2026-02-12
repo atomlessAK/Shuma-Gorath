@@ -17,6 +17,8 @@
 - Test mode (log-only, no enforcement)
 - Event logging with retention (`SHUMA_EVENT_LOG_RETENTION_HOURS`)
 - Prometheus metrics (`/metrics`)
+- Composable defence modes per module (`off` / `signal` / `enforce` / `both`) for `rate`, `geo`, and `js`
+- Effective-mode and signal-state observability for botness decisions
 - Web dashboard for analytics and admin control
 - Makefile-based setup, build, and test workflows
 
@@ -31,4 +33,4 @@
 
 ## 🐙 Longer-Term / Modern Threats
 
-See `docs/akamai-bot-manager.md` for the Agentic AI & modern threat roadmap.
+See `docs/bot-defence.md` for Shuma-Gorath layering strategy with managed edge bot defences (including Akamai Bot Manager).

@@ -13,7 +13,7 @@ pub fn needs_js_verification_with_whitelist(
         .map(|v| v.as_str().unwrap_or(""))
         .unwrap_or("");
     for (name, min_version) in browser_whitelist {
-        if let Some(ver) = super::browser::extract_version(ua, name) {
+        if let Some(ver) = super::browser_user_agent::extract_version(ua, name) {
             if ver >= *min_version {
                 return false;
             }
@@ -22,7 +22,7 @@ pub fn needs_js_verification_with_whitelist(
     // Fallback to normal JS verification logic
     needs_js_verification(req, _store, _site_id, ip)
 }
-// src/js.rs
+// src/signals/js_verification.rs
 // JavaScript verification and challenge logic for WASM Bot Defence
 // Handles JS-based bot detection and challenge/response for suspicious clients.
 
@@ -103,7 +103,7 @@ pub fn inject_js_challenge(
     let cdp_script = crate::signals::cdp::get_cdp_detection_script();
 
     if pow_enabled {
-        let challenge = crate::pow::issue_pow_challenge(ip, pow_difficulty, pow_ttl_seconds);
+        let challenge = crate::challenge::pow::issue_pow_challenge(ip, pow_difficulty, pow_ttl_seconds);
         let html = format!(
             r#"
         <html><head><script>{cdp_script}</script></head><body>

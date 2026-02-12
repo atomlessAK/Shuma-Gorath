@@ -1,4 +1,4 @@
-// src/pow.rs
+// src/challenge/pow.rs
 // Lightweight proof-of-work (PoW) challenge for JS verification
 
 use base64::{engine::general_purpose, Engine as _};
@@ -111,7 +111,7 @@ pub fn issue_pow_challenge(ip: &str, difficulty: u8, ttl_seconds: u64) -> PowCha
     let seed_id = format!("{:016x}", rand::rng().random::<u64>());
     let payload = PowPayload {
         seed_id,
-        ip_bucket: crate::signals::ip::bucket_ip(ip),
+        ip_bucket: crate::signals::ip_identity::bucket_ip(ip),
         issued_at: now,
         expires_at: now + ttl,
         difficulty,
@@ -151,9 +151,9 @@ pub fn handle_pow_verify(req: &Request, ip: &str, pow_enabled: bool) -> Response
         return Response::new(405, "Method Not Allowed");
     }
 
-    let json = match crate::input_validation::parse_json_body(
+    let json = match crate::request_validation::parse_json_body(
         req.body(),
-        crate::input_validation::MAX_POW_VERIFY_BYTES,
+        crate::request_validation::MAX_POW_VERIFY_BYTES,
     ) {
         Ok(v) => v,
         Err(e) => return Response::new(400, e),
@@ -162,14 +162,14 @@ pub fn handle_pow_verify(req: &Request, ip: &str, pow_enabled: bool) -> Response
         Some(v) => v,
         None => return Response::new(400, "Missing seed"),
     };
-    if !crate::input_validation::validate_seed_token(seed) {
+    if !crate::request_validation::validate_seed_token(seed) {
         return Response::new(400, "Invalid seed");
     }
     let nonce = match json.get("nonce").and_then(|v| v.as_str()) {
         Some(v) => v,
         None => return Response::new(400, "Missing nonce"),
     };
-    if !crate::input_validation::validate_nonce(nonce) {
+    if !crate::request_validation::validate_nonce(nonce) {
         return Response::new(400, "Invalid nonce");
     }
 
@@ -183,7 +183,7 @@ pub fn handle_pow_verify(req: &Request, ip: &str, pow_enabled: bool) -> Response
         return Response::new(400, "Seed expired");
     }
 
-    let ip_bucket = crate::signals::ip::bucket_ip(ip);
+    let ip_bucket = crate::signals::ip_identity::bucket_ip(ip);
     if payload.ip_bucket != ip_bucket {
         return Response::new(400, "IP bucket mismatch");
     }
@@ -194,7 +194,7 @@ pub fn handle_pow_verify(req: &Request, ip: &str, pow_enabled: bool) -> Response
 
     Response::builder()
         .status(200)
-        .header("Set-Cookie", crate::signals::js::js_verified_cookie(ip).as_str())
+        .header("Set-Cookie", crate::signals::js_verification::js_verified_cookie(ip).as_str())
         .header("Cache-Control", "no-store")
         .body("OK")
         .build()

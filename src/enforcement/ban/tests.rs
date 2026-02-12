@@ -111,7 +111,7 @@ fn test_ban_metadata_is_sanitized_before_persist() {
     assert!(!entry.reason.chars().any(|c| c.is_control()));
     assert_eq!(
         entry.reason.chars().count(),
-        crate::input_validation::MAX_BAN_REASON_LEN
+        crate::request_validation::MAX_BAN_REASON_LEN
     );
 
     let summary = entry
@@ -121,6 +121,6 @@ fn test_ban_metadata_is_sanitized_before_persist() {
     assert!(!summary.chars().any(|c| c.is_control()));
     assert_eq!(
         summary.chars().count(),
-        crate::input_validation::MAX_BAN_SUMMARY_LEN
+        crate::request_validation::MAX_BAN_SUMMARY_LEN
     );
 }

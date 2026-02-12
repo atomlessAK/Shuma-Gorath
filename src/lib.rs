@@ -8,7 +8,7 @@ mod test_support;
 // Entry point for the WASM Stealth Bot Defence Spin app
 
 use crate::enforcement::{ban, block_page};
-use crate::signals::{browser, cdp, geo, js, whitelist};
+use crate::signals::{browser_user_agent as browser, cdp, geo, js_verification as js, whitelist};
 use serde::Serialize;
 use spin_sdk::http::{Request, Response};
 use spin_sdk::http_component;
@@ -20,15 +20,14 @@ mod admin; // Admin API endpoints
 mod boundaries; // Domain boundary adapters for future repo splits
 mod challenge; // Interactive math challenge for banned users
 mod config; // Config loading and defaults
+mod crawler_policy; // Crawler-facing policy surfaces (robots.txt)
 mod enforcement; // Enforcement actions (ban, block page, honeypot, rate limiting)
-mod input_validation;
 mod maze; // maze crawler trap
-mod metrics; // Prometheus metrics
-mod pow; // Proof-of-work verification
+mod observability; // Metrics and monitoring surfaces
+mod providers; // Provider contracts for swappable implementations
+mod request_validation; // Request validation/parsing helpers
 mod runtime; // request-time orchestration helpers
-mod robots; // robots.txt generation
 mod signals; // Risk and identity signals (browser/CDP/GEO/IP/JS/whitelist)
-mod test_mode; // test-mode routing behavior
 
 /// Main HTTP handler for the bot defence. This function is invoked for every HTTP request.
 /// It applies a series of anti-bot checks in order of cost and effectiveness, returning early on block/allow.
@@ -272,6 +271,15 @@ pub struct BotnessAssessment {
     pub contributions: Vec<BotnessContribution>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BotnessSignalContext {
+    pub js_needed: bool,
+    pub geo_signal_available: bool,
+    pub geo_risk: bool,
+    pub rate_count: u32,
+    pub rate_limit: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GeoAssessment {
     pub country: Option<String>,
@@ -300,41 +308,68 @@ pub(crate) fn assess_geo_request(req: &Request, cfg: &config::Config) -> GeoAsse
     }
 }
 
-pub(crate) fn compute_botness_assessment(
-    js_enforced: bool,
-    js_needed: bool,
-    geo_signal_available: bool,
-    geo_risk: bool,
-    rate_count: u32,
-    rate_limit: u32,
+pub(crate) fn collect_botness_contributions(
+    context: BotnessSignalContext,
     cfg: &config::Config,
-) -> BotnessAssessment {
+) -> Vec<BotnessContribution> {
     let mut accumulator = crate::signals::botness::SignalAccumulator::with_capacity(4);
+
     accumulator.push(js::bot_signal(
-        js_enforced,
-        js_needed,
+        cfg.js_signal_enabled(),
+        context.js_needed,
         cfg.botness_weights.js_required,
     ));
-    accumulator.push(geo::bot_signal(
-        geo_signal_available,
-        geo_risk,
-        cfg.botness_weights.geo_risk,
-    ));
 
-    for rate_signal in crate::enforcement::rate::bot_signals(
-        rate_count,
-        rate_limit,
-        cfg.botness_weights.rate_medium,
-        cfg.botness_weights.rate_high,
-    ) {
+    let geo_signal = if cfg.geo_signal_enabled() {
+        geo::bot_signal(
+            context.geo_signal_available,
+            context.geo_risk,
+            cfg.botness_weights.geo_risk,
+        )
+    } else {
+        geo::disabled_bot_signal()
+    };
+    accumulator.push(geo_signal);
+
+    let rate_signals = if cfg.rate_signal_enabled() {
+        crate::signals::rate_pressure::bot_signals(
+            context.rate_count,
+            context.rate_limit,
+            cfg.botness_weights.rate_medium,
+            cfg.botness_weights.rate_high,
+        )
+    } else {
+        crate::signals::rate_pressure::disabled_bot_signals()
+    };
+
+    for rate_signal in rate_signals {
         accumulator.push(rate_signal);
     }
 
+    let (_score, contributions) = accumulator.finish();
+    contributions
+}
+
+pub(crate) fn compute_botness_assessment_from_contributions(
+    contributions: Vec<BotnessContribution>,
+) -> BotnessAssessment {
+    let mut accumulator = crate::signals::botness::SignalAccumulator::with_capacity(contributions.len());
+    for contribution in contributions {
+        accumulator.push(contribution);
+    }
     let (score, contributions) = accumulator.finish();
     BotnessAssessment {
         score,
         contributions,
     }
+}
+
+pub(crate) fn compute_botness_assessment(
+    context: BotnessSignalContext,
+    cfg: &config::Config,
+) -> BotnessAssessment {
+    let contributions = collect_botness_contributions(context, cfg);
+    compute_botness_assessment_from_contributions(contributions)
 }
 
 pub(crate) fn botness_signals_summary(assessment: &BotnessAssessment) -> String {
@@ -349,6 +384,38 @@ pub(crate) fn botness_signals_summary(assessment: &BotnessAssessment) -> String 
     } else {
         active.join(",")
     }
+}
+
+pub(crate) fn botness_signal_states_summary(assessment: &BotnessAssessment) -> String {
+    assessment
+        .contributions
+        .iter()
+        .map(|signal| {
+            format!(
+                "{}:{}:{}",
+                signal.key,
+                signal.availability.as_str(),
+                signal.contribution
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+pub(crate) fn defence_modes_effective_summary(cfg: &config::Config) -> String {
+    let effective = cfg.defence_modes_effective();
+    format!(
+        "rate={}/{}/{} geo={}/{}/{} js={}/{}/{}",
+        effective.rate.configured.as_str(),
+        effective.rate.signal_enabled,
+        effective.rate.action_enabled,
+        effective.geo.configured.as_str(),
+        effective.geo.signal_enabled,
+        effective.geo.action_enabled,
+        effective.js.configured.as_str(),
+        effective.js.signal_enabled,
+        effective.js.action_enabled
+    )
 }
 
 pub(crate) fn write_log_line(out: &mut impl Write, msg: &str) {
@@ -368,7 +435,7 @@ pub(crate) fn serve_maze_with_tracking(
     event_reason: &str,
     event_outcome: &str,
 ) -> Response {
-    metrics::increment(store, metrics::MetricName::MazeHits, None);
+    observability::metrics::increment(store, observability::metrics::MetricName::MazeHits, None);
 
     crate::admin::log_event(
         store,
@@ -383,7 +450,7 @@ pub(crate) fn serve_maze_with_tracking(
     );
 
     // Bucket the IP to reduce KV cardinality and avoid per-IP explosion.
-    let maze_bucket = crate::signals::ip::bucket_ip(ip);
+    let maze_bucket = crate::signals::ip_identity::bucket_ip(ip);
     let maze_key = format!("maze_hits:{}", maze_bucket);
     let hits: u32 = store
         .get(&maze_key)
@@ -417,7 +484,11 @@ pub(crate) fn serve_maze_with_tracking(
                 )),
             }),
         );
-        metrics::increment(store, metrics::MetricName::BansTotal, Some("maze_crawler"));
+        observability::metrics::increment(
+            store,
+            observability::metrics::MetricName::BansTotal,
+            Some("maze_crawler"),
+        );
         crate::admin::log_event(
             store,
             &crate::admin::EventLogEntry {
@@ -478,6 +549,7 @@ pub fn handle_bot_defence_impl(req: &Request) -> Response {
         Ok(cfg) => cfg,
         Err(resp) => return resp,
     };
+    let _provider_registry = providers::registry::ProviderRegistry::from_config(&cfg);
     let geo_assessment = assess_geo_request(req, &cfg);
 
     // Maze - trap crawlers in infinite loops (only if enabled)
@@ -489,19 +561,27 @@ pub fn handle_bot_defence_impl(req: &Request) -> Response {
     }
 
     // Increment request counter
-    metrics::increment(store, metrics::MetricName::RequestsTotal, None);
+    observability::metrics::increment(store, observability::metrics::MetricName::RequestsTotal, None);
 
     // Path-based whitelist (for webhooks/integrations)
     if whitelist::is_path_whitelisted(path, &cfg.path_whitelist) {
-        metrics::increment(store, metrics::MetricName::WhitelistedTotal, None);
+        observability::metrics::increment(
+            store,
+            observability::metrics::MetricName::WhitelistedTotal,
+            None,
+        );
         return Response::new(200, "OK (path whitelisted)");
     }
     // IP/CIDR whitelist
     if whitelist::is_whitelisted(&ip, &cfg.whitelist) {
-        metrics::increment(store, metrics::MetricName::WhitelistedTotal, None);
+        observability::metrics::increment(
+            store,
+            observability::metrics::MetricName::WhitelistedTotal,
+            None,
+        );
         return Response::new(200, "OK (whitelisted)");
     }
-    if let Some(response) = test_mode::maybe_handle_test_mode(
+    if let Some(response) = runtime::test_mode::maybe_handle_test_mode(
         store,
         &cfg,
         site_id,
@@ -510,7 +590,13 @@ pub fn handle_bot_defence_impl(req: &Request) -> Response {
         path,
         geo_assessment.route,
         || js::needs_js_verification(req, store, site_id, &ip),
-        || metrics::increment(store, metrics::MetricName::TestModeActions, None),
+        || {
+            observability::metrics::increment(
+                store,
+                observability::metrics::MetricName::TestModeActions,
+                None,
+            )
+        },
     ) {
         return response;
     }
@@ -530,7 +616,7 @@ pub fn handle_bot_defence_impl(req: &Request) -> Response {
         if *req.method() != spin_sdk::http::Method::Get {
             return Response::new(405, "Method Not Allowed");
         }
-        return pow::handle_pow_challenge(
+        return challenge::pow::handle_pow_challenge(
             &ip,
             cfg.pow_enabled,
             cfg.pow_difficulty,
@@ -538,7 +624,7 @@ pub fn handle_bot_defence_impl(req: &Request) -> Response {
         );
     }
     if path == "/pow/verify" {
-        return pow::handle_pow_verify(req, &ip, cfg.pow_enabled);
+        return challenge::pow::handle_pow_verify(req, &ip, cfg.pow_enabled);
     }
     // Outdated browser
     if browser::is_outdated_browser(ua, &cfg.browser_block) {
@@ -554,8 +640,12 @@ pub fn handle_bot_defence_impl(req: &Request) -> Response {
                 summary: Some(format!("ua={}", ua)),
             }),
         );
-        metrics::increment(store, metrics::MetricName::BansTotal, Some("browser"));
-        metrics::increment(store, metrics::MetricName::BlocksTotal, None);
+        observability::metrics::increment(
+            store,
+            observability::metrics::MetricName::BansTotal,
+            Some("browser"),
+        );
+        observability::metrics::increment(store, observability::metrics::MetricName::BlocksTotal, None);
         // Log ban event
         crate::admin::log_event(
             store,

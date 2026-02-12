@@ -58,6 +58,10 @@ Deployment policy note: `SHUMA_KV_STORE_FAIL_OPEN` is a critical choice (fail-op
 ## 🐙 Documentation
 
 - [`docs/index.md`](docs/index.md) - Docs index
+- [`docs/project-principles.md`](docs/project-principles.md) - Project goals and engineering principles
+- [`docs/adr/README.md`](docs/adr/README.md) - Architecture decision record process
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) - Contribution standards and PR expectations
+- [`AGENTS.md`](AGENTS.md) - Instructions for coding agents assisting contributors
 - [`docs/quick-reference.md`](docs/quick-reference.md) - Command and API cheat sheet
 - [`docs/testing.md`](docs/testing.md) - Testing guide (Makefile-only)
 - [`docs/dashboard.md`](docs/dashboard.md) - Dashboard and admin UI
@@ -66,7 +70,7 @@ Deployment policy note: `SHUMA_KV_STORE_FAIL_OPEN` is a critical choice (fail-op
 - [`docs/configuration.md`](docs/configuration.md) - Runtime configuration reference
 - [`docs/security-hardening.md`](docs/security-hardening.md) - Deployment security checklist
 - [`docs/observability.md`](docs/observability.md) - Prometheus/Grafana integration
-- [`docs/akamai-bot-manager.md`](docs/akamai-bot-manager.md) - Positioning and layered defense
+- [`docs/bot-defence.md`](docs/bot-defence.md) - Shuma-Gorath layered defence strategy with managed edge bot protection
 - [`docs/features.md`](docs/features.md) - Feature list and roadmap
 - [`docs/challenge-verification.md`](docs/challenge-verification.md) - Human verification strategy
 - [`docs/maze.md`](docs/maze.md) - maze crawler trap

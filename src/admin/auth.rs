@@ -424,7 +424,7 @@ mod tests {
             AdminAuthFailureScope::Login
         ));
         let ip = crate::extract_client_ip(&req);
-        let bucket = crate::signals::ip::bucket_ip(&ip);
+        let bucket = crate::signals::ip_identity::bucket_ip(&ip);
         let now_window = super::now_ts() / 60;
         // Pre-seed to guaranteed saturation regardless runtime env limit (max clamp is 10_000).
         for window in [now_window, now_window + 1] {
@@ -454,7 +454,7 @@ mod tests {
         let req = request_for_admin_login();
         let store = MockStore::default();
         let ip = crate::extract_client_ip(&req);
-        let bucket = crate::signals::ip::bucket_ip(&ip);
+        let bucket = crate::signals::ip_identity::bucket_ip(&ip);
         let now_window = super::now_ts() / 60;
         // Pre-seed both current and next window to avoid minute-boundary flakiness.
         for window in [now_window, now_window + 1] {

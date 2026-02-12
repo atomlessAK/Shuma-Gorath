@@ -8,6 +8,16 @@ pub enum SignalAvailability {
     Unavailable,
 }
 
+impl SignalAvailability {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SignalAvailability::Active => "active",
+            SignalAvailability::Disabled => "disabled",
+            SignalAvailability::Unavailable => "unavailable",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct BotSignal {
     pub key: &'static str,
@@ -114,5 +124,12 @@ mod tests {
         assert_eq!(unavailable.contribution, 0);
         assert!(!unavailable.active);
         assert_eq!(unavailable.availability, SignalAvailability::Unavailable);
+    }
+
+    #[test]
+    fn signal_availability_has_stable_labels() {
+        assert_eq!(SignalAvailability::Active.as_str(), "active");
+        assert_eq!(SignalAvailability::Disabled.as_str(), "disabled");
+        assert_eq!(SignalAvailability::Unavailable.as_str(), "unavailable");
     }
 }

@@ -1,4 +1,4 @@
-.PHONY: dev local run run-prebuilt build prod clean test test-unit test-integration test-coverage test-dashboard test-dashboard-e2e deploy logs status stop help setup verify config-seed env-help api-key-generate api-key-show api-key-rotate api-key-validate deploy-env-validate
+.PHONY: dev local run run-prebuilt build prod clean test test-unit unit-test test-integration integration-test test-coverage test-dashboard test-dashboard-e2e deploy logs status stop help setup verify config-seed env-help api-key-generate api-key-show api-key-rotate api-key-validate deploy-env-validate
 
 # Default target
 .DEFAULT_GOAL := help
@@ -156,26 +156,37 @@ deploy: build ## Deploy to Fermyon Cloud
 # Testing
 #--------------------------
 
-test: ## Run ALL tests: unit tests first, then integration tests (requires server)
+test: ## Run ALL tests in series: unit, integration, and dashboard e2e (fails if server is not running)
 	@echo "$(CYAN)============================================$(NC)"
 	@echo "$(CYAN)  RUNNING ALL TESTS$(NC)"
 	@echo "$(CYAN)============================================$(NC)"
 	@echo ""
-	@echo "$(CYAN)Step 1/2: Rust Unit Tests (34 tests)$(NC)"
+	@if ! curl -sf -H "X-Forwarded-For: 127.0.0.1" $(FORWARDED_SECRET_HEADER) $(HEALTH_SECRET_HEADER) http://127.0.0.1:3000/health > /dev/null 2>&1; then \
+		echo "$(RED)❌ Error: Spin server not running. Integration tests must run and may not be skipped.$(NC)"; \
+		echo "$(YELLOW)   Required flow: 1) make dev  2) make test$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)✅ Preflight: Spin server is running; integration and dashboard e2e tests will be executed.$(NC)"
+	@echo ""
+	@echo "$(CYAN)Step 1/3: Rust Unit Tests$(NC)"
 	@echo "$(CYAN)--------------------------------------------$(NC)"
 	@./scripts/set_crate_type.sh rlib
 	@cargo test || exit 1
 	@echo ""
-	@echo "$(CYAN)Step 2/2: Integration Tests (21 scenarios)$(NC)"
+	@echo "$(CYAN)Step 2/3: Integration Tests (Spin HTTP scenarios)$(NC)"
 	@echo "$(CYAN)--------------------------------------------$(NC)"
 	@if curl -sf -H "X-Forwarded-For: 127.0.0.1" $(FORWARDED_SECRET_HEADER) $(HEALTH_SECRET_HEADER) http://127.0.0.1:3000/health > /dev/null 2>&1; then \
 		SHUMA_API_KEY="$(SHUMA_API_KEY)" SHUMA_FORWARDED_IP_SECRET="$(SHUMA_FORWARDED_IP_SECRET)" SHUMA_HEALTH_SECRET="$(SHUMA_HEALTH_SECRET)" ./scripts/tests/integration.sh || exit 1; \
 	else \
-		echo "$(YELLOW)⚠️  Spin server not running. Skipping integration tests.$(NC)"; \
-		echo "$(YELLOW)   To run integration tests:$(NC)"; \
-		echo "$(YELLOW)   1. Start server: make dev$(NC)"; \
-		echo "$(YELLOW)   2. Run tests:    make test-integration$(NC)"; \
+		echo "$(RED)❌ Error: Spin server not running. Integration tests must run and may not be skipped.$(NC)"; \
+		echo "$(YELLOW)   Start server first: make dev$(NC)"; \
+		echo "$(YELLOW)   Then run tests:     make test$(NC)"; \
+		exit 1; \
 	fi
+	@echo ""
+	@echo "$(CYAN)Step 3/3: Dashboard E2E Smoke Tests$(NC)"
+	@echo "$(CYAN)--------------------------------------------$(NC)"
+	@$(MAKE) --no-print-directory test-dashboard-e2e || exit 1
 	@echo ""
 	@echo "$(GREEN)============================================$(NC)"
 	@echo "$(GREEN)  ALL TESTS COMPLETE$(NC)"
@@ -186,6 +197,8 @@ test-unit: ## Run Rust unit tests only (34 tests)
 	@./scripts/set_crate_type.sh rlib
 	@cargo test
 
+unit-test: test-unit ## Alias for Rust unit tests
+
 test-integration: ## Run integration tests only (21 scenarios, requires running server)
 	@echo "$(CYAN)🧪 Running integration tests...$(NC)"
 	@if curl -sf -H "X-Forwarded-For: 127.0.0.1" $(FORWARDED_SECRET_HEADER) $(HEALTH_SECRET_HEADER) http://127.0.0.1:3000/health > /dev/null 2>&1; then \
@@ -195,6 +208,8 @@ test-integration: ## Run integration tests only (21 scenarios, requires running 
 		echo "$(YELLOW)   Start the server first: make dev$(NC)"; \
 		exit 1; \
 	fi
+
+integration-test: test-integration ## Alias for Spin integration tests
 
 test-coverage: ## Run unit test coverage (requires cargo-llvm-cov)
 	@echo "$(CYAN)🧪 Running Rust unit test coverage...$(NC)"

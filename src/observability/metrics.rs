@@ -1,4 +1,4 @@
-// src/metrics.rs
+// src/observability/metrics.rs
 // Prometheus-compatible metrics for WASM Bot Defence
 // Stores counters in KV store and exports in Prometheus text format
 
@@ -8,6 +8,15 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 const METRICS_PREFIX: &str = "metrics:";
+const BOTNESS_SIGNAL_KEYS: [&str; 4] = [
+    "js_verification_required",
+    "geo_risk",
+    "rate_pressure_medium",
+    "rate_pressure_high",
+];
+const SIGNAL_AVAILABILITY_STATES: [&str; 3] = ["active", "disabled", "unavailable"];
+const DEFENCE_MODE_MODULES: [&str; 3] = ["rate", "geo", "js"];
+const DEFENCE_MODE_VALUES: [&str; 4] = ["off", "signal", "enforce", "both"];
 
 /// Metric types we track
 #[derive(Debug, Clone, Copy)]
@@ -24,6 +33,8 @@ pub enum MetricName {
     TestModeActions,
     MazeHits,
     CdpDetections,
+    BotnessSignalState,
+    DefenceModeEffective,
 }
 
 impl MetricName {
@@ -41,6 +52,8 @@ impl MetricName {
             MetricName::TestModeActions => "test_mode_actions_total",
             MetricName::MazeHits => "maze_hits_total",
             MetricName::CdpDetections => "cdp_detections_total",
+            MetricName::BotnessSignalState => "botness_signal_state_total",
+            MetricName::DefenceModeEffective => "defence_mode_effective_total",
         }
     }
 }
@@ -99,6 +112,37 @@ pub fn increment(store: &Store, metric: MetricName, label: Option<&str>) {
             *entry = entry.saturating_add(v);
         }
     }
+}
+
+fn record_defence_mode_effective(
+    store: &Store,
+    module: &str,
+    effective: &crate::config::DefenceModeEffective,
+) {
+    let label = format!(
+        "{}:{}:{}:{}",
+        module,
+        effective.configured.as_str(),
+        effective.signal_enabled as u8,
+        effective.action_enabled as u8
+    );
+    increment(store, MetricName::DefenceModeEffective, Some(label.as_str()));
+}
+
+pub fn record_botness_visibility(
+    store: &Store,
+    cfg: &crate::config::Config,
+    assessment: &crate::BotnessAssessment,
+) {
+    for signal in &assessment.contributions {
+        let label = format!("{}:{}", signal.key, signal.availability.as_str());
+        increment(store, MetricName::BotnessSignalState, Some(label.as_str()));
+    }
+
+    let effective = cfg.defence_modes_effective();
+    record_defence_mode_effective(store, "rate", &effective.rate);
+    record_defence_mode_effective(store, "geo", &effective.geo);
+    record_defence_mode_effective(store, "js", &effective.js);
 }
 
 /// Get current value of a counter
@@ -211,6 +255,56 @@ pub fn render_metrics(store: &Store) -> String {
     output.push_str("# HELP bot_defence_maze_hits_total Total hits on maze pages\n");
     let maze_hits = get_counter(store, &format!("{}maze_hits_total", METRICS_PREFIX));
     output.push_str(&format!("bot_defence_maze_hits_total {}\n", maze_hits));
+
+    // Botness signal states
+    output.push_str("\n# TYPE bot_defence_botness_signal_state_total counter\n");
+    output.push_str(
+        "# HELP bot_defence_botness_signal_state_total Botness signal state observations by signal key and availability\n",
+    );
+    for signal_key in BOTNESS_SIGNAL_KEYS {
+        for state in SIGNAL_AVAILABILITY_STATES {
+            let key = format!(
+                "{}botness_signal_state_total:{}:{}",
+                METRICS_PREFIX, signal_key, state
+            );
+            let count = get_counter(store, &key);
+            output.push_str(&format!(
+                "bot_defence_botness_signal_state_total{{signal=\"{}\",state=\"{}\"}} {}\n",
+                signal_key, state, count
+            ));
+        }
+    }
+
+    // Effective defence modes (runtime-observed)
+    output.push_str("\n# TYPE bot_defence_defence_mode_effective_total counter\n");
+    output.push_str(
+        "# HELP bot_defence_defence_mode_effective_total Observed effective defence mode combinations by module\n",
+    );
+    for module in DEFENCE_MODE_MODULES {
+        for configured_mode in DEFENCE_MODE_VALUES {
+            for signal_enabled in [false, true] {
+                for action_enabled in [false, true] {
+                    let key = format!(
+                        "{}defence_mode_effective_total:{}:{}:{}:{}",
+                        METRICS_PREFIX,
+                        module,
+                        configured_mode,
+                        signal_enabled as u8,
+                        action_enabled as u8
+                    );
+                    let count = get_counter(store, &key);
+                    output.push_str(&format!(
+                        "bot_defence_defence_mode_effective_total{{module=\"{}\",configured=\"{}\",signal_enabled=\"{}\",action_enabled=\"{}\"}} {}\n",
+                        module,
+                        configured_mode,
+                        signal_enabled,
+                        action_enabled,
+                        count
+                    ));
+                }
+            }
+        }
+    }
 
     // Active bans (gauge)
     output.push_str("\n# TYPE bot_defence_active_bans gauge\n");

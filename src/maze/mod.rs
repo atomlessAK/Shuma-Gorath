@@ -1,7 +1,7 @@
 mod content;
 mod http;
+mod renders;
 mod rng;
-mod templates;
 mod types;
 
 pub use http::{handle_maze_request, is_maze_path};
@@ -10,7 +10,7 @@ pub type MazeConfig = types::MazeConfig;
 
 #[allow(dead_code)]
 pub fn generate_maze_page(path: &str, config: &MazeConfig) -> String {
-    templates::generate_maze_page(path, config)
+    renders::generate_maze_page(path, config)
 }
 
 #[cfg(test)]

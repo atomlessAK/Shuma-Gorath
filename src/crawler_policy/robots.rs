@@ -279,6 +279,8 @@ mod tests {
             challenge_risk_threshold: 3,
             botness_maze_threshold: 6,
             botness_weights: crate::config::BotnessWeights::default(),
+            defence_modes: crate::config::DefenceModes::default(),
+            provider_backends: crate::config::ProviderBackends::default(),
         }
     }
 

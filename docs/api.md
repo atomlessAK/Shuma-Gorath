@@ -178,6 +178,7 @@ The unified botness model uses weighted scored signals plus terminal hard-ban si
 Core enforcement fields:
 - `js_required_enforced` - enable/disable JS-required enforcement
 - `rate_limit` - per-minute request limit used for hard rate limiting and rate-pressure scoring
+- `defence_modes.rate` / `defence_modes.geo` / `defence_modes.js` - per-module composability mode (`off`, `signal`, `enforce`, `both`)
 
 Scored thresholds:
 - `challenge_risk_threshold` - score at/above which challenge is served
@@ -192,6 +193,11 @@ Scored weights:
 Mutability:
 - `botness_config_mutable` indicates whether score/weight settings can be changed at runtime.
 - Runtime mutation is disabled by default; enable with `SHUMA_BOTNESS_CONFIG_MUTABLE=true`.
+
+Effective-mode visibility:
+- `defence_modes_effective` reports runtime-effective signal/action booleans per module.
+- `defence_mode_warnings` reports mode conflicts (for example JS mode overridden by `js_required_enforced=false`).
+- Invalid `defence_modes` keys or invalid mode values are rejected by `POST /admin/config` with `400`.
 
 Signal catalog:
 - `botness_signal_definitions.scored_signals` lists weighted contributors.
