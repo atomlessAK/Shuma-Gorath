@@ -28,7 +28,7 @@ Set these in your deployment secret/config system:
 - `SHUMA_DEBUG_HEADERS`
 
 For the full env-only list and per-variable behavior, use `docs/configuration.md`.
-Template file: `/.env.full.example`.
+Template source: run `make setup` and use `.env.local` (gitignored) as your env-only override baseline.
 
 ## 🐙 Security Baseline
 
