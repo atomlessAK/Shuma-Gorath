@@ -74,3 +74,6 @@ pub fn evaluate_geo_policy(country: Option<&str>, cfg: &crate::config::Config) -
     }
     GeoPolicyRoute::None
 }
+
+#[cfg(test)]
+mod tests;

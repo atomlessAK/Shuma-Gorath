@@ -1,6 +1,5 @@
 #![recursion_limit = "256"]
 
-mod block_page;
 #[cfg(test)]
 mod lib_tests;
 #[cfg(test)]
@@ -16,25 +15,21 @@ use std::env;
 use std::io::Write;
 
 mod admin; // Admin API endpoints
-mod ban; // Ban logic (IP, expiry, reason)
 mod boundaries; // Domain boundary adapters for future repo splits
-mod browser; // Browser version checks
-mod cdp; // CDP (Chrome DevTools Protocol) automation detection
 mod challenge; // Interactive math challenge for banned users
 mod config; // Config loading and defaults
-mod geo; // Geo-based risk
-mod honeypot; // Honeypot endpoint logic
+mod enforcement; // Enforcement actions (ban, block page, honeypot, rate limiting)
 mod input_validation;
-mod ip; // IP bucketing helpers
-mod js; // JS challenge/verification
 mod maze; // maze crawler trap
 mod metrics; // Prometheus metrics
 mod pow; // Proof-of-work verification
-mod rate; // Rate limiting
 mod runtime; // request-time orchestration helpers
 mod robots; // robots.txt generation
+mod signals; // Risk and identity signals (browser/CDP/GEO/IP/JS/whitelist)
 mod test_mode; // test-mode routing behavior
-mod whitelist; // Whitelist logic // Shared request/input validation helpers
+
+pub(crate) use enforcement::{ban, block_page, honeypot, rate};
+pub(crate) use signals::{browser, cdp, geo, ip, js, whitelist};
 
 /// Main HTTP handler for the bot defence. This function is invoked for every HTTP request.
 /// It applies a series of anti-bot checks in order of cost and effectiveness, returning early on block/allow.

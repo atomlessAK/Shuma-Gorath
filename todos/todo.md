@@ -145,11 +145,12 @@ This is the active work queue.
 ### H3 Domain directory deepening (beyond first modularization pass)
 - [x] Move orchestration helpers (`request_router`, `kv_gate`, `policy_pipeline`) into a cohesive runtime/policy directory with clear ownership boundaries.
 - [x] Group admin/auth/config concerns into a cohesive adapter/domain boundary layout with minimal cross-module leakage.
-- [ ] Group signal and enforcement modules by domain (for example risk signals, enforcement actions, challenge/maze) and reduce root-level file sprawl.
-- [ ] Add thin compatibility re-exports during moves so refactors remain reviewable and low-risk.
+- [x] Group signal and enforcement modules by domain (for example risk signals, enforcement actions, challenge/maze) and reduce root-level file sprawl.
+- [x] Add thin compatibility re-exports during moves so refactors remain reviewable and low-risk.
 - [ ] Remove temporary compatibility shims once imports are fully migrated.
 - [x] H3.1 slice completed: moved request orchestration modules into `src/runtime/` (`runtime/request_router.rs`, `runtime/kv_gate.rs`, `runtime/policy_pipeline.rs`) and rewired `src/lib.rs` call sites without behavior changes.
 - [x] H3.2 slice completed: moved admin/auth into `src/admin/` (`admin/mod.rs`, `admin/api.rs`, `admin/auth.rs`) and moved config into `src/config/mod.rs`, then rewired module imports with no behavior change.
+- [x] H3.3/H3.4 slice completed: regrouped signal modules under `src/signals/` and enforcement modules under `src/enforcement/`, then added crate-level compatibility re-exports in `src/lib.rs` to keep call sites stable during the move.
 
 ### H4 Pluggable provider architecture (internal by default, external-capable)
 - [ ] Define provider traits for swappable capabilities:

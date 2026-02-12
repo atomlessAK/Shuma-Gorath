@@ -496,3 +496,6 @@ pub fn inject_cdp_detection(html: &str, report_endpoint: Option<&str>) -> String
         format!("{}{}{}", html, detection_script, report_script)
     }
 }
+
+#[cfg(test)]
+mod tests;

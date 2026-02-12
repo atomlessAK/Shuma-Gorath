@@ -1,94 +1,58 @@
-use once_cell::sync::Lazy;
-use spin_sdk::http::{Method, Request};
-use std::sync::Mutex;
+use spin_sdk::http::Method;
 
 use crate::{
     extract_health_client_ip, forwarded_ip_trusted, health_secret_authorized,
     response_with_optional_debug_headers,
 };
 
-static ENV_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
-
-fn request_with_headers(path: &str, headers: &[(&str, &str)]) -> Request {
-    request_with_method_and_headers(Method::Get, path, headers)
-}
-
-fn request_with_method_and_headers(
-    method: Method,
-    path: &str,
-    headers: &[(&str, &str)],
-) -> Request {
-    let mut builder = Request::builder();
-    builder.method(method).uri(path);
-    for (key, value) in headers {
-        builder.header(*key, *value);
-    }
-    builder.build()
-}
-
-fn has_header(resp: &spin_sdk::http::Response, name: &str) -> bool {
-    resp.headers()
-        .any(|(key, _)| key.eq_ignore_ascii_case(name))
-}
-
 #[test]
 fn forwarded_headers_are_not_trusted_without_secret() {
-    let _lock = ENV_MUTEX
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = crate::test_support::lock_env();
     std::env::remove_var("SHUMA_FORWARDED_IP_SECRET");
 
-    let req = request_with_headers("/health", &[("x-forwarded-for", "127.0.0.1")]);
+    let req = crate::test_support::request_with_headers("/health", &[("x-forwarded-for", "127.0.0.1")]);
     assert!(!forwarded_ip_trusted(&req));
 }
 
 #[test]
 fn health_internal_headers_hidden_by_default() {
-    let _lock = ENV_MUTEX
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = crate::test_support::lock_env();
     std::env::remove_var("SHUMA_DEBUG_HEADERS");
 
     let resp = response_with_optional_debug_headers(200, "OK", "available", "open");
 
-    assert!(!has_header(&resp, "X-KV-Status"));
-    assert!(!has_header(&resp, "X-Shuma-Fail-Mode"));
+    assert!(!crate::test_support::has_header(&resp, "X-KV-Status"));
+    assert!(!crate::test_support::has_header(&resp, "X-Shuma-Fail-Mode"));
 }
 
 #[test]
 fn health_internal_headers_visible_when_enabled() {
-    let _lock = ENV_MUTEX
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = crate::test_support::lock_env();
     std::env::set_var("SHUMA_DEBUG_HEADERS", "true");
 
     let resp = response_with_optional_debug_headers(200, "OK", "available", "open");
 
-    assert!(has_header(&resp, "X-KV-Status"));
-    assert!(has_header(&resp, "X-Shuma-Fail-Mode"));
+    assert!(crate::test_support::has_header(&resp, "X-KV-Status"));
+    assert!(crate::test_support::has_header(&resp, "X-Shuma-Fail-Mode"));
 }
 
 #[test]
 fn health_secret_not_required_when_unset() {
-    let _lock = ENV_MUTEX
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = crate::test_support::lock_env();
     std::env::remove_var("SHUMA_HEALTH_SECRET");
-    let req = request_with_headers("/health", &[("x-forwarded-for", "127.0.0.1")]);
+    let req = crate::test_support::request_with_headers("/health", &[("x-forwarded-for", "127.0.0.1")]);
     assert!(health_secret_authorized(&req));
 }
 
 #[test]
 fn health_secret_required_when_configured() {
-    let _lock = ENV_MUTEX
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = crate::test_support::lock_env();
     std::env::set_var("SHUMA_HEALTH_SECRET", "health-secret-value");
 
-    let missing = request_with_headers("/health", &[("x-forwarded-for", "127.0.0.1")]);
+    let missing = crate::test_support::request_with_headers("/health", &[("x-forwarded-for", "127.0.0.1")]);
     assert!(!health_secret_authorized(&missing));
 
-    let wrong = request_with_headers(
+    let wrong = crate::test_support::request_with_headers(
         "/health",
         &[
             ("x-forwarded-for", "127.0.0.1"),
@@ -97,7 +61,7 @@ fn health_secret_required_when_configured() {
     );
     assert!(!health_secret_authorized(&wrong));
 
-    let correct = request_with_headers(
+    let correct = crate::test_support::request_with_headers(
         "/health",
         &[
             ("x-forwarded-for", "127.0.0.1"),
@@ -111,12 +75,10 @@ fn health_secret_required_when_configured() {
 
 #[test]
 fn health_endpoint_rejects_when_health_secret_missing() {
-    let _lock = ENV_MUTEX
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = crate::test_support::lock_env();
     std::env::set_var("SHUMA_FORWARDED_IP_SECRET", "test-forwarded-secret");
     std::env::set_var("SHUMA_HEALTH_SECRET", "health-secret-value");
-    let req = request_with_headers(
+    let req = crate::test_support::request_with_headers(
         "/health",
         &[
             ("x-forwarded-for", "127.0.0.1"),
@@ -133,13 +95,11 @@ fn health_endpoint_rejects_when_health_secret_missing() {
 
 #[test]
 fn https_enforcement_blocks_insecure_admin_requests() {
-    let _lock = ENV_MUTEX
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = crate::test_support::lock_env();
     std::env::set_var("SHUMA_ENFORCE_HTTPS", "true");
     std::env::remove_var("SHUMA_FORWARDED_IP_SECRET");
 
-    let req = request_with_method_and_headers(Method::Get, "/admin/config", &[]);
+    let req = crate::test_support::request_with_method_and_headers(Method::Get, "/admin/config", &[]);
     let resp = crate::handle_bot_defence_impl(&req);
 
     assert_eq!(*resp.status(), 403u16);
@@ -153,14 +113,12 @@ fn https_enforcement_blocks_insecure_admin_requests() {
 
 #[test]
 fn https_enforcement_allows_trusted_forwarded_https_to_reach_admin_auth() {
-    let _lock = ENV_MUTEX
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = crate::test_support::lock_env();
     std::env::set_var("SHUMA_ENFORCE_HTTPS", "true");
     std::env::set_var("SHUMA_FORWARDED_IP_SECRET", "test-forwarded-secret");
     std::env::set_var("SHUMA_API_KEY", "test-admin-key");
 
-    let req = request_with_method_and_headers(
+    let req = crate::test_support::request_with_method_and_headers(
         Method::Get,
         "/admin/config",
         &[
@@ -179,10 +137,8 @@ fn https_enforcement_allows_trusted_forwarded_https_to_reach_admin_auth() {
 
 #[test]
 fn admin_options_preflight_is_rejected_without_cors_headers() {
-    let _lock = ENV_MUTEX
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let req = request_with_method_and_headers(
+    let _lock = crate::test_support::lock_env();
+    let req = crate::test_support::request_with_method_and_headers(
         Method::Options,
         "/admin/config",
         &[
@@ -198,18 +154,16 @@ fn admin_options_preflight_is_rejected_without_cors_headers() {
     let resp = crate::handle_bot_defence_impl(&req);
 
     assert_eq!(*resp.status(), 403u16);
-    assert!(!has_header(&resp, "Access-Control-Allow-Origin"));
-    assert!(!has_header(&resp, "Access-Control-Allow-Methods"));
-    assert!(!has_header(&resp, "Access-Control-Allow-Headers"));
+    assert!(!crate::test_support::has_header(&resp, "Access-Control-Allow-Origin"));
+    assert!(!crate::test_support::has_header(&resp, "Access-Control-Allow-Methods"));
+    assert!(!crate::test_support::has_header(&resp, "Access-Control-Allow-Headers"));
 }
 
 #[test]
 fn forwarded_headers_are_trusted_with_matching_secret() {
-    let _lock = ENV_MUTEX
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = crate::test_support::lock_env();
     std::env::set_var("SHUMA_FORWARDED_IP_SECRET", "test-forwarded-secret");
-    let req = request_with_headers(
+    let req = crate::test_support::request_with_headers(
         "/health",
         &[
             ("x-forwarded-for", "127.0.0.1"),
@@ -221,11 +175,9 @@ fn forwarded_headers_are_trusted_with_matching_secret() {
 
 #[test]
 fn health_ip_extraction_rejects_multi_hop_forwarded_for() {
-    let _lock = ENV_MUTEX
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = crate::test_support::lock_env();
     std::env::set_var("SHUMA_FORWARDED_IP_SECRET", "test-forwarded-secret");
-    let req = request_with_headers(
+    let req = crate::test_support::request_with_headers(
         "/health",
         &[
             ("x-forwarded-for", "127.0.0.1, 203.0.113.10"),
@@ -239,11 +191,9 @@ fn health_ip_extraction_rejects_multi_hop_forwarded_for() {
 
 #[test]
 fn geo_headers_are_ignored_when_forwarding_not_trusted() {
-    let _lock = ENV_MUTEX
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = crate::test_support::lock_env();
     std::env::remove_var("SHUMA_FORWARDED_IP_SECRET");
-    let req = request_with_headers("/health", &[("x-geo-country", "US")]);
+    let req = crate::test_support::request_with_headers("/health", &[("x-geo-country", "US")]);
 
     let cfg = crate::config::defaults().clone();
     let assessment = crate::assess_geo_request(&req, &cfg);
@@ -254,11 +204,9 @@ fn geo_headers_are_ignored_when_forwarding_not_trusted() {
 
 #[test]
 fn geo_headers_are_used_when_forwarding_is_trusted() {
-    let _lock = ENV_MUTEX
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = crate::test_support::lock_env();
     std::env::set_var("SHUMA_FORWARDED_IP_SECRET", "test-forwarded-secret");
-    let req = request_with_headers(
+    let req = crate::test_support::request_with_headers(
         "/health",
         &[
             ("x-geo-country", " us "),
@@ -277,9 +225,7 @@ fn geo_headers_are_used_when_forwarding_is_trusted() {
 
 #[test]
 fn invalid_bool_env_returns_500_without_panicking() {
-    let _lock = ENV_MUTEX
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _lock = crate::test_support::lock_env();
 
     std::env::set_var("SHUMA_VALIDATE_ENV_IN_TESTS", "true");
     std::env::set_var("SHUMA_API_KEY", "test-admin-key");
@@ -294,7 +240,7 @@ fn invalid_bool_env_returns_500_without_panicking() {
     std::env::set_var("SHUMA_CHALLENGE_CONFIG_MUTABLE", "false");
     std::env::set_var("SHUMA_BOTNESS_CONFIG_MUTABLE", "false");
 
-    let req = request_with_method_and_headers(Method::Get, "/health", &[]);
+    let req = crate::test_support::request_with_method_and_headers(Method::Get, "/health", &[]);
     let result = std::panic::catch_unwind(|| crate::handle_bot_defence_impl(&req));
     assert!(result.is_ok(), "handler panicked on invalid bool env");
 

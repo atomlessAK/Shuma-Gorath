@@ -1,9 +1,9 @@
-// src/challenge_tests.rs
+// src/challenge/tests.rs
 // Unit tests for the ARC-style challenge logic
 
 #[cfg(test)]
 mod tests {
-    use super::super::challenge::{
+    use super::super::{
         apply_transform, build_puzzle, generate_pair, handle_challenge_submit, make_seed_token,
         parse_submission, parse_transform_count, render_challenge, select_transform_pair,
         serve_challenge_page, transforms_for_count, ChallengeSeed, Transform,
@@ -33,7 +33,7 @@ mod tests {
         map: RefCell<HashMap<String, Vec<u8>>>,
     }
 
-    impl super::super::challenge::KeyValueStore for TestStore {
+    impl super::super::KeyValueStore for TestStore {
         fn get(&self, key: &str) -> Result<Option<Vec<u8>>, ()> {
             Ok(self.map.borrow().get(key).cloned())
         }

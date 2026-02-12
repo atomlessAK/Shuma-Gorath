@@ -48,3 +48,9 @@ pub fn is_whitelisted(ip: &str, whitelist: &[String]) -> bool {
     }
     false
 }
+
+#[cfg(test)]
+mod path_tests;
+
+#[cfg(test)]
+mod tests;

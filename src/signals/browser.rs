@@ -29,9 +29,7 @@ fn extract_version_after_marker(ua: &str, marker: &str) -> Option<u32> {
     let ver_str = &ua[idx + marker.len()..];
     let token = ver_str.split_whitespace().next().unwrap_or(ver_str);
     let start = token.find(|c: char| c.is_ascii_digit())?;
-    let digits = token[start..]
-        .split(|c: char| !c.is_ascii_digit())
-        .next()?;
+    let digits = token[start..].split(|c: char| !c.is_ascii_digit()).next()?;
     if digits.is_empty() {
         return None;
     }

@@ -1,4 +1,4 @@
-// src/log_tests.rs
+// src/lib_tests/logging.rs
 // Tests for safe logging helpers
 
 #[cfg(test)]
@@ -20,6 +20,6 @@ mod tests {
     #[test]
     fn write_log_line_ignores_write_errors() {
         let mut out = FailingWriter;
-        super::super::write_log_line(&mut out, "test");
+        crate::write_log_line(&mut out, "test");
     }
 }

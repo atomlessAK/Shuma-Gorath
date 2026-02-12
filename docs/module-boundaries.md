@@ -23,6 +23,8 @@ This document defines the in-repo boundaries used to prepare future repo splits.
 - Core policy/orchestration: `src/lib.rs` and `src/runtime/` helpers (`request_router`, `kv_gate`, `policy_pipeline`)
 - Admin adapter domain: `src/admin/` (`api.rs` endpoint surface + `auth.rs` auth/session concerns)
 - Config domain: `src/config/mod.rs` (+ `src/config/tests.rs`)
+- Signal domain: `src/signals/` (browser/CDP/GEO/IP/JS/whitelist)
+- Enforcement domain: `src/enforcement/` (ban/block/rate/honeypot)
 - Maze/tarpit domain: `src/maze/` plus future tarpit implementation
 - Challenge domain: `src/challenge/`
 - Dashboard adapter: `dashboard/modules/` API/session/config adapters

@@ -251,3 +251,6 @@ fn now_ts() -> u64 {
         .unwrap()
         .as_secs()
 }
+
+#[cfg(test)]
+mod tests;
