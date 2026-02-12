@@ -29,7 +29,7 @@ pub(crate) fn maybe_handle_test_mode<S, F, G>(
     ip: &str,
     ua: &str,
     path: &str,
-    geo_route: crate::geo::GeoPolicyRoute,
+    geo_route: crate::signals::geo::GeoPolicyRoute,
     needs_js_verification: F,
     record_test_mode_action: G,
 ) -> Option<Response>
@@ -46,7 +46,7 @@ where
         return Some(Response::new(200, "TEST MODE: PoW bypassed"));
     }
 
-    if crate::honeypot::is_honeypot(path, &cfg.honeypots) {
+    if crate::enforcement::honeypot::is_honeypot(path, &cfg.honeypots) {
         crate::log_line(&format!("[TEST MODE] Would ban IP {ip} for honeypot"));
         log_test_mode_event(
             store,
@@ -59,7 +59,7 @@ where
         return Some(Response::new(200, "TEST MODE: Would block (honeypot)"));
     }
 
-    if !crate::rate::check_rate_limit(store, site_id, ip, cfg.rate_limit) {
+    if !crate::enforcement::rate::check_rate_limit(store, site_id, ip, cfg.rate_limit) {
         crate::log_line(&format!("[TEST MODE] Would ban IP {ip} for rate limit"));
         log_test_mode_event(
             store,
@@ -72,7 +72,7 @@ where
         return Some(Response::new(200, "TEST MODE: Would block (rate limit)"));
     }
 
-    if crate::ban::is_banned(store, site_id, ip) {
+    if crate::enforcement::ban::is_banned(store, site_id, ip) {
         crate::log_line(&format!(
             "[TEST MODE] Would serve challenge to banned IP {ip}"
         ));
@@ -102,7 +102,7 @@ where
         return Some(Response::new(200, "TEST MODE: Would inject JS challenge"));
     }
 
-    if crate::browser::is_outdated_browser(ua, &cfg.browser_block) {
+    if crate::signals::browser::is_outdated_browser(ua, &cfg.browser_block) {
         crate::log_line(&format!(
             "[TEST MODE] Would ban IP {ip} for outdated browser"
         ));
@@ -121,7 +121,7 @@ where
     }
 
     match geo_route {
-        crate::geo::GeoPolicyRoute::Block => {
+        crate::signals::geo::GeoPolicyRoute::Block => {
             crate::log_line(&format!("[TEST MODE] Would block IP {ip} for GEO policy"));
             log_test_mode_event(
                 store,
@@ -133,7 +133,7 @@ where
             );
             return Some(Response::new(200, "TEST MODE: Would block (geo policy)"));
         }
-        crate::geo::GeoPolicyRoute::Maze => {
+        crate::signals::geo::GeoPolicyRoute::Maze => {
             crate::log_line(&format!(
                 "[TEST MODE] Would route IP {ip} to maze for GEO policy"
             ));
@@ -150,7 +150,7 @@ where
                 "TEST MODE: Would route to maze (geo policy)",
             ));
         }
-        crate::geo::GeoPolicyRoute::Challenge => {
+        crate::signals::geo::GeoPolicyRoute::Challenge => {
             crate::log_line(&format!(
                 "[TEST MODE] Would challenge IP {ip} for GEO policy"
             ));
@@ -167,7 +167,7 @@ where
                 "TEST MODE: Would serve challenge (geo policy)",
             ));
         }
-        crate::geo::GeoPolicyRoute::Allow | crate::geo::GeoPolicyRoute::None => {}
+        crate::signals::geo::GeoPolicyRoute::Allow | crate::signals::geo::GeoPolicyRoute::None => {}
     }
 
     Some(Response::new(

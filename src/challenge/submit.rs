@@ -112,7 +112,7 @@ pub(crate) fn handle_challenge_submit_with_outcome<S: KeyValueStore>(
         );
     }
     let ip = crate::extract_client_ip(req);
-    let ip_bucket = crate::ip::bucket_ip(&ip);
+    let ip_bucket = crate::signals::ip::bucket_ip(&ip);
     if seed.ip_bucket != ip_bucket {
         return (
             challenge_forbidden_response(),

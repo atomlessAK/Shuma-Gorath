@@ -1,5 +1,5 @@
 use crate::challenge::KeyValueStore;
-use crate::whitelist;
+use crate::signals::whitelist;
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
 use spin_sdk::http::{Method, Request};
@@ -279,7 +279,7 @@ pub fn register_admin_auth_failure<S: KeyValueStore>(
 ) -> bool {
     let ip = crate::extract_client_ip(req);
     let limit = admin_auth_failure_limit_per_minute();
-    !crate::rate::check_rate_limit(store, admin_auth_failure_site(scope), &ip, limit)
+    !crate::enforcement::rate::check_rate_limit(store, admin_auth_failure_site(scope), &ip, limit)
 }
 
 /// Returns true if admin access is allowed from this IP.
@@ -424,7 +424,7 @@ mod tests {
             AdminAuthFailureScope::Login
         ));
         let ip = crate::extract_client_ip(&req);
-        let bucket = crate::ip::bucket_ip(&ip);
+        let bucket = crate::signals::ip::bucket_ip(&ip);
         let now_window = super::now_ts() / 60;
         // Pre-seed to guaranteed saturation regardless runtime env limit (max clamp is 10_000).
         for window in [now_window, now_window + 1] {
@@ -454,7 +454,7 @@ mod tests {
         let req = request_for_admin_login();
         let store = MockStore::default();
         let ip = crate::extract_client_ip(&req);
-        let bucket = crate::ip::bucket_ip(&ip);
+        let bucket = crate::signals::ip::bucket_ip(&ip);
         let now_window = super::now_ts() / 60;
         // Pre-seed both current and next window to avoid minute-boundary flakiness.
         for window in [now_window, now_window + 1] {

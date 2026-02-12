@@ -2,7 +2,7 @@
 // Rate limiting for WASM Bot Defence
 
 use crate::challenge::KeyValueStore;
-use crate::ip;
+use crate::signals::ip;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn current_rate_usage<S: KeyValueStore>(store: &S, site_id: &str, ip: &str) -> u32 {

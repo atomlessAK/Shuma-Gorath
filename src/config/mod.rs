@@ -705,7 +705,7 @@ fn defaults_string_list(key: &str) -> Vec<String> {
 }
 
 fn defaults_country_list(key: &str) -> Vec<String> {
-    crate::geo::normalize_country_list(&defaults_string_list(key))
+    crate::signals::geo::normalize_country_list(&defaults_string_list(key))
 }
 
 fn defaults_browser_rules(key: &str) -> Vec<(String, u32)> {

@@ -111,7 +111,7 @@ pub fn issue_pow_challenge(ip: &str, difficulty: u8, ttl_seconds: u64) -> PowCha
     let seed_id = format!("{:016x}", rand::rng().random::<u64>());
     let payload = PowPayload {
         seed_id,
-        ip_bucket: crate::ip::bucket_ip(ip),
+        ip_bucket: crate::signals::ip::bucket_ip(ip),
         issued_at: now,
         expires_at: now + ttl,
         difficulty,
@@ -183,7 +183,7 @@ pub fn handle_pow_verify(req: &Request, ip: &str, pow_enabled: bool) -> Response
         return Response::new(400, "Seed expired");
     }
 
-    let ip_bucket = crate::ip::bucket_ip(ip);
+    let ip_bucket = crate::signals::ip::bucket_ip(ip);
     if payload.ip_bucket != ip_bucket {
         return Response::new(400, "IP bucket mismatch");
     }
@@ -194,7 +194,7 @@ pub fn handle_pow_verify(req: &Request, ip: &str, pow_enabled: bool) -> Response
 
     Response::builder()
         .status(200)
-        .header("Set-Cookie", crate::js::js_verified_cookie(ip).as_str())
+        .header("Set-Cookie", crate::signals::js::js_verified_cookie(ip).as_str())
         .header("Cache-Control", "no-store")
         .body("OK")
         .build()

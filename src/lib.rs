@@ -7,6 +7,8 @@ mod test_support;
 // src/lib.rs
 // Entry point for the WASM Stealth Bot Defence Spin app
 
+use crate::enforcement::{ban, block_page};
+use crate::signals::{browser, cdp, geo, js, whitelist};
 use serde::Serialize;
 use spin_sdk::http::{Request, Response};
 use spin_sdk::http_component;
@@ -27,9 +29,6 @@ mod runtime; // request-time orchestration helpers
 mod robots; // robots.txt generation
 mod signals; // Risk and identity signals (browser/CDP/GEO/IP/JS/whitelist)
 mod test_mode; // test-mode routing behavior
-
-pub(crate) use enforcement::{ban, block_page, honeypot, rate};
-pub(crate) use signals::{browser, cdp, geo, ip, js, whitelist};
 
 /// Main HTTP handler for the bot defence. This function is invoked for every HTTP request.
 /// It applies a series of anti-bot checks in order of cost and effectiveness, returning early on block/allow.
@@ -424,7 +423,7 @@ pub(crate) fn serve_maze_with_tracking(
     );
 
     // Bucket the IP to reduce KV cardinality and avoid per-IP explosion.
-    let maze_bucket = crate::ip::bucket_ip(ip);
+    let maze_bucket = crate::signals::ip::bucket_ip(ip);
     let maze_key = format!("maze_hits:{}", maze_bucket);
     let hits: u32 = store
         .get(&maze_key)
@@ -448,7 +447,7 @@ pub(crate) fn serve_maze_with_tracking(
             ip,
             "maze_crawler",
             cfg.get_ban_duration("honeypot"),
-            Some(crate::ban::BanFingerprint {
+            Some(crate::enforcement::ban::BanFingerprint {
                 score: None,
                 signals: vec!["maze_crawler_threshold".to_string()],
                 summary: Some(format!(
@@ -589,7 +588,7 @@ pub fn handle_bot_defence_impl(req: &Request) -> Response {
             &ip,
             "browser",
             cfg.get_ban_duration("browser"),
-            Some(crate::ban::BanFingerprint {
+            Some(crate::enforcement::ban::BanFingerprint {
                 score: None,
                 signals: vec!["outdated_browser".to_string()],
                 summary: Some(format!("ua={}", ua)),

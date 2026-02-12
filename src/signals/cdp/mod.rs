@@ -162,13 +162,13 @@ pub fn handle_cdp_report(store: &Store, req: &Request) -> Response {
 
     // Auto-ban only for strong-tier detections when enabled.
     if cfg.cdp_auto_ban && cdp_tier == CdpTier::Strong {
-        crate::ban::ban_ip_with_fingerprint(
+        crate::enforcement::ban::ban_ip_with_fingerprint(
             store,
             "default",
             &ip,
             "cdp_automation",
             cfg.get_ban_duration("cdp"),
-            Some(crate::ban::BanFingerprint {
+            Some(crate::enforcement::ban::BanFingerprint {
                 score: Some((report.score * 10.0).round().clamp(0.0, 10.0) as u8),
                 signals: vec!["cdp_automation".to_string()],
                 summary: Some(format!(

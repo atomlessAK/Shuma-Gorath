@@ -114,7 +114,7 @@ fn get_counter(store: &Store, key: &str) -> u64 {
 
 /// Count active bans (gauge)
 fn count_active_bans(store: &Store) -> u64 {
-    crate::ban::list_active_bans_with_scan(store, "default").len() as u64
+    crate::enforcement::ban::list_active_bans_with_scan(store, "default").len() as u64
 }
 
 /// Generate Prometheus-format metrics output

@@ -8,17 +8,17 @@ pub(crate) fn maybe_handle_honeypot(
     ip: &str,
     path: &str,
 ) -> Option<Response> {
-    if !crate::honeypot::is_honeypot(path, &cfg.honeypots) {
+    if !crate::enforcement::honeypot::is_honeypot(path, &cfg.honeypots) {
         return None;
     }
 
-    crate::ban::ban_ip_with_fingerprint(
+    crate::enforcement::ban::ban_ip_with_fingerprint(
         store,
         site_id,
         ip,
         "honeypot",
         cfg.get_ban_duration("honeypot"),
-        Some(crate::ban::BanFingerprint {
+        Some(crate::enforcement::ban::BanFingerprint {
             score: None,
             signals: vec!["honeypot".to_string()],
             summary: Some(format!("path={}", path)),
@@ -43,7 +43,7 @@ pub(crate) fn maybe_handle_honeypot(
     );
     Some(Response::new(
         403,
-        crate::block_page::render_block_page(crate::block_page::BlockReason::Honeypot),
+        crate::enforcement::block_page::render_block_page(crate::enforcement::block_page::BlockReason::Honeypot),
     ))
 }
 
@@ -53,17 +53,17 @@ pub(crate) fn maybe_handle_rate_limit(
     site_id: &str,
     ip: &str,
 ) -> Option<Response> {
-    if crate::rate::check_rate_limit(store, site_id, ip, cfg.rate_limit) {
+    if crate::enforcement::rate::check_rate_limit(store, site_id, ip, cfg.rate_limit) {
         return None;
     }
 
-    crate::ban::ban_ip_with_fingerprint(
+    crate::enforcement::ban::ban_ip_with_fingerprint(
         store,
         site_id,
         ip,
         "rate",
         cfg.get_ban_duration("rate"),
-        Some(crate::ban::BanFingerprint {
+        Some(crate::enforcement::ban::BanFingerprint {
             score: None,
             signals: vec!["rate_limit_exceeded".to_string()],
             summary: Some(format!("rate_limit={}", cfg.rate_limit)),
@@ -88,7 +88,7 @@ pub(crate) fn maybe_handle_rate_limit(
     );
     Some(Response::new(
         429,
-        crate::block_page::render_block_page(crate::block_page::BlockReason::RateLimit),
+        crate::enforcement::block_page::render_block_page(crate::enforcement::block_page::BlockReason::RateLimit),
     ))
 }
 
@@ -97,7 +97,7 @@ pub(crate) fn maybe_handle_existing_ban(
     site_id: &str,
     ip: &str,
 ) -> Option<Response> {
-    if !crate::ban::is_banned(store, site_id, ip) {
+    if !crate::enforcement::ban::is_banned(store, site_id, ip) {
         return None;
     }
 
@@ -115,7 +115,7 @@ pub(crate) fn maybe_handle_existing_ban(
     );
     Some(Response::new(
         403,
-        crate::block_page::render_block_page(crate::block_page::BlockReason::Honeypot),
+        crate::enforcement::block_page::render_block_page(crate::enforcement::block_page::BlockReason::Honeypot),
     ))
 }
 
@@ -127,7 +127,7 @@ pub(crate) fn maybe_handle_geo_policy(
     geo_assessment: &crate::GeoAssessment,
 ) -> Option<Response> {
     match geo_assessment.route {
-        crate::geo::GeoPolicyRoute::Block => {
+        crate::signals::geo::GeoPolicyRoute::Block => {
             crate::metrics::increment(store, crate::metrics::MetricName::BlocksTotal, None);
             crate::admin::log_event(
                 store,
@@ -145,10 +145,10 @@ pub(crate) fn maybe_handle_geo_policy(
             );
             Some(Response::new(
                 403,
-                crate::block_page::render_block_page(crate::block_page::BlockReason::GeoPolicy),
+                crate::enforcement::block_page::render_block_page(crate::enforcement::block_page::BlockReason::GeoPolicy),
             ))
         }
-        crate::geo::GeoPolicyRoute::Maze => {
+        crate::signals::geo::GeoPolicyRoute::Maze => {
             if cfg.maze_enabled {
                 return Some(crate::serve_maze_with_tracking(
                     store,
@@ -184,7 +184,7 @@ pub(crate) fn maybe_handle_geo_policy(
                 cfg.challenge_transform_count as usize,
             ))
         }
-        crate::geo::GeoPolicyRoute::Challenge => {
+        crate::signals::geo::GeoPolicyRoute::Challenge => {
             crate::metrics::increment(store, crate::metrics::MetricName::ChallengesTotal, None);
             crate::metrics::increment(
                 store,
@@ -210,7 +210,7 @@ pub(crate) fn maybe_handle_geo_policy(
                 cfg.challenge_transform_count as usize,
             ))
         }
-        crate::geo::GeoPolicyRoute::Allow | crate::geo::GeoPolicyRoute::None => None,
+        crate::signals::geo::GeoPolicyRoute::Allow | crate::signals::geo::GeoPolicyRoute::None => None,
     }
 }
 
@@ -223,7 +223,7 @@ pub(crate) fn compute_needs_js(
     ip: &str,
 ) -> bool {
     let js_missing_verification = path != "/health"
-        && crate::js::needs_js_verification_with_whitelist(
+        && crate::signals::js::needs_js_verification_with_whitelist(
             req,
             store,
             site_id,
@@ -243,7 +243,7 @@ pub(crate) fn maybe_handle_botness(
     geo_assessment: &crate::GeoAssessment,
 ) -> Option<Response> {
     let geo_risk = geo_assessment.scored_risk;
-    let rate_usage = crate::rate::current_rate_usage(store, site_id, ip);
+    let rate_usage = crate::enforcement::rate::current_rate_usage(store, site_id, ip);
     let botness =
         crate::compute_botness_assessment(needs_js, geo_risk, rate_usage, cfg.rate_limit, cfg);
     let botness_summary = crate::botness_signals_summary(&botness);
@@ -310,7 +310,7 @@ pub(crate) fn maybe_handle_js(
             admin: None,
         },
     );
-    Some(crate::js::inject_js_challenge(
+    Some(crate::signals::js::inject_js_challenge(
         ip,
         cfg.pow_enabled,
         cfg.pow_difficulty,

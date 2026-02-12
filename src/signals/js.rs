@@ -81,7 +81,7 @@ pub fn inject_js_challenge(
     pow_difficulty: u8,
     pow_ttl_seconds: u64,
 ) -> Response {
-    let cdp_script = crate::cdp::get_cdp_detection_script();
+    let cdp_script = crate::signals::cdp::get_cdp_detection_script();
 
     if pow_enabled {
         let challenge = crate::pow::issue_pow_challenge(ip, pow_difficulty, pow_ttl_seconds);

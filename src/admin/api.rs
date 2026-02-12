@@ -844,11 +844,11 @@ fn parse_country_list_json(field: &str, value: &serde_json::Value) -> Result<Vec
         let raw = item
             .as_str()
             .ok_or_else(|| format!("{} must contain only strings", field))?;
-        let code = crate::geo::normalize_country_code(raw)
+        let code = crate::signals::geo::normalize_country_code(raw)
             .ok_or_else(|| format!("{} contains invalid country code '{}'", field, raw))?;
         parsed.push(code);
     }
-    Ok(crate::geo::normalize_country_list(&parsed))
+    Ok(crate::signals::geo::normalize_country_list(&parsed))
 }
 
 fn handle_admin_config(
@@ -1552,13 +1552,13 @@ pub fn handle_admin(req: &Request) -> Response {
                     .unwrap_or(21600)
                     .clamp(ADMIN_BAN_DURATION_MIN, ADMIN_BAN_DURATION_MAX);
 
-                crate::ban::ban_ip_with_fingerprint(
+                crate::enforcement::ban::ban_ip_with_fingerprint(
                     &store,
                     site_id,
                     ip.as_str(),
                     reason.as_str(),
                     duration,
-                    Some(crate::ban::BanFingerprint {
+                    Some(crate::enforcement::ban::BanFingerprint {
                         score: None,
                         signals: vec!["manual_admin".to_string()],
                         summary: Some("manual_admin_ban".to_string()),
@@ -1580,7 +1580,7 @@ pub fn handle_admin(req: &Request) -> Response {
             }
             // GET: List all bans for this site (keys starting with ban:site_id:)
             let mut bans = vec![];
-            for (ip, ban) in crate::ban::list_active_bans_with_scan(&store, site_id) {
+            for (ip, ban) in crate::enforcement::ban::list_active_bans_with_scan(&store, site_id) {
                 bans.push(json!({
                     "ip": ip,
                     "reason": ban.reason,
@@ -1618,7 +1618,7 @@ pub fn handle_admin(req: &Request) -> Response {
                 return Response::new(400, "Missing ip param");
             }
             // Use the ban module's unban_ip function for consistency
-            crate::ban::unban_ip(&store, site_id, ip.as_str());
+            crate::enforcement::ban::unban_ip(&store, site_id, ip.as_str());
             // Log unban event
             log_event(
                 &store,
@@ -1639,7 +1639,7 @@ pub fn handle_admin(req: &Request) -> Response {
                 Ok(cfg) => cfg,
                 Err(err) => return Response::new(500, err.user_message()),
             };
-            let ban_count = crate::ban::list_active_bans_with_scan(&store, site_id).len();
+            let ban_count = crate::enforcement::ban::list_active_bans_with_scan(&store, site_id).len();
             let fail_mode = if crate::config::kv_store_fail_open() {
                 "open"
             } else {
@@ -1724,7 +1724,7 @@ pub fn handle_admin(req: &Request) -> Response {
                 .collect();
 
             // Count auto-bans from maze (check bans with reason "maze_crawler")
-            let maze_bans = crate::ban::list_active_bans_with_scan(&store, site_id)
+            let maze_bans = crate::enforcement::ban::list_active_bans_with_scan(&store, site_id)
                 .into_iter()
                 .filter(|(_, ban)| ban.reason == "maze_crawler")
                 .count();
