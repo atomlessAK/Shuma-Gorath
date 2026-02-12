@@ -45,8 +45,13 @@ read_env_local_value() {
         raw="$(grep -E "^${key}=" "$ENV_LOCAL_FILE" | tail -1 || true)"
     fi
     raw="${raw#*=}"
-    raw="${raw#\"}"
-    raw="${raw%\"}"
+    if [[ ${#raw} -ge 2 ]]; then
+        if [[ "${raw:0:1}" == "\"" && "${raw: -1}" == "\"" ]]; then
+            raw="${raw:1:${#raw}-2}"
+        elif [[ "${raw:0:1}" == "'" && "${raw: -1}" == "'" ]]; then
+            raw="${raw:1:${#raw}-2}"
+        fi
+    fi
     printf '%s' "$raw"
 }
 
@@ -66,6 +71,29 @@ upsert_env_local_value() {
         fi
         printf '%s=%s\n' "$key" "$value" >> "$tmp_file"
     fi
+    mv "$tmp_file" "$ENV_LOCAL_FILE"
+}
+
+normalize_env_local_unquoted_style() {
+    local tmp_file
+    tmp_file="$(mktemp)"
+    awk '
+        BEGIN { single_quote = sprintf("%c", 39) }
+        /^[A-Za-z_][A-Za-z0-9_]*=/ {
+            key = substr($0, 1, index($0, "=") - 1)
+            value = substr($0, index($0, "=") + 1)
+            if (length(value) >= 2) {
+                if (substr(value, 1, 1) == "\"" && substr(value, length(value), 1) == "\"") {
+                    value = substr(value, 2, length(value) - 2)
+                } else if (substr(value, 1, 1) == single_quote && substr(value, length(value), 1) == single_quote) {
+                    value = substr(value, 2, length(value) - 2)
+                }
+            }
+            print key "=" value
+            next
+        }
+        { print }
+    ' "$ENV_LOCAL_FILE" > "$tmp_file"
     mv "$tmp_file" "$ENV_LOCAL_FILE"
 }
 
@@ -339,6 +367,7 @@ ensure_env_local_default_from_defaults "SHUMA_DEBUG_HEADERS"
 ensure_env_local_default_from_defaults "SHUMA_POW_CONFIG_MUTABLE"
 ensure_env_local_default_from_defaults "SHUMA_CHALLENGE_CONFIG_MUTABLE"
 ensure_env_local_default_from_defaults "SHUMA_BOTNESS_CONFIG_MUTABLE"
+normalize_env_local_unquoted_style
 success "Local dev secrets are ready in $ENV_LOCAL_FILE"
 
 info "Seeding KV tunables from config/defaults.env (missing values only)..."

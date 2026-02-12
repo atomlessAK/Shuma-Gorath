@@ -13,6 +13,7 @@ Shuma-Gorath uses one runtime configuration model:
 1. Creates `.env.local` from `config/defaults.env` if missing.
 2. Generates local dev secrets in `.env.local` (`SHUMA_API_KEY`, `SHUMA_JS_SECRET`, `SHUMA_FORWARDED_IP_SECRET`).
 3. Runs `make config-seed`, which writes KV tunables only when `config:default` does not already exist.
+4. Normalizes `.env.local` entries to unquoted `KEY=value` style for consistency.
 
 At runtime:
 

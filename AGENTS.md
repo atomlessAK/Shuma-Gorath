@@ -55,6 +55,7 @@ This file provides instructions for coding agents working in this repository.
 - Keep compatibility shims temporary and remove when migrations complete.
 - Use descriptive Rust module/file naming: prefer clear, responsibility-revealing `snake_case` names (for example `request_validation.rs`, `browser_user_agent.rs`) over vague names.
 - Prefer explicit module files (`foo.rs`) over opaque `mod.rs` for new work when practical; keep directory + filename understandable without opening the file.
+- Keep `.env.local` entries in unquoted `KEY=value` form for consistency. The setup script normalizes quoted values, so avoid introducing new quoted scalars unless a value truly needs shell quoting semantics.
 
 ## Pull request expectations
 

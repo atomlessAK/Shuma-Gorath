@@ -37,6 +37,11 @@
 - Keep naming semantics consistent across domains (`renders.rs` for renderers, `http.rs` for HTTP handlers, `tests.rs` for colocated unit tests).
 - Treat renames as behavior-preserving refactors: update imports/paths and run full `make test`.
 
+## Env Override Style
+
+- Keep `.env.local` in unquoted `KEY=value` format for scalar values used in this project.
+- Avoid adding quoted scalar secrets/flags in `.env.local`; `make setup` normalizes quoted values to the unquoted style.
+
 ## When an ADR Is Required
 
 Create/update an ADR in `docs/adr/` when you change architecture or cross-cutting behavior:
