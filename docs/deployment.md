@@ -39,6 +39,7 @@ Current implementation note:
 - `enterprise_akamai`:
   - multi-instance deployments must treat distributed state as a critical-path control.
   - keep rollout in advisory posture until rate-limiter atomicity and ban-sync semantics are validated.
+  - runtime now hard-fails (`503`) when enterprise multi-instance posture is unsafe (for example authoritative mode with local-only rate/ban state).
 - One codebase policy:
   - keep one shared policy engine; profile differences should be state backend and precedence choices, not separate policy logic.
 
@@ -55,6 +56,8 @@ Set these in your deployment secret/config system:
 - `SHUMA_KV_STORE_FAIL_OPEN`
 - `SHUMA_ENFORCE_HTTPS`
 - `SHUMA_DEBUG_HEADERS`
+- `SHUMA_ENTERPRISE_MULTI_INSTANCE` (optional; required for enterprise multi-instance guardrail posture)
+- `SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED` (optional; temporary advisory/off exception attestation only)
 
 For the full env-only list and per-variable behavior, use `docs/configuration.md`.
 Template source: run `make setup` and use `.env.local` (gitignored) as your env-only override baseline.

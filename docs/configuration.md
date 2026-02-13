@@ -54,6 +54,8 @@ These are read from process env at runtime (not from KV).
 | `SHUMA_KV_STORE_FAIL_OPEN` | Yes | `true` | KV failure policy (`true` fail-open, `false` fail-closed). |
 | `SHUMA_ENFORCE_HTTPS` | Yes | `false` | Rejects non-HTTPS requests when `true` (proxy/header trust rules still apply). |
 | `SHUMA_DEBUG_HEADERS` | Yes | `false` | Enables internal debug headers (keep `false` in production). |
+| `SHUMA_ENTERPRISE_MULTI_INSTANCE` | No | `false` | Marks deployment as enterprise multi-instance for runtime/deploy state guardrails. |
+| `SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED` | No | `false` | Explicit temporary attestation for advisory/off operation when enterprise multi-instance still uses local-only rate/ban state. |
 | `SHUMA_POW_CONFIG_MUTABLE` | Yes | `false` | Allows runtime edits of PoW difficulty/TTL from admin config. |
 | `SHUMA_CHALLENGE_CONFIG_MUTABLE` | Yes | `false` | Allows runtime edits of challenge transform count/threshold from admin config. |
 | `SHUMA_BOTNESS_CONFIG_MUTABLE` | Yes | `false` | Allows runtime edits of botness thresholds/weights from admin config. |

@@ -193,6 +193,103 @@ fn defaults_enable_both_signal_and_action_paths() {
 }
 
 #[test]
+fn enterprise_state_guardrail_errors_without_exception_for_unsynced_multi_instance() {
+    let _lock = crate::test_support::lock_env();
+    clear_env(&[
+        "SHUMA_ENTERPRISE_MULTI_INSTANCE",
+        "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+    ]);
+    std::env::set_var("SHUMA_ENTERPRISE_MULTI_INSTANCE", "true");
+
+    let cfg = defaults().clone();
+    let error = cfg.enterprise_state_guardrail_error();
+    assert!(error.is_some());
+    assert!(error
+        .unwrap()
+        .contains("SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED=true"));
+    assert!(cfg.enterprise_state_guardrail_warnings().is_empty());
+
+    clear_env(&[
+        "SHUMA_ENTERPRISE_MULTI_INSTANCE",
+        "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+    ]);
+}
+
+#[test]
+fn enterprise_state_guardrail_warns_for_exceptioned_advisory_unsynced_posture() {
+    let _lock = crate::test_support::lock_env();
+    clear_env(&[
+        "SHUMA_ENTERPRISE_MULTI_INSTANCE",
+        "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+    ]);
+    std::env::set_var("SHUMA_ENTERPRISE_MULTI_INSTANCE", "true");
+    std::env::set_var(
+        "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+        "true",
+    );
+
+    let mut cfg = defaults().clone();
+    cfg.edge_integration_mode = EdgeIntegrationMode::Advisory;
+    assert_eq!(cfg.enterprise_state_guardrail_error(), None);
+    let warnings = cfg.enterprise_state_guardrail_warnings();
+    assert_eq!(warnings.len(), 1);
+    assert!(warnings[0].contains("explicit advisory/off exception"));
+
+    clear_env(&[
+        "SHUMA_ENTERPRISE_MULTI_INSTANCE",
+        "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+    ]);
+}
+
+#[test]
+fn enterprise_state_guardrail_errors_for_authoritative_unsynced_posture_even_with_exception() {
+    let _lock = crate::test_support::lock_env();
+    clear_env(&[
+        "SHUMA_ENTERPRISE_MULTI_INSTANCE",
+        "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+    ]);
+    std::env::set_var("SHUMA_ENTERPRISE_MULTI_INSTANCE", "true");
+    std::env::set_var(
+        "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+        "true",
+    );
+
+    let mut cfg = defaults().clone();
+    cfg.edge_integration_mode = EdgeIntegrationMode::Authoritative;
+    let error = cfg.enterprise_state_guardrail_error();
+    assert!(error.is_some());
+    assert!(error.unwrap().contains("authoritative mode"));
+    assert!(cfg.enterprise_state_guardrail_warnings().is_empty());
+
+    clear_env(&[
+        "SHUMA_ENTERPRISE_MULTI_INSTANCE",
+        "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+    ]);
+}
+
+#[test]
+fn enterprise_state_guardrail_is_clear_for_synced_multi_instance_posture() {
+    let _lock = crate::test_support::lock_env();
+    clear_env(&[
+        "SHUMA_ENTERPRISE_MULTI_INSTANCE",
+        "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+    ]);
+    std::env::set_var("SHUMA_ENTERPRISE_MULTI_INSTANCE", "true");
+
+    let mut cfg = defaults().clone();
+    cfg.provider_backends.rate_limiter = ProviderBackend::External;
+    cfg.provider_backends.ban_store = ProviderBackend::External;
+    cfg.edge_integration_mode = EdgeIntegrationMode::Authoritative;
+    assert_eq!(cfg.enterprise_state_guardrail_error(), None);
+    assert!(cfg.enterprise_state_guardrail_warnings().is_empty());
+
+    clear_env(&[
+        "SHUMA_ENTERPRISE_MULTI_INSTANCE",
+        "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+    ]);
+}
+
+#[test]
 fn js_effective_mode_is_disabled_when_js_required_enforced_is_false() {
     let mut cfg = defaults().clone();
     cfg.js_required_enforced = false;
@@ -229,6 +326,65 @@ fn parse_admin_config_write_defaults_to_disabled() {
     assert!(parse_admin_config_write_enabled(Some("true")));
     assert!(parse_admin_config_write_enabled(Some("1")));
     assert!(!parse_admin_config_write_enabled(Some("false")));
+}
+
+#[test]
+fn validate_env_rejects_invalid_optional_enterprise_bool() {
+    let _lock = crate::test_support::lock_env();
+    clear_env(&[
+        "SHUMA_VALIDATE_ENV_IN_TESTS",
+        "SHUMA_API_KEY",
+        "SHUMA_JS_SECRET",
+        "SHUMA_FORWARDED_IP_SECRET",
+        "SHUMA_EVENT_LOG_RETENTION_HOURS",
+        "SHUMA_ADMIN_CONFIG_WRITE_ENABLED",
+        "SHUMA_KV_STORE_FAIL_OPEN",
+        "SHUMA_ENFORCE_HTTPS",
+        "SHUMA_DEBUG_HEADERS",
+        "SHUMA_POW_CONFIG_MUTABLE",
+        "SHUMA_CHALLENGE_CONFIG_MUTABLE",
+        "SHUMA_BOTNESS_CONFIG_MUTABLE",
+        "SHUMA_ENTERPRISE_MULTI_INSTANCE",
+        "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+    ]);
+
+    std::env::set_var("SHUMA_VALIDATE_ENV_IN_TESTS", "true");
+    std::env::set_var("SHUMA_API_KEY", "test-admin-key");
+    std::env::set_var("SHUMA_JS_SECRET", "test-js-secret");
+    std::env::set_var("SHUMA_FORWARDED_IP_SECRET", "test-forwarded-secret");
+    std::env::set_var("SHUMA_EVENT_LOG_RETENTION_HOURS", "168");
+    std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "false");
+    std::env::set_var("SHUMA_KV_STORE_FAIL_OPEN", "true");
+    std::env::set_var("SHUMA_ENFORCE_HTTPS", "false");
+    std::env::set_var("SHUMA_DEBUG_HEADERS", "false");
+    std::env::set_var("SHUMA_POW_CONFIG_MUTABLE", "false");
+    std::env::set_var("SHUMA_CHALLENGE_CONFIG_MUTABLE", "false");
+    std::env::set_var("SHUMA_BOTNESS_CONFIG_MUTABLE", "false");
+    std::env::set_var("SHUMA_ENTERPRISE_MULTI_INSTANCE", "definitely-not-bool");
+
+    let result = validate_env_only_once();
+    assert!(result.is_err());
+    assert!(result
+        .err()
+        .unwrap()
+        .contains("SHUMA_ENTERPRISE_MULTI_INSTANCE"));
+
+    clear_env(&[
+        "SHUMA_VALIDATE_ENV_IN_TESTS",
+        "SHUMA_API_KEY",
+        "SHUMA_JS_SECRET",
+        "SHUMA_FORWARDED_IP_SECRET",
+        "SHUMA_EVENT_LOG_RETENTION_HOURS",
+        "SHUMA_ADMIN_CONFIG_WRITE_ENABLED",
+        "SHUMA_KV_STORE_FAIL_OPEN",
+        "SHUMA_ENFORCE_HTTPS",
+        "SHUMA_DEBUG_HEADERS",
+        "SHUMA_POW_CONFIG_MUTABLE",
+        "SHUMA_CHALLENGE_CONFIG_MUTABLE",
+        "SHUMA_BOTNESS_CONFIG_MUTABLE",
+        "SHUMA_ENTERPRISE_MULTI_INSTANCE",
+        "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+    ]);
 }
 
 #[test]

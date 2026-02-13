@@ -460,6 +460,13 @@ mod admin_config_tests {
         assert!(body.get("defence_modes").is_some());
         assert!(body.get("defence_modes_effective").is_some());
         assert!(body.get("defence_mode_warnings").is_some());
+        assert!(body.get("enterprise_multi_instance").is_some());
+        assert!(
+            body.get("enterprise_unsynced_state_exception_confirmed")
+                .is_some()
+        );
+        assert!(body.get("enterprise_state_guardrail_warnings").is_some());
+        assert!(body.get("enterprise_state_guardrail_error").is_some());
         assert!(body.get("botness_config_mutable").is_some());
         assert!(body.get("botness_signal_definitions").is_some());
     }
@@ -1908,6 +1915,10 @@ fn handle_admin_config(
                 },
                 "defence_modes_effective": cfg.defence_modes_effective(),
                 "defence_mode_warnings": cfg.defence_mode_warnings(),
+                "enterprise_multi_instance": crate::config::enterprise_multi_instance_enabled(),
+                "enterprise_unsynced_state_exception_confirmed": crate::config::enterprise_unsynced_state_exception_confirmed(),
+                "enterprise_state_guardrail_warnings": cfg.enterprise_state_guardrail_warnings(),
+                "enterprise_state_guardrail_error": cfg.enterprise_state_guardrail_error(),
                 "botness_config_mutable": botness_mutable,
                 "botness_signal_definitions": botness_signal_definitions(&cfg)
             }
@@ -1990,6 +2001,10 @@ fn handle_admin_config(
         },
         "defence_modes_effective": cfg.defence_modes_effective(),
         "defence_mode_warnings": cfg.defence_mode_warnings(),
+        "enterprise_multi_instance": crate::config::enterprise_multi_instance_enabled(),
+        "enterprise_unsynced_state_exception_confirmed": crate::config::enterprise_unsynced_state_exception_confirmed(),
+        "enterprise_state_guardrail_warnings": cfg.enterprise_state_guardrail_warnings(),
+        "enterprise_state_guardrail_error": cfg.enterprise_state_guardrail_error(),
         "botness_config_mutable": crate::config::botness_config_mutable(),
         "botness_signal_definitions": botness_signal_definitions(&cfg)
     }))

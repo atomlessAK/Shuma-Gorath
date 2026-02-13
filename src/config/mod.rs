@@ -379,6 +379,49 @@ impl Config {
         warnings
     }
 
+    fn enterprise_unsynced_state_active(&self) -> bool {
+        self.provider_backends.rate_limiter != ProviderBackend::External
+            || self.provider_backends.ban_store != ProviderBackend::External
+    }
+
+    pub fn enterprise_state_guardrail_error(&self) -> Option<String> {
+        if !enterprise_multi_instance_enabled() || !self.enterprise_unsynced_state_active() {
+            return None;
+        }
+
+        if self.edge_integration_mode == EdgeIntegrationMode::Authoritative {
+            return Some(
+                "enterprise multi-instance rollout cannot run with local-only rate/ban state in authoritative mode"
+                    .to_string(),
+            );
+        }
+
+        if !enterprise_unsynced_state_exception_confirmed() {
+            return Some(
+                "enterprise multi-instance rollout using local-only rate/ban state requires SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED=true"
+                    .to_string(),
+            );
+        }
+
+        None
+    }
+
+    pub fn enterprise_state_guardrail_warnings(&self) -> Vec<String> {
+        if !enterprise_multi_instance_enabled() || !self.enterprise_unsynced_state_active() {
+            return Vec::new();
+        }
+
+        if self.edge_integration_mode == EdgeIntegrationMode::Authoritative {
+            return Vec::new();
+        }
+
+        if enterprise_unsynced_state_exception_confirmed() {
+            vec!["enterprise multi-instance rollout is using local-only rate/ban state under explicit advisory/off exception; keep this temporary until distributed state is enabled".to_string()]
+        } else {
+            Vec::new()
+        }
+    }
+
     pub fn defence_modes_effective(&self) -> DefenceModesEffective {
         let js_note = if !self.js_required_enforced && self.defence_modes.js != ComposabilityMode::Off
         {
@@ -573,6 +616,8 @@ fn validate_env_only_impl() -> Result<(), String> {
     validate_bool_like_var("SHUMA_POW_CONFIG_MUTABLE")?;
     validate_bool_like_var("SHUMA_CHALLENGE_CONFIG_MUTABLE")?;
     validate_bool_like_var("SHUMA_BOTNESS_CONFIG_MUTABLE")?;
+    validate_optional_bool_like_var("SHUMA_ENTERPRISE_MULTI_INSTANCE")?;
+    validate_optional_bool_like_var("SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED")?;
 
     Ok(())
 }
@@ -597,6 +642,16 @@ fn validate_non_empty(name: &str) -> Result<(), String> {
 
 fn validate_bool_like_var(name: &str) -> Result<(), String> {
     let value = env::var(name).map_err(|_| format!("Missing required env var {}", name))?;
+    if parse_bool_like(&value).is_none() {
+        return Err(format!("Invalid boolean env var {}={}", name, value));
+    }
+    Ok(())
+}
+
+fn validate_optional_bool_like_var(name: &str) -> Result<(), String> {
+    let Some(value) = env::var(name).ok() else {
+        return Ok(());
+    };
     if parse_bool_like(&value).is_none() {
         return Err(format!("Invalid boolean env var {}={}", name, value));
     }
@@ -637,6 +692,21 @@ pub fn forwarded_header_trust_configured() -> bool {
 
 pub fn kv_store_fail_open() -> bool {
     env_bool_required("SHUMA_KV_STORE_FAIL_OPEN")
+}
+
+fn env_bool_optional(name: &str, default: bool) -> bool {
+    env::var(name)
+        .ok()
+        .and_then(|v| parse_bool_like(v.as_str()))
+        .unwrap_or(default)
+}
+
+pub fn enterprise_multi_instance_enabled() -> bool {
+    env_bool_optional("SHUMA_ENTERPRISE_MULTI_INSTANCE", false)
+}
+
+pub fn enterprise_unsynced_state_exception_confirmed() -> bool {
+    env_bool_optional("SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED", false)
 }
 
 fn parse_bool_like(value: &str) -> Option<bool> {

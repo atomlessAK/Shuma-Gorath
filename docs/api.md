@@ -214,6 +214,11 @@ Mutability:
 Effective-mode visibility:
 - `defence_modes_effective` reports runtime-effective signal/action booleans per module.
 - `defence_mode_warnings` reports mode conflicts (for example JS mode overridden by `js_required_enforced=false`).
+- Enterprise state posture visibility:
+  - `enterprise_multi_instance`
+  - `enterprise_unsynced_state_exception_confirmed`
+  - `enterprise_state_guardrail_warnings`
+  - `enterprise_state_guardrail_error`
 - Invalid `defence_modes` keys or invalid mode values are rejected by `POST /admin/config` with `400`.
 
 Signal catalog:

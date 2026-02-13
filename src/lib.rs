@@ -228,7 +228,15 @@ fn load_runtime_config(
     site_id: &str,
     path: &str,
 ) -> Result<config::Config, Response> {
-    config::load_runtime_cached(store, site_id).map_err(|err| config_error_response(err, path))
+    let cfg = config::load_runtime_cached(store, site_id).map_err(|err| config_error_response(err, path))?;
+    if let Some(guardrail_error) = cfg.enterprise_state_guardrail_error() {
+        log_line(&format!(
+            "[ENTERPRISE STATE ERROR] path={} {}",
+            path, guardrail_error
+        ));
+        return Err(Response::new(503, "Server configuration error"));
+    }
+    Ok(cfg)
 }
 
 fn rate_proximity_score(rate_count: u32, rate_limit: u32) -> u8 {
