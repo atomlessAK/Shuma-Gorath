@@ -308,13 +308,25 @@ mod admin_config_tests {
     #[test]
     fn admin_config_rejects_challenge_update_when_immutable() {
         let _lock = crate::test_support::lock_env();
+        let prior_challenge_mutable = std::env::var("SHUMA_CHALLENGE_CONFIG_MUTABLE").ok();
+        let prior_botness_mutable = std::env::var("SHUMA_BOTNESS_CONFIG_MUTABLE").ok();
         std::env::set_var("SHUMA_CHALLENGE_CONFIG_MUTABLE", "0");
+        std::env::set_var("SHUMA_BOTNESS_CONFIG_MUTABLE", "0");
         let body = br#"{"challenge_risk_threshold":5}"#.to_vec();
         let req = make_request(Method::Post, "/admin/config", body);
         let store = TestStore::default();
         let resp = handle_admin_config(&req, &store, "default");
         assert_eq!(*resp.status(), 403u16);
-        std::env::remove_var("SHUMA_CHALLENGE_CONFIG_MUTABLE");
+        if let Some(previous) = prior_challenge_mutable {
+            std::env::set_var("SHUMA_CHALLENGE_CONFIG_MUTABLE", previous);
+        } else {
+            std::env::remove_var("SHUMA_CHALLENGE_CONFIG_MUTABLE");
+        }
+        if let Some(previous) = prior_botness_mutable {
+            std::env::set_var("SHUMA_BOTNESS_CONFIG_MUTABLE", previous);
+        } else {
+            std::env::remove_var("SHUMA_BOTNESS_CONFIG_MUTABLE");
+        }
     }
 
     #[test]
