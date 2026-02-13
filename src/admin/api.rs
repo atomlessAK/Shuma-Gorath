@@ -309,6 +309,7 @@ mod admin_config_tests {
         std::env::set_var("SHUMA_ENFORCE_HTTPS", "true");
         std::env::set_var("SHUMA_DEBUG_HEADERS", "true");
         std::env::set_var("SHUMA_RATE_LIMITER_REDIS_URL", "redis://redis:6379");
+        std::env::set_var("SHUMA_BAN_STORE_REDIS_URL", "redis://redis:6379");
         std::env::set_var("SHUMA_POW_CONFIG_MUTABLE", "true");
         std::env::set_var("SHUMA_CHALLENGE_CONFIG_MUTABLE", "true");
         std::env::set_var("SHUMA_BOTNESS_CONFIG_MUTABLE", "true");
@@ -379,6 +380,10 @@ mod admin_config_tests {
             env.get("SHUMA_RATE_LIMITER_REDIS_URL"),
             Some(&serde_json::json!("redis://redis:6379"))
         );
+        assert_eq!(
+            env.get("SHUMA_BAN_STORE_REDIS_URL"),
+            Some(&serde_json::json!("redis://redis:6379"))
+        );
 
         let env_text = body.get("env_text").and_then(|v| v.as_str()).unwrap();
         assert!(env_text.contains("SHUMA_RATE_LIMIT=321"));
@@ -386,6 +391,7 @@ mod admin_config_tests {
         assert!(env_text.contains("SHUMA_PROVIDER_FINGERPRINT_SIGNAL=external"));
         assert!(env_text.contains("SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE=17"));
         assert!(env_text.contains("SHUMA_RATE_LIMITER_REDIS_URL=redis://redis:6379"));
+        assert!(env_text.contains("SHUMA_BAN_STORE_REDIS_URL=redis://redis:6379"));
 
         clear_env(&[
             "SHUMA_ADMIN_IP_ALLOWLIST",
@@ -396,6 +402,7 @@ mod admin_config_tests {
             "SHUMA_ENFORCE_HTTPS",
             "SHUMA_DEBUG_HEADERS",
             "SHUMA_RATE_LIMITER_REDIS_URL",
+            "SHUMA_BAN_STORE_REDIS_URL",
             "SHUMA_POW_CONFIG_MUTABLE",
             "SHUMA_CHALLENGE_CONFIG_MUTABLE",
             "SHUMA_BOTNESS_CONFIG_MUTABLE",
@@ -1201,6 +1208,10 @@ fn config_export_env_entries(cfg: &crate::config::Config) -> Vec<(String, String
         (
             "SHUMA_RATE_LIMITER_REDIS_URL".to_string(),
             crate::config::rate_limiter_redis_url().unwrap_or_default(),
+        ),
+        (
+            "SHUMA_BAN_STORE_REDIS_URL".to_string(),
+            crate::config::ban_store_redis_url().unwrap_or_default(),
         ),
         (
             "SHUMA_POW_CONFIG_MUTABLE".to_string(),
@@ -2229,6 +2240,12 @@ pub fn handle_admin(req: &Request) -> Response {
             Response::new(200, body)
         }
         "/admin/ban" => {
+            let cfg = match crate::config::load_runtime_cached(&store, site_id) {
+                Ok(cfg) => cfg,
+                Err(err) => return Response::new(500, err.user_message()),
+            };
+            let provider_registry = crate::providers::registry::ProviderRegistry::from_config(&cfg);
+
             // POST: Manually ban an IP
             if *req.method() == spin_sdk::http::Method::Post {
                 let json = match crate::request_validation::parse_json_body(
@@ -2255,18 +2272,20 @@ pub fn handle_admin(req: &Request) -> Response {
                     .unwrap_or(21600)
                     .clamp(ADMIN_BAN_DURATION_MIN, ADMIN_BAN_DURATION_MAX);
 
-                crate::enforcement::ban::ban_ip_with_fingerprint(
-                    &store,
-                    site_id,
-                    ip.as_str(),
-                    reason.as_str(),
-                    duration,
-                    Some(crate::enforcement::ban::BanFingerprint {
-                        score: None,
-                        signals: vec!["manual_admin".to_string()],
-                        summary: Some("manual_admin_ban".to_string()),
-                    }),
-                );
+                provider_registry
+                    .ban_store_provider()
+                    .ban_ip_with_fingerprint(
+                        &store,
+                        site_id,
+                        ip.as_str(),
+                        reason.as_str(),
+                        duration,
+                        Some(crate::enforcement::ban::BanFingerprint {
+                            score: None,
+                            signals: vec!["manual_admin".to_string()],
+                            summary: Some("manual_admin_ban".to_string()),
+                        }),
+                    );
                 // Log ban event
                 log_event(
                     &store,
@@ -2283,7 +2302,10 @@ pub fn handle_admin(req: &Request) -> Response {
             }
             // GET: List all bans for this site (keys starting with ban:site_id:)
             let mut bans = vec![];
-            for (ip, ban) in crate::enforcement::ban::list_active_bans_with_scan(&store, site_id) {
+            for (ip, ban) in provider_registry
+                .ban_store_provider()
+                .list_active_bans(&store, site_id)
+            {
                 bans.push(json!({
                     "ip": ip,
                     "reason": ban.reason,
@@ -2323,8 +2345,14 @@ pub fn handle_admin(req: &Request) -> Response {
             if ip.is_empty() {
                 return Response::new(400, "Missing ip param");
             }
-            // Use the ban module's unban_ip function for consistency
-            crate::enforcement::ban::unban_ip(&store, site_id, ip.as_str());
+            let cfg = match crate::config::load_runtime_cached(&store, site_id) {
+                Ok(cfg) => cfg,
+                Err(err) => return Response::new(500, err.user_message()),
+            };
+            let provider_registry = crate::providers::registry::ProviderRegistry::from_config(&cfg);
+            provider_registry
+                .ban_store_provider()
+                .unban_ip(&store, site_id, ip.as_str());
             // Log unban event
             log_event(
                 &store,

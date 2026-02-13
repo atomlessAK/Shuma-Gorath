@@ -397,6 +397,14 @@ impl Config {
                     .to_string(),
             );
         }
+        if self.provider_backends.ban_store == ProviderBackend::External
+            && ban_store_redis_url().is_none()
+        {
+            return Some(
+                "enterprise multi-instance rollout with SHUMA_PROVIDER_BAN_STORE=external requires SHUMA_BAN_STORE_REDIS_URL (redis:// or rediss://)"
+                    .to_string(),
+            );
+        }
 
         if !self.enterprise_unsynced_state_active() {
             return None;
@@ -632,6 +640,7 @@ fn validate_env_only_impl() -> Result<(), String> {
     validate_optional_bool_like_var("SHUMA_ENTERPRISE_MULTI_INSTANCE")?;
     validate_optional_bool_like_var("SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED")?;
     validate_optional_redis_url_var("SHUMA_RATE_LIMITER_REDIS_URL")?;
+    validate_optional_redis_url_var("SHUMA_BAN_STORE_REDIS_URL")?;
 
     Ok(())
 }
@@ -741,6 +750,12 @@ pub fn enterprise_unsynced_state_exception_confirmed() -> bool {
 
 pub fn rate_limiter_redis_url() -> Option<String> {
     env::var("SHUMA_RATE_LIMITER_REDIS_URL")
+        .ok()
+        .and_then(|value| parse_redis_url(&value))
+}
+
+pub fn ban_store_redis_url() -> Option<String> {
+    env::var("SHUMA_BAN_STORE_REDIS_URL")
         .ok()
         .and_then(|value| parse_redis_url(&value))
 }

@@ -57,6 +57,9 @@ impl ProviderRegistry {
             (ProviderCapability::RateLimiter, ProviderBackend::External) => {
                 "external_redis_with_internal_fallback"
             }
+            (ProviderCapability::BanStore, ProviderBackend::External) => {
+                "external_redis_with_internal_fallback"
+            }
             (ProviderCapability::FingerprintSignal, ProviderBackend::External) => {
                 "external_stub_fingerprint"
             }
@@ -90,7 +93,7 @@ impl ProviderRegistry {
     pub fn ban_store_provider(&self) -> &'static dyn BanStoreProvider {
         match self.backend_for(ProviderCapability::BanStore) {
             ProviderBackend::Internal => &internal::BAN_STORE,
-            ProviderBackend::External => &external::UNSUPPORTED_BAN_STORE,
+            ProviderBackend::External => &external::BAN_STORE,
         }
     }
 
@@ -246,7 +249,9 @@ mod tests {
     }
 
     #[test]
-    fn registry_external_unsupported_backends_expose_safe_contracts() {
+    fn registry_external_backends_expose_safe_contracts() {
+        let _lock = crate::test_support::lock_env();
+        std::env::remove_var("SHUMA_BAN_STORE_REDIS_URL");
         let mut cfg = defaults().clone();
         cfg.provider_backends.rate_limiter = ProviderBackend::External;
         cfg.provider_backends.ban_store = ProviderBackend::External;
@@ -271,12 +276,26 @@ mod tests {
         assert!(registry
             .maze_tarpit_provider()
             .is_maze_path("/maze/external-stub"));
+
+        std::env::set_var("SHUMA_BAN_STORE_REDIS_URL", "redis://redis:6379");
+        assert_eq!(
+            registry.ban_store_provider().sync_ban("default", "1.2.3.4"),
+            BanSyncResult::Synced
+        );
+        assert_eq!(
+            registry
+                .ban_store_provider()
+                .sync_unban("default", "1.2.3.4"),
+            BanSyncResult::Synced
+        );
+        std::env::remove_var("SHUMA_BAN_STORE_REDIS_URL");
     }
 
     #[test]
     fn registry_reports_active_provider_implementation_labels() {
         let mut cfg = defaults().clone();
         cfg.provider_backends.rate_limiter = ProviderBackend::External;
+        cfg.provider_backends.ban_store = ProviderBackend::External;
         cfg.provider_backends.fingerprint_signal = ProviderBackend::External;
         let registry = ProviderRegistry::from_config(&cfg);
 
@@ -290,7 +309,7 @@ mod tests {
         );
         assert_eq!(
             registry.implementation_for(ProviderCapability::BanStore),
-            "internal"
+            "external_redis_with_internal_fallback"
         );
     }
 }

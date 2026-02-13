@@ -11,14 +11,13 @@ use super::internal;
 const EXTERNAL_RATE_WINDOW_TTL_SECONDS: u64 = 120;
 
 pub(crate) struct ExternalRateLimiterProvider;
-pub(crate) struct UnsupportedExternalBanStoreProvider;
+pub(crate) struct ExternalBanStoreProvider;
 pub(crate) struct UnsupportedExternalChallengeEngineProvider;
 pub(crate) struct UnsupportedExternalMazeTarpitProvider;
 pub(crate) struct ExternalFingerprintSignalProvider;
 
 pub(crate) const RATE_LIMITER: ExternalRateLimiterProvider = ExternalRateLimiterProvider;
-pub(crate) const UNSUPPORTED_BAN_STORE: UnsupportedExternalBanStoreProvider =
-    UnsupportedExternalBanStoreProvider;
+pub(crate) const BAN_STORE: ExternalBanStoreProvider = ExternalBanStoreProvider;
 pub(crate) const UNSUPPORTED_CHALLENGE_ENGINE: UnsupportedExternalChallengeEngineProvider =
     UnsupportedExternalChallengeEngineProvider;
 pub(crate) const UNSUPPORTED_MAZE_TARPIT: UnsupportedExternalMazeTarpitProvider =
@@ -181,9 +180,292 @@ impl RateLimiterProvider for ExternalRateLimiterProvider {
     }
 }
 
-impl BanStoreProvider for UnsupportedExternalBanStoreProvider {
+trait DistributedBanStore {
+    fn is_banned(&self, site_id: &str, ip: &str) -> Result<bool, String>;
+    fn list_active_bans(
+        &self,
+        site_id: &str,
+    ) -> Result<Vec<(String, crate::enforcement::ban::BanEntry)>, String>;
+    fn ban_ip_with_fingerprint(
+        &self,
+        site_id: &str,
+        ip: &str,
+        reason: &str,
+        duration_secs: u64,
+        fingerprint: Option<crate::enforcement::ban::BanFingerprint>,
+    ) -> Result<(), String>;
+    fn unban_ip(&self, site_id: &str, ip: &str) -> Result<(), String>;
+}
+
+struct RedisDistributedBanStore {
+    address: String,
+}
+
+impl RedisDistributedBanStore {
+    fn from_env() -> Option<Self> {
+        crate::config::ban_store_redis_url().map(|address| Self { address })
+    }
+
+    fn open_connection(&self) -> Result<spin_sdk::redis::Connection, String> {
+        spin_sdk::redis::Connection::open(&self.address)
+            .map_err(|err| format!("redis connection failed ({:?})", err))
+    }
+}
+
+fn distributed_ban_key(site_id: &str, ip: &str) -> String {
+    format!("ban:{}:{}", site_id, ip)
+}
+
+fn distributed_ban_key_pattern(site_id: &str) -> String {
+    format!("ban:{}:*", site_id)
+}
+
+fn redis_result_as_string(result: &spin_sdk::redis::RedisResult) -> Option<String> {
+    match result {
+        spin_sdk::redis::RedisResult::Binary(bytes) => String::from_utf8(bytes.clone()).ok(),
+        spin_sdk::redis::RedisResult::Status(value) => Some(value.clone()),
+        _ => None,
+    }
+}
+
+impl DistributedBanStore for RedisDistributedBanStore {
+    fn is_banned(&self, site_id: &str, ip: &str) -> Result<bool, String> {
+        let conn = self.open_connection()?;
+        let key = distributed_ban_key(site_id, ip);
+        let payload = conn
+            .get(&key)
+            .map_err(|err| format!("redis GET failed ({:?})", err))?;
+        let Some(bytes) = payload else {
+            return Ok(false);
+        };
+
+        let entry = match serde_json::from_slice::<crate::enforcement::ban::BanEntry>(&bytes) {
+            Ok(entry) => entry,
+            Err(_) => {
+                if let Err(err) = conn.del(&[key.clone()]) {
+                    eprintln!(
+                        "[providers][ban] failed to delete invalid redis ban {} ({:?})",
+                        key, err
+                    );
+                }
+                return Ok(false);
+            }
+        };
+
+        if entry.expires > now_ts() {
+            return Ok(true);
+        }
+
+        if let Err(err) = conn.del(&[key.clone()]) {
+            eprintln!(
+                "[providers][ban] failed to delete expired redis ban {} ({:?})",
+                key, err
+            );
+        }
+        Ok(false)
+    }
+
+    fn list_active_bans(
+        &self,
+        site_id: &str,
+    ) -> Result<Vec<(String, crate::enforcement::ban::BanEntry)>, String> {
+        let conn = self.open_connection()?;
+        let pattern = distributed_ban_key_pattern(site_id);
+        let keys = conn
+            .execute(
+                "KEYS",
+                &[spin_sdk::redis::RedisParameter::Binary(
+                    pattern.as_bytes().to_vec(),
+                )],
+            )
+            .map_err(|err| format!("redis KEYS failed ({:?})", err))?;
+
+        let mut bans = Vec::new();
+        let now = now_ts();
+
+        for key in keys.iter().filter_map(redis_result_as_string) {
+            let ip = key.split(':').next_back().unwrap_or("").to_string();
+            if ip.is_empty() {
+                continue;
+            }
+
+            let payload = match conn.get(&key) {
+                Ok(payload) => payload,
+                Err(err) => {
+                    eprintln!(
+                        "[providers][ban] redis GET failed for key {} ({:?})",
+                        key, err
+                    );
+                    continue;
+                }
+            };
+            let Some(bytes) = payload else {
+                continue;
+            };
+
+            match serde_json::from_slice::<crate::enforcement::ban::BanEntry>(&bytes) {
+                Ok(entry) if entry.expires > now => bans.push((ip, entry)),
+                Ok(_) | Err(_) => {
+                    if let Err(err) = conn.del(&[key.clone()]) {
+                        eprintln!(
+                            "[providers][ban] failed to delete stale redis ban {} ({:?})",
+                            key, err
+                        );
+                    }
+                }
+            }
+        }
+
+        bans.sort_by(|a, b| a.0.cmp(&b.0));
+        Ok(bans)
+    }
+
+    fn ban_ip_with_fingerprint(
+        &self,
+        site_id: &str,
+        ip: &str,
+        reason: &str,
+        duration_secs: u64,
+        fingerprint: Option<crate::enforcement::ban::BanFingerprint>,
+    ) -> Result<(), String> {
+        let conn = self.open_connection()?;
+        let key = distributed_ban_key(site_id, ip);
+        let ts = now_ts();
+        let normalized_reason = crate::request_validation::sanitize_ban_reason(reason);
+        let normalized_fingerprint = fingerprint.map(|mut fp| {
+            fp.summary = fp
+                .summary
+                .as_deref()
+                .and_then(crate::request_validation::sanitize_ban_summary);
+            fp
+        });
+        let entry = crate::enforcement::ban::BanEntry {
+            reason: normalized_reason,
+            expires: ts.saturating_add(duration_secs),
+            banned_at: ts,
+            fingerprint: normalized_fingerprint,
+        };
+        let payload = serde_json::to_vec(&entry)
+            .map_err(|err| format!("serialize ban failed ({:?})", err))?;
+        conn.set(&key, &payload)
+            .map_err(|err| format!("redis SET failed ({:?})", err))?;
+
+        let ttl = i64::try_from(duration_secs.max(1)).unwrap_or(i64::MAX);
+        let args = [
+            spin_sdk::redis::RedisParameter::Binary(key.as_bytes().to_vec()),
+            spin_sdk::redis::RedisParameter::Int64(ttl),
+        ];
+        if let Err(err) = conn.execute("EXPIRE", &args) {
+            eprintln!(
+                "[providers][ban] redis EXPIRE failed for key {} ({:?})",
+                key, err
+            );
+        }
+        Ok(())
+    }
+
+    fn unban_ip(&self, site_id: &str, ip: &str) -> Result<(), String> {
+        let conn = self.open_connection()?;
+        let key = distributed_ban_key(site_id, ip);
+        conn.del(&[key])
+            .map_err(|err| format!("redis DEL failed ({:?})", err))?;
+        Ok(())
+    }
+}
+
+fn is_banned_with_backend<B: DistributedBanStore>(
+    backend: Option<&B>,
+    site_id: &str,
+    ip: &str,
+    fallback: impl FnOnce() -> bool,
+) -> bool {
+    if let Some(distributed_backend) = backend {
+        match distributed_backend.is_banned(site_id, ip) {
+            Ok(is_banned) => return is_banned,
+            Err(err) => eprintln!(
+                "[providers][ban] external distributed ban check failed for site={} ip={} ({}); falling back to internal",
+                site_id, ip, err
+            ),
+        }
+    }
+    fallback()
+}
+
+fn list_active_bans_with_backend<B: DistributedBanStore>(
+    backend: Option<&B>,
+    site_id: &str,
+    fallback: impl FnOnce() -> Vec<(String, crate::enforcement::ban::BanEntry)>,
+) -> Vec<(String, crate::enforcement::ban::BanEntry)> {
+    if let Some(distributed_backend) = backend {
+        match distributed_backend.list_active_bans(site_id) {
+            Ok(bans) => return bans,
+            Err(err) => eprintln!(
+                "[providers][ban] external distributed ban listing failed for site={} ({}); falling back to internal",
+                site_id, err
+            ),
+        }
+    }
+    fallback()
+}
+
+fn ban_with_backend<B: DistributedBanStore>(
+    backend: Option<&B>,
+    site_id: &str,
+    ip: &str,
+    reason: &str,
+    duration_secs: u64,
+    fingerprint: Option<crate::enforcement::ban::BanFingerprint>,
+    fallback: impl FnOnce(),
+) {
+    if let Some(distributed_backend) = backend {
+        match distributed_backend
+            .ban_ip_with_fingerprint(site_id, ip, reason, duration_secs, fingerprint.clone())
+        {
+            Ok(()) => return,
+            Err(err) => eprintln!(
+                "[providers][ban] external distributed ban write failed for site={} ip={} ({}); falling back to internal",
+                site_id, ip, err
+            ),
+        }
+    }
+    fallback();
+}
+
+fn unban_with_backend<B: DistributedBanStore>(
+    backend: Option<&B>,
+    site_id: &str,
+    ip: &str,
+    fallback: impl FnOnce(),
+) {
+    if let Some(distributed_backend) = backend {
+        match distributed_backend.unban_ip(site_id, ip) {
+            Ok(()) => return,
+            Err(err) => eprintln!(
+                "[providers][ban] external distributed unban failed for site={} ip={} ({}); falling back to internal",
+                site_id, ip, err
+            ),
+        }
+    }
+    fallback();
+}
+
+impl BanStoreProvider for ExternalBanStoreProvider {
     fn is_banned(&self, store: &Store, site_id: &str, ip: &str) -> bool {
-        internal::BAN_STORE.is_banned(store, site_id, ip)
+        let distributed_backend = RedisDistributedBanStore::from_env();
+        is_banned_with_backend(distributed_backend.as_ref(), site_id, ip, || {
+            internal::BAN_STORE.is_banned(store, site_id, ip)
+        })
+    }
+
+    fn list_active_bans(
+        &self,
+        store: &Store,
+        site_id: &str,
+    ) -> Vec<(String, crate::enforcement::ban::BanEntry)> {
+        let distributed_backend = RedisDistributedBanStore::from_env();
+        list_active_bans_with_backend(distributed_backend.as_ref(), site_id, || {
+            internal::BAN_STORE.list_active_bans(store, site_id)
+        })
     }
 
     fn ban_ip_with_fingerprint(
@@ -195,26 +477,48 @@ impl BanStoreProvider for UnsupportedExternalBanStoreProvider {
         duration_secs: u64,
         fingerprint: Option<crate::enforcement::ban::BanFingerprint>,
     ) {
-        internal::BAN_STORE.ban_ip_with_fingerprint(
-            store,
+        let distributed_backend = RedisDistributedBanStore::from_env();
+        ban_with_backend(
+            distributed_backend.as_ref(),
             site_id,
             ip,
             reason,
             duration_secs,
-            fingerprint,
+            fingerprint.clone(),
+            || {
+                internal::BAN_STORE.ban_ip_with_fingerprint(
+                    store,
+                    site_id,
+                    ip,
+                    reason,
+                    duration_secs,
+                    fingerprint,
+                )
+            },
         );
     }
 
     fn unban_ip(&self, store: &Store, site_id: &str, ip: &str) {
-        internal::BAN_STORE.unban_ip(store, site_id, ip);
+        let distributed_backend = RedisDistributedBanStore::from_env();
+        unban_with_backend(distributed_backend.as_ref(), site_id, ip, || {
+            internal::BAN_STORE.unban_ip(store, site_id, ip)
+        });
     }
 
     fn sync_ban(&self, _site_id: &str, _ip: &str) -> BanSyncResult {
-        BanSyncResult::Failed
+        if crate::config::ban_store_redis_url().is_some() {
+            BanSyncResult::Synced
+        } else {
+            BanSyncResult::Failed
+        }
     }
 
     fn sync_unban(&self, _site_id: &str, _ip: &str) -> BanSyncResult {
-        BanSyncResult::Failed
+        if crate::config::ban_store_redis_url().is_some() {
+            BanSyncResult::Synced
+        } else {
+            BanSyncResult::Failed
+        }
     }
 }
 
@@ -327,7 +631,9 @@ impl FingerprintSignalProvider for ExternalFingerprintSignalProvider {
 #[cfg(test)]
 mod tests {
     use super::{
-        check_rate_limit_with_backend, current_rate_usage_with_backend, DistributedRateCounter,
+        ban_with_backend, check_rate_limit_with_backend, current_rate_usage_with_backend,
+        is_banned_with_backend, list_active_bans_with_backend, unban_with_backend,
+        DistributedBanStore, DistributedRateCounter,
     };
     use crate::providers::contracts::RateLimitDecision;
     use std::cell::Cell;
@@ -363,6 +669,70 @@ mod tests {
         fn increment_and_get(&self, _key: &str, _ttl_seconds: u64) -> Result<u32, String> {
             self.increment_calls.set(self.increment_calls.get() + 1);
             self.increment_result.clone()
+        }
+    }
+
+    #[derive(Clone)]
+    struct MockDistributedBanStore {
+        is_banned_result: Result<bool, String>,
+        list_result: Result<Vec<(String, crate::enforcement::ban::BanEntry)>, String>,
+        ban_result: Result<(), String>,
+        unban_result: Result<(), String>,
+        is_banned_calls: Cell<u32>,
+        list_calls: Cell<u32>,
+        ban_calls: Cell<u32>,
+        unban_calls: Cell<u32>,
+    }
+
+    impl MockDistributedBanStore {
+        fn with_results(
+            is_banned_result: Result<bool, String>,
+            list_result: Result<Vec<(String, crate::enforcement::ban::BanEntry)>, String>,
+            ban_result: Result<(), String>,
+            unban_result: Result<(), String>,
+        ) -> Self {
+            Self {
+                is_banned_result,
+                list_result,
+                ban_result,
+                unban_result,
+                is_banned_calls: Cell::new(0),
+                list_calls: Cell::new(0),
+                ban_calls: Cell::new(0),
+                unban_calls: Cell::new(0),
+            }
+        }
+    }
+
+    impl DistributedBanStore for MockDistributedBanStore {
+        fn is_banned(&self, _site_id: &str, _ip: &str) -> Result<bool, String> {
+            self.is_banned_calls.set(self.is_banned_calls.get() + 1);
+            self.is_banned_result.clone()
+        }
+
+        fn list_active_bans(
+            &self,
+            _site_id: &str,
+        ) -> Result<Vec<(String, crate::enforcement::ban::BanEntry)>, String> {
+            self.list_calls.set(self.list_calls.get() + 1);
+            self.list_result.clone()
+        }
+
+        fn ban_ip_with_fingerprint(
+            &self,
+            _site_id: &str,
+            _ip: &str,
+            _reason: &str,
+            _duration_secs: u64,
+            _fingerprint: Option<crate::enforcement::ban::BanFingerprint>,
+        ) -> Result<(), String> {
+            self.ban_calls.set(self.ban_calls.get() + 1);
+            self.ban_result.clone()
+        }
+
+        fn unban_ip(&self, _site_id: &str, _ip: &str) -> Result<(), String> {
+            self.unban_calls.set(self.unban_calls.get() + 1);
+            self.unban_result.clone()
         }
     }
 
@@ -445,5 +815,156 @@ mod tests {
         assert_eq!(decision, RateLimitDecision::Limited);
         assert!(!fallback_called.get());
         assert_eq!(backend.increment_calls.get(), 0);
+    }
+
+    #[test]
+    fn distributed_ban_lookup_prefers_backend_when_available() {
+        let backend =
+            MockDistributedBanStore::with_results(Ok(true), Ok(Vec::new()), Ok(()), Ok(()));
+        let fallback_called = Cell::new(false);
+        let banned = is_banned_with_backend(Some(&backend), "default", "1.2.3.4", || {
+            fallback_called.set(true);
+            false
+        });
+        assert!(banned);
+        assert!(!fallback_called.get());
+        assert_eq!(backend.is_banned_calls.get(), 1);
+    }
+
+    #[test]
+    fn distributed_ban_lookup_falls_back_when_backend_errors() {
+        let backend = MockDistributedBanStore::with_results(
+            Err("backend unavailable".to_string()),
+            Ok(Vec::new()),
+            Ok(()),
+            Ok(()),
+        );
+        let fallback_called = Cell::new(false);
+        let banned = is_banned_with_backend(Some(&backend), "default", "1.2.3.4", || {
+            fallback_called.set(true);
+            true
+        });
+        assert!(banned);
+        assert!(fallback_called.get());
+        assert_eq!(backend.is_banned_calls.get(), 1);
+    }
+
+    #[test]
+    fn distributed_ban_listing_prefers_backend_when_available() {
+        let entries = vec![(
+            "1.2.3.4".to_string(),
+            crate::enforcement::ban::BanEntry {
+                reason: "test".to_string(),
+                expires: 999_999,
+                banned_at: 1,
+                fingerprint: None,
+            },
+        )];
+        let backend =
+            MockDistributedBanStore::with_results(Ok(false), Ok(entries.clone()), Ok(()), Ok(()));
+        let fallback_called = Cell::new(false);
+        let bans = list_active_bans_with_backend(Some(&backend), "default", || {
+            fallback_called.set(true);
+            Vec::new()
+        });
+        assert_eq!(bans.len(), 1);
+        assert_eq!(bans[0].0, "1.2.3.4");
+        assert!(!fallback_called.get());
+        assert_eq!(backend.list_calls.get(), 1);
+    }
+
+    #[test]
+    fn distributed_ban_listing_falls_back_when_backend_errors() {
+        let backend = MockDistributedBanStore::with_results(
+            Ok(false),
+            Err("backend unavailable".to_string()),
+            Ok(()),
+            Ok(()),
+        );
+        let fallback_called = Cell::new(false);
+        let bans = list_active_bans_with_backend(Some(&backend), "default", || {
+            fallback_called.set(true);
+            vec![(
+                "2.3.4.5".to_string(),
+                crate::enforcement::ban::BanEntry {
+                    reason: "fallback".to_string(),
+                    expires: 999_999,
+                    banned_at: 1,
+                    fingerprint: None,
+                },
+            )]
+        });
+        assert_eq!(bans.len(), 1);
+        assert_eq!(bans[0].0, "2.3.4.5");
+        assert!(fallback_called.get());
+        assert_eq!(backend.list_calls.get(), 1);
+    }
+
+    #[test]
+    fn distributed_ban_write_prefers_backend_when_available() {
+        let backend =
+            MockDistributedBanStore::with_results(Ok(false), Ok(Vec::new()), Ok(()), Ok(()));
+        let fallback_called = Cell::new(false);
+        ban_with_backend(
+            Some(&backend),
+            "default",
+            "1.2.3.4",
+            "test",
+            60,
+            None,
+            || fallback_called.set(true),
+        );
+        assert!(!fallback_called.get());
+        assert_eq!(backend.ban_calls.get(), 1);
+    }
+
+    #[test]
+    fn distributed_ban_write_falls_back_when_backend_errors() {
+        let backend = MockDistributedBanStore::with_results(
+            Ok(false),
+            Ok(Vec::new()),
+            Err("backend unavailable".to_string()),
+            Ok(()),
+        );
+        let fallback_called = Cell::new(false);
+        ban_with_backend(
+            Some(&backend),
+            "default",
+            "1.2.3.4",
+            "test",
+            60,
+            None,
+            || fallback_called.set(true),
+        );
+        assert!(fallback_called.get());
+        assert_eq!(backend.ban_calls.get(), 1);
+    }
+
+    #[test]
+    fn distributed_unban_prefers_backend_when_available() {
+        let backend =
+            MockDistributedBanStore::with_results(Ok(false), Ok(Vec::new()), Ok(()), Ok(()));
+        let fallback_called = Cell::new(false);
+        unban_with_backend(Some(&backend), "default", "1.2.3.4", || {
+            fallback_called.set(true)
+        });
+        assert!(!fallback_called.get());
+        assert_eq!(backend.unban_calls.get(), 1);
+    }
+
+    #[test]
+    fn distributed_unban_falls_back_when_backend_errors() {
+        let backend = MockDistributedBanStore::with_results(
+            Ok(false),
+            Ok(Vec::new()),
+            Ok(()),
+            Err("backend unavailable".to_string()),
+        );
+        let fallback_called = Cell::new(false);
+        unban_with_backend(Some(&backend), "default", "1.2.3.4", || {
+            fallback_called.set(true)
+        });
+        assert!(fallback_called.get());
+        assert_eq!(backend.unban_calls.get(), 1);
     }
 }

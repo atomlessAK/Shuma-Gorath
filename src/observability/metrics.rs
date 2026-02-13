@@ -41,7 +41,7 @@ const PROVIDER_OBSERVED_COMBINATIONS: [(
     (
         crate::providers::registry::ProviderCapability::BanStore,
         crate::config::ProviderBackend::External,
-        "external_stub_unsupported",
+        "external_redis_with_internal_fallback",
     ),
     (
         crate::providers::registry::ProviderCapability::ChallengeEngine,

@@ -14,7 +14,8 @@ pub(crate) struct InternalFingerprintSignalProvider;
 
 pub(crate) const RATE_LIMITER: InternalRateLimiterProvider = InternalRateLimiterProvider;
 pub(crate) const BAN_STORE: InternalBanStoreProvider = InternalBanStoreProvider;
-pub(crate) const CHALLENGE_ENGINE: InternalChallengeEngineProvider = InternalChallengeEngineProvider;
+pub(crate) const CHALLENGE_ENGINE: InternalChallengeEngineProvider =
+    InternalChallengeEngineProvider;
 pub(crate) const MAZE_TARPIT: InternalMazeTarpitProvider = InternalMazeTarpitProvider;
 pub(crate) const FINGERPRINT_SIGNAL: InternalFingerprintSignalProvider =
     InternalFingerprintSignalProvider;
@@ -42,6 +43,14 @@ impl RateLimiterProvider for InternalRateLimiterProvider {
 impl BanStoreProvider for InternalBanStoreProvider {
     fn is_banned(&self, store: &Store, site_id: &str, ip: &str) -> bool {
         crate::enforcement::ban::is_banned(store, site_id, ip)
+    }
+
+    fn list_active_bans(
+        &self,
+        store: &Store,
+        site_id: &str,
+    ) -> Vec<(String, crate::enforcement::ban::BanEntry)> {
+        crate::enforcement::ban::list_active_bans_with_scan(store, site_id)
     }
 
     fn ban_ip_with_fingerprint(

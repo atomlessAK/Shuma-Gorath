@@ -46,6 +46,11 @@ impl BanSyncResult {
 
 pub(crate) trait BanStoreProvider {
     fn is_banned(&self, store: &Store, site_id: &str, ip: &str) -> bool;
+    fn list_active_bans(
+        &self,
+        store: &Store,
+        site_id: &str,
+    ) -> Vec<(String, crate::enforcement::ban::BanEntry)>;
     fn ban_ip_with_fingerprint(
         &self,
         store: &Store,
@@ -139,6 +144,14 @@ mod tests {
             false
         }
 
+        fn list_active_bans(
+            &self,
+            _store: &Store,
+            _site_id: &str,
+        ) -> Vec<(String, crate::enforcement::ban::BanEntry)> {
+            Vec::new()
+        }
+
         fn ban_ip_with_fingerprint(
             &self,
             _store: &Store,
@@ -169,7 +182,10 @@ mod tests {
     #[test]
     fn ban_store_sync_defaults_to_deferred() {
         let provider = StubBanStoreProvider;
-        assert_eq!(provider.sync_ban("default", "1.2.3.4"), BanSyncResult::Deferred);
+        assert_eq!(
+            provider.sync_ban("default", "1.2.3.4"),
+            BanSyncResult::Deferred
+        );
         assert_eq!(
             provider.sync_unban("default", "1.2.3.4"),
             BanSyncResult::Deferred
