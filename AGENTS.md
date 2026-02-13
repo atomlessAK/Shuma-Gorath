@@ -35,6 +35,7 @@ This file provides instructions for coding agents working in this repository.
    - `make setup`/`make verify` when environment/bootstrap behavior is touched.
    Direct ad-hoc tool invocations (for example `cargo test`, `cargo build`, `spin up`) are not the canonical verification path for normal contributor/agent workflow.
    For `make test`, integration and dashboard e2e tests are mandatory and must not be skipped: start Spin first with `make dev` (separate terminal/session), then run `make test`.
+   Exception: if a change is documentation-only (`*.md` and no behavior/config/runtime code changes), do not run tests; document that verification was intentionally skipped because the slice is docs-only.
 8. Before reporting completion, confirm relevant CI status (or state explicitly that CI is pending/unverified).
 9. Commit/push in atomic slices by default:
    - one logical change per commit,

@@ -70,6 +70,34 @@ This model keeps high-volume commodity bot traffic away from app paths while pre
 | Policy-code ownership and extensibility | Limited | Primary |
 | Per-app rapid tuning loop | Shared | Primary in app layer |
 
+## 🐙 Platform Scope Boundaries (Akamai vs Shuma)
+
+Use this section to avoid overreach and duplicated controls.
+
+| Capability Family | System of Record | Why | Shuma Role | Explicit Non-Goal |
+|---|---|---|---|---|
+| Global reputation, bot category models, and internet-scale classifier training | Akamai (managed edge) | Edge has cross-tenant/global telemetry and model lifecycle tooling | Ingest outputs as advisory/authoritative signals where configured | Rebuilding global bot classifier training inside Shuma |
+| Transport/network identity signals (for example JA3/JA4-like fingerprints, ASN reputation, network provenance) | Akamai (managed edge) | Edge sees handshake/network context origin apps usually do not | Normalize and consume trusted upstream signals in policy | Duplicating edge-only transport fingerprint collection logic in app runtime |
+| Volumetric pre-filtering and broad perimeter suppression | Akamai (managed edge) | Best placed before app resource spend | Assume pre-filtered traffic and apply app-aware controls | Treating Shuma as a DDoS/perimeter replacement |
+| App workflow abuse controls (route/action semantics, business logic checks) | Shuma | Requires application context and product semantics | Primary policy and enforcement ownership | Delegating all app-abuse policy design to generic edge controls |
+| Deception controls (honeypot/maze/tarpit) | Shuma | Needs app-specific URL/content shaping and local tuning | Primary design and operation | Waiting for edge vendor parity before shipping app-specific deception |
+| Challenge escalation composition (when to challenge/maze/block) | Shuma policy engine | Requires local thresholds, observability, and rollback ownership | Keep policy composition internal even with external signals | Outsourcing core policy/routing composition authority |
+| Security/ops observability for app decisions | Shuma + platform observability | Operators need explainable app-level outcomes and rollback evidence | Emit provider/mode/signal-state telemetry and event context | Relying only on edge dashboards for app-level incident response |
+
+### Boundary Decision Rule
+
+Prefer implementation in Shuma only when at least one is true:
+
+- the control depends on application-specific semantics unavailable at the edge,
+- self-hosted minimal mode must support the feature without managed-edge dependency,
+- operators need direct local policy ownership and explainability not provided by upstream controls.
+
+Prefer implementation at the edge when at least one is true:
+
+- the capability relies on authoritative network/transport vantage unavailable to origin runtime,
+- global state/reputation quality materially exceeds what local app-only data can provide,
+- placing the control at edge materially reduces origin resource spend with acceptable explainability.
+
 ## 🐙 Shuma-Gorath Feature Fit in a Layered Model
 
 Shuma-Gorath remains valuable even behind a strong edge bot product:
