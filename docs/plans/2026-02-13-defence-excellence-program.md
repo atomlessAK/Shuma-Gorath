@@ -53,6 +53,9 @@ Each plan is structured to answer:
 
 - Preserve internal defaults for `self_hosted_minimal`.
 - Keep Shuma as policy orchestrator in all personas.
+- Deliver internal capability maturity before external-provider completeness for the same capability.
+- Use Akamai/enterprise research to shape internal design decisions, but keep baseline effectiveness independent of edge dependencies.
 - Prefer Akamai authoritative mode only where edge vantage materially improves correctness or cost.
+- Avoid rebuilding global edge-native capabilities inside Shuma when that effort does not materially improve self-hosted outcomes.
 - Keep fallback-to-internal behavior explicit and observable.
 - Ensure every plan has rollback thresholds before enforcement expansion.

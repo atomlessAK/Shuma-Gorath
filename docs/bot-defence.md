@@ -62,6 +62,16 @@ This policy is the default for `enterprise_akamai` planning and implementation. 
 - Challenge escalation routing.
 - Overall botness/policy orchestration.
 
+### Internal-First Delivery Policy
+
+- For all capability families, build or harden the internal Shuma path first, informed by enterprise/edge research and patterns.
+- Treat enterprise edge signals (including Akamai) as high-value inputs that improve internal design, not as a prerequisite for baseline feature completeness.
+- Do not over-invest in app-runtime features that are fundamentally better at edge scale (for example global reputation training or internet-wide sync) when those do not improve `self_hosted_minimal` outcomes.
+- Keep `self_hosted_minimal` effective without distributed edge sync requirements.
+- Add external provider wiring only when one of the following is true:
+  - edge vantage provides material correctness/cost advantages that cannot be achieved internally,
+  - internal capability semantics are already stable and enterprise integration adds clear incremental value.
+
 ## 🐙 Where Shuma-Gorath Adds Unique Value (Not Just Duplication)
 
 When Akamai Bot Manager (or equivalent) is already in place, Shuma-Gorath should focus on controls that are highly application-specific and hard to get from generic edge policy alone:

@@ -6,6 +6,7 @@ This is the active work queue.
 `todos/security-review.md` tracks security finding validity and closure status.
 
 ## Direction Snapshot (for next implementation stages)
+- [ ] Follow internal-first delivery policy: harden Shuma-native capability paths before completing external-provider parity for the same capability; use enterprise/Akamai patterns to inform design, not as baseline dependencies.
 - [ ] Evolve maze behavior toward Cloudflare-style selective covert decoys for suspicious traffic while keeping explicit `/maze` and `/trap` endpoints as fallback and test surface.
 - [ ] Build Shuma-native bounded slow-drip tarpit behavior in Rust/Spin; treat external projects (for example Finch/Sarracenia/caddy-defender) as design references, not runtime dependencies.
 - [ ] Strengthen fingerprinting by ingesting trusted upstream edge signals (JA3/JA4 and similar) and integrating them into scoring/policy.
