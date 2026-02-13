@@ -75,6 +75,7 @@ These keys are seeded into KV and loaded from KV at runtime.
 | `SHUMA_PROVIDER_CHALLENGE_ENGINE` | `internal` | Backend selection for challenge engine capability (`internal`, `external`). |
 | `SHUMA_PROVIDER_MAZE_TARPIT` | `internal` | Backend selection for maze/tarpit capability (`internal`, `external`). |
 | `SHUMA_PROVIDER_FINGERPRINT_SIGNAL` | `internal` | Backend selection for fingerprint signal capability (`internal`, `external`). |
+| `SHUMA_EDGE_INTEGRATION_MODE` | `off` | Managed-edge integration precedence: `off`, `advisory`, `authoritative` (metadata-only in current slice). |
 | `SHUMA_POW_ENABLED` | `true` | Enables PoW in JS verification flow. |
 | `SHUMA_POW_DIFFICULTY` | `15` | PoW cost level (clamped to supported range). |
 | `SHUMA_POW_TTL_SECONDS` | `90` | PoW seed lifetime in seconds (clamped). |
@@ -159,16 +160,56 @@ Default seeded modes are `both` for all three modules as the current pre-launch 
 
 - Provider selection is now explicit in config under `provider_backends`.
 - All capabilities default to `internal`.
-- `external` values are accepted at config level to support staged rollout of provider adapters; behavior remains internal until external adapters are wired in later H4 slices.
+- `external` backend behavior in the current slice:
+  - `fingerprint_signal=external` routes to an explicit external stub contract (`/fingerprint-report`) with no injected detection script and `501` report handler response until a concrete adapter is configured.
+  - Fingerprint source availability is explicit:
+    - internal provider reports `active` when `cdp_detection_enabled=true`, `disabled` when `cdp_detection_enabled=false`.
+    - external stub reports `unavailable` when `cdp_detection_enabled=true`, `disabled` when `cdp_detection_enabled=false`.
+  - `rate_limiter=external`, `ban_store=external`, `challenge_engine=external`, and `maze_tarpit=external` route through explicit unsupported external adapters that currently fall back to internal runtime behavior.
+  - `ban_store` external sync methods currently return `failed` to surface unimplemented external sync semantics.
+- `edge_integration_mode` defaults to `off` for self-hosted baseline.
+- `advisory` and `authoritative` are currently telemetry/runtime metadata posture values in this slice; request decision precedence remains unchanged.
+
+### Provider + Edge Matrix (Operator Quick Reference)
+
+This matrix is meant to answer: "What actually happens if I change this setting?"
+
+| Capability | `internal` backend | `external` backend (current) | Advisory mode intent | Authoritative mode intent | Safe fallback behavior |
+| --- | --- | --- | --- | --- | --- |
+| `fingerprint_signal` | Uses internal CDP scripts and `/cdp-report` | Uses external stub (`/fingerprint-report`), no detection injection, returns `501` on report handler | Treat external edge fingerprinting as an input to Shuma policy | Allow selected edge fingerprint outcomes to short-circuit local flow only after adapter hardening | If external is unavailable, treat signal as unavailable/disabled and keep local controls active |
+| `rate_limiter` | Internal local rate logic | Explicit unsupported external adapter currently delegates to internal behavior | Consume distributed rate state as advisory pressure once implemented | External authoritative limit decisions only after semantic parity is proven | Unsupported external path currently degrades to internal behavior |
+| `ban_store` | Internal ban persistence and checks | Explicit unsupported external adapter currently delegates to internal checks; sync calls report `failed` | Use external ban sync state as advisory input once implemented | External authoritative ban sync only with explicit outage controls | Unsupported external path keeps internal enforcement active |
+| `challenge_engine` | Internal challenge rendering/verification | Explicit unsupported external adapter currently delegates to internal behavior | External challenge attestations may inform policy once implemented | Authoritative external challenge only when replay/expiry semantics are parity-tested | Unsupported external path keeps internal challenge path |
+| `maze_tarpit` | Internal Shuma-native maze/tarpit | Explicit unsupported external adapter delegates to internal behavior | Keep internal (no practical external target currently) | Keep internal | Internal-only path remains the source of truth |
+| Policy composition (`botness`, routing, modes) | Internal | Not externalized | Shuma remains policy brain | Shuma remains policy brain | Not swappable by design |
+
+### Recommended Config Profiles
+
+Use these as startup presets, then tune incrementally:
+
+1. `self_hosted_minimal`:
+   - all `SHUMA_PROVIDER_*` values = `internal`
+   - `SHUMA_EDGE_INTEGRATION_MODE=off`
+2. `enterprise_akamai` (advisory-first):
+   - begin with all providers `internal`
+   - enable one external provider at a time only after staging soak
+   - set `SHUMA_EDGE_INTEGRATION_MODE=advisory` during initial enterprise rollout
+3. `enterprise_akamai` (authoritative-optional):
+   - only after advisory stability and rollback rehearsal
+   - keep non-validated capabilities on `internal`
+   - set `SHUMA_EDGE_INTEGRATION_MODE=authoritative` only for validated integrations
 
 ### Observability surfaces for composability
 
 - `/metrics` includes:
   - `bot_defence_botness_signal_state_total{signal="...",state="active|disabled|unavailable"}`
   - `bot_defence_defence_mode_effective_total{module="rate|geo|js",configured="off|signal|enforce|both",signal_enabled="true|false",action_enabled="true|false"}`
+  - `bot_defence_edge_integration_mode_total{mode="off|advisory|authoritative"}`
+  - `bot_defence_provider_implementation_effective_total{capability="...",backend="internal|external",implementation="..."}`
 - Botness-driven maze/challenge event outcomes include both:
   - `signal_states` summary (`key:state:contribution`),
-  - effective mode summary (`module=configured/signal_enabled/action_enabled`).
+  - effective runtime metadata summary (`modes=... edge=...`),
+  - provider summary (`providers=capability=backend/implementation ...`).
 
 ## 🐙 GEO Trust Boundary
 

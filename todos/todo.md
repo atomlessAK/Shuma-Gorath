@@ -193,19 +193,33 @@ Implementation rule: when internal feature work touches provider-managed capabil
   fingerprint signal source.
 - [x] Add a provider registry/factory that selects implementations from config (compile-time/runtime config, no behavior change by default).
 - [x] Implement `Internal*` providers matching current behavior as the default path.
-- [ ] Add explicit `External*` adapter stubs/contracts (for example Redis limiter, upstream fingerprint feed) with clear unsupported-path handling.
-- [ ] Add contract tests that every provider implementation must pass to guarantee semantic parity.
-- [ ] Add observability tags/metrics identifying active provider implementation per capability.
-- [ ] Document provider selection, rollout, and rollback procedures in deployment docs.
+- [x] Define and document provider externalization matrix by deployment persona:
+  `self_hosted_minimal` (default),
+  `enterprise_akamai` (target managed-edge integration),
+  with advisory-by-default and authoritative-optional edge signal precedence.
+- [x] Add explicit `External*` adapter stubs/contracts for high-leverage capabilities first:
+  `fingerprint_signal`,
+  `rate_limiter`,
+  `ban_store`,
+  `challenge_engine`,
+  with explicit unsupported handling for `maze_tarpit` until a stable external API target exists.
+- [x] Add contract tests that every provider implementation must pass to guarantee semantic parity and explicit unavailability behavior (`active`/`disabled`/`unavailable`) for external signal sources.
+- [x] Add observability tags/metrics identifying active provider implementation per capability and edge integration mode (`off`/`advisory`/`authoritative`).
+- [x] Document provider selection, rollout, and rollback procedures in deployment docs (including Akamai advisory/authoritative guidance and fallback-to-internal behavior).
 - [x] H4.1 slice completed: formalized provider capability contracts in `src/providers/contracts.rs` (`RateLimiterProvider`, `BanStoreProvider`, `ChallengeEngineProvider`, `MazeTarpitProvider`, `FingerprintSignalProvider`) with stable enum labels and default-behavior regression tests.
 - [x] H4.2 slice completed: added config-backed provider backend selection (`provider_backends` + `SHUMA_PROVIDER_*` defaults), plus `src/providers/registry.rs` factory/registry mapping (`internal`/`external`) with default internal selection and no behavior change to request handling paths.
 - [x] H4.3 slice completed: implemented `Internal*` provider adapters in `src/providers/internal.rs` and routed core request/policy flow through registry-selected provider interfaces in `src/lib.rs` and `src/runtime/policy_pipeline.rs` (default behavior preserved under `internal` backends).
+- [x] H4.4.1 slice completed: added `edge_integration_mode` posture (`off`/`advisory`/`authoritative`) to config/defaults and threaded it through runtime decision metadata plus metrics export (`bot_defence_edge_integration_mode_total`) without changing enforcement precedence.
+- [x] H4.4.2 slice completed: added explicit `external` provider adapters in `src/providers/external.rs`; `fingerprint_signal` now routes to an external stub contract, while unsupported external backends (`rate_limiter`, `ban_store`, `challenge_engine`, `maze_tarpit`) are explicit adapter paths with safe fallback semantics and ban-sync failure signaling.
+- [x] H4.4.3 slice completed: added provider implementation observability with capability/backend/implementation metrics (`bot_defence_provider_implementation_effective_total`) and runtime event-tag provider summaries (`providers=...`) wired from registry-selected implementations.
+- [x] H4.4.4 slice completed: added fingerprint provider contract availability semantics (`active`/`disabled`/`unavailable`) across internal/external adapters plus registry tests enforcing explicit unavailability behavior when external fingerprint is selected but not configured.
+- [x] H4.4.5 slice completed: documented deployment personas plus provider selection matrix and added Akamai-focused advisory/authoritative rollout + rollback runbook with explicit fallback-to-internal procedure in `docs/configuration.md`, `docs/deployment.md`, and `docs/observability.md`.
 
 ### H5 Execution and rollout discipline
 - [ ] Execute this hardening work as small, test-backed slices (one boundary family at a time) to avoid broad regressions.
 - [ ] Require each structural slice to pass full verification (`cargo test`, integration smoke, dashboard smoke where relevant) before merge.
 - [ ] Track and enforce “no net behavior change” for refactor-only slices unless explicitly scoped otherwise.
-- [ ] Define a cutover checklist for enabling any external provider in non-dev environments (staging soak, SLOs, rollback trigger).
+- [x] Define a cutover checklist for enabling any external provider in non-dev environments (staging soak, SLOs, rollback trigger).
 
 ## P3 Platform and Configuration Clarity
 - [ ] Design runtime-agnostic architecture that keeps core detection logic portable while preserving Fermyon-first performance paths.

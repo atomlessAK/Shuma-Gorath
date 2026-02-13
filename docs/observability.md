@@ -27,6 +27,8 @@ This endpoint is unauthenticated for Prometheus compatibility. Restrict access a
 - `bot_defence_test_mode_enabled`
 - `bot_defence_botness_signal_state_total{signal="...",state="active|disabled|unavailable"}`
 - `bot_defence_defence_mode_effective_total{module="rate|geo|js",configured="off|signal|enforce|both",signal_enabled="true|false",action_enabled="true|false"}`
+- `bot_defence_edge_integration_mode_total{mode="off|advisory|authoritative"}`
+- `bot_defence_provider_implementation_effective_total{capability="...",backend="internal|external",implementation="..."}`
 
 ## 🐙 Prometheus Scrape Example
 
@@ -48,11 +50,69 @@ scrape_configs:
 - Botness-driven challenge/maze events include:
   - active signal summary (`signals=...`)
   - full state summary (`signal_states=key:state:contribution,...`)
-  - effective mode summary (`modes=rate=... geo=... js=...`)
+  - runtime metadata summary (`modes=rate=... geo=... js=... edge=...`)
+  - provider summary (`providers=rate_limiter=... ban_store=... challenge_engine=... maze_tarpit=... fingerprint_signal=...`)
 - Use this event context with the two composability metrics to distinguish:
   - intentional disabled signals (`state=disabled`),
   - unavailable inputs (`state=unavailable`), and
   - active contributors (`state=active`).
+
+## 🐙 External Provider Cutover Monitoring
+
+Use this when moving from internal-only to advisory/authoritative edge integration.
+
+### 1. Mode and Provider Selection Checks
+
+- Confirm configured edge mode is being observed:
+  - `bot_defence_edge_integration_mode_total{mode="off|advisory|authoritative"}`
+- Confirm active provider implementation by capability:
+  - `bot_defence_provider_implementation_effective_total{capability="...",backend="...",implementation="..."}`
+- Use `increase(...)` windows in PromQL to verify recent behavior rather than cumulative lifetime totals.
+
+Example PromQL (last 10 minutes):
+
+```promql
+sum by (mode) (increase(bot_defence_edge_integration_mode_total[10m]))
+```
+
+```promql
+sum by (capability, backend, implementation) (
+  increase(bot_defence_provider_implementation_effective_total[10m])
+)
+```
+
+### 2. Signal Health Checks
+
+- Watch unavailable signal-state growth during external cutover:
+  - `bot_defence_botness_signal_state_total{state="unavailable"}`
+- For fingerprint migrations specifically, an unexpected rise in unavailable state after enablement is a rollback trigger.
+
+Example PromQL (last 10 minutes):
+
+```promql
+sum by (signal, state) (increase(bot_defence_botness_signal_state_total[10m]))
+```
+
+### 3. Outcome Sanity Checks
+
+Correlate provider/mode transitions with:
+
+- `bot_defence_challenges_total`
+- `bot_defence_blocks_total`
+- admin event outcomes that include:
+  - `signal_states=...`
+  - `modes=... edge=...`
+  - `providers=...`
+
+If challenge/block behavior changes sharply without matching traffic or threat context, roll back to internal/`off` and investigate.
+
+### 4. Minimum Alerting Guidance
+
+During any external provider rollout, alert on:
+
+- sustained increase in unavailable signal state,
+- unexpected provider implementation label changes,
+- sudden challenge/block jumps versus baseline.
 
 ## 🐙 Spin Cloud Monitoring
 

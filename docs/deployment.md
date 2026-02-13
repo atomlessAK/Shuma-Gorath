@@ -14,6 +14,22 @@ Shuma-Gorath is intended to complement enterprise bot defenses (for example Akam
 
 If KV config is missing/invalid at runtime, config-dependent request handling fails with `500 Configuration unavailable`.
 
+## 🐙 Deployment Personas (Provider Scope)
+
+Use one of these operating profiles as your baseline:
+
+| Persona | Who it is for | Provider posture | Edge mode posture | Default recommendation |
+| --- | --- | --- | --- | --- |
+| `self_hosted_minimal` | Small/self-hosted deployments without managed edge bot tooling | All `provider_backends.*=internal` | `off` | Recommended default for all new installs |
+| `enterprise_akamai` (advisory) | Enterprise deployments with Akamai edge/Bot Manager telemetry | Start internal, then selectively enable external per capability after validation | `advisory` | First enterprise cutover stage |
+| `enterprise_akamai` (authoritative) | Mature enterprise deployments with validated external adapters and explicit rollback drills | External only for capabilities with proven parity/SLOs | `authoritative` | Optional, advanced stage only |
+
+Current implementation note:
+
+- `fingerprint_signal=external` is currently a stub contract and reports external signal state as unavailable (or disabled when CDP detection is disabled).
+- `rate_limiter`, `ban_store`, `challenge_engine`, and `maze_tarpit` currently use explicit unsupported external adapters with safe internal fallback semantics.
+- Keep production deployments on internal providers unless you are explicitly exercising a staged integration plan.
+
 ## 🐙 Required Env-Only Keys
 
 Set these in your deployment secret/config system:
@@ -45,6 +61,69 @@ Validation helper before deploy:
 ```bash
 make deploy-env-validate
 ```
+
+## 🐙 External Provider Rollout & Rollback Runbook
+
+This runbook is required before enabling any external provider in non-dev environments.
+
+### 1. Prerequisites (Do Not Skip)
+
+- Record a baseline while fully internal (`provider_backends.*=internal`, `edge_integration_mode=off`) for at least one representative traffic window.
+- Ensure dashboards include:
+  - `bot_defence_provider_implementation_effective_total`
+  - `bot_defence_botness_signal_state_total`
+  - `bot_defence_edge_integration_mode_total`
+  - challenge/block rates and p95 latency from your platform metrics.
+- Ensure operators can quickly apply config changes (immutable redeploy or controlled `POST /admin/config` workflow).
+- Ensure rollback authority and on-call ownership are assigned before cutover.
+
+### 2. Staged Cutover Sequence
+
+1. Internal baseline (required):
+   - Keep all providers `internal`.
+   - Keep `edge_integration_mode=off`.
+   - Confirm stable baseline metrics and normal challenge/block behavior.
+2. Advisory stage (first external stage):
+   - Enable one capability at a time, beginning with `fingerprint_signal`.
+   - Set `edge_integration_mode=advisory`.
+   - Keep all other providers internal during this stage.
+   - Soak in staging, then production, and confirm expected metrics/outcomes before expanding scope.
+3. Authoritative stage (optional):
+   - Enter only after advisory stage shows stable behavior and clear operational benefit.
+   - Set `edge_integration_mode=authoritative` only for capabilities with explicit authoritative semantics and rollback confidence.
+   - Maintain safety-critical local controls and admin protections regardless of edge mode.
+
+### 3. Success Gates Per Stage
+
+- Provider selection gate:
+  - `bot_defence_provider_implementation_effective_total` shows expected capability/backend/implementation labels.
+- Edge mode gate:
+  - `bot_defence_edge_integration_mode_total` confirms requested mode (`off`, `advisory`, `authoritative`).
+- Signal health gate:
+  - `bot_defence_botness_signal_state_total{state="unavailable"}` does not spike unexpectedly for enabled external signal paths.
+- Outcome gate:
+  - challenge/block rates remain within expected variance versus baseline.
+  - no unexplained increase in user-facing friction or false positives.
+
+### 4. Rollback Triggers
+
+Trigger immediate rollback when any of the following occurs:
+
+- sustained increase in `state="unavailable"` for an enabled external signal provider,
+- sudden challenge/block rate jump not explained by traffic or attack context,
+- operational instability (timeouts/errors) attributable to external integration,
+- operator confidence loss in explainability of decisions/outcomes.
+
+### 5. Rollback Procedure (Immediate)
+
+1. Set affected `provider_backends` capability back to `internal`.
+2. Set `edge_integration_mode=off`.
+3. Redeploy/reload config via your standard production change path.
+4. Verify post-rollback metrics:
+   - provider implementation metric returns to `implementation="internal"` for affected capability,
+   - edge integration metric reflects `mode="off"`,
+   - challenge/block behavior returns toward baseline.
+5. Capture incident notes and defer re-enable until root cause and safeguards are documented.
 
 ## 🐙 CDN/WAF Rate Limits (Cloudflare + Akamai)
 
