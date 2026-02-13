@@ -1,6 +1,6 @@
 # TODO Roadmap
 
-Last updated: 2026-02-12
+Last updated: 2026-02-13
 
 This is the active work queue.
 `todos/security-review.md` tracks security finding validity and closure status.
@@ -214,10 +214,14 @@ Implementation rule: when internal feature work touches provider-managed capabil
 - [x] H4.4.3 slice completed: added provider implementation observability with capability/backend/implementation metrics (`bot_defence_provider_implementation_effective_total`) and runtime event-tag provider summaries (`providers=...`) wired from registry-selected implementations.
 - [x] H4.4.4 slice completed: added fingerprint provider contract availability semantics (`active`/`disabled`/`unavailable`) across internal/external adapters plus registry tests enforcing explicit unavailability behavior when external fingerprint is selected but not configured.
 - [x] H4.4.5 slice completed: documented deployment personas plus provider selection matrix and added Akamai-focused advisory/authoritative rollout + rollback runbook with explicit fallback-to-internal procedure in `docs/configuration.md`, `docs/deployment.md`, and `docs/observability.md`.
+- [ ] H4.5 plan follow-up (`docs/plans/2026-02-13-provider-externalization-design.md` step 3): replace external fingerprint stub with an Akamai-first adapter that maps edge/Bot Manager outcomes into normalized fingerprint signals.
+- [ ] H4.6 plan follow-up (`docs/plans/2026-02-13-provider-externalization-design.md` step 4): implement external `rate_limiter` and `ban_store` adapters with distributed state/sync semantics, then retire unsupported-stub behavior for those capabilities.
+- [ ] H4.7 plan follow-up (`docs/plans/2026-02-13-provider-externalization-design.md` step 5): add integration tests for advisory vs authoritative mode precedence and explicit downgrade-to-internal behavior when external providers are unavailable.
 
 ### H5 Execution and rollout discipline
 - [ ] Execute this hardening work as small, test-backed slices (one boundary family at a time) to avoid broad regressions.
-- [ ] Require each structural slice to pass full verification (`cargo test`, integration smoke, dashboard smoke where relevant) before merge.
+- [ ] ~~Require each structural slice to pass full verification (`cargo test`, integration smoke, dashboard smoke where relevant) before merge.~~
+- [ ] Require each structural slice to pass full verification via Makefile (`make test`; includes unit + integration + dashboard e2e) before merge.
 - [ ] Track and enforce “no net behavior change” for refactor-only slices unless explicitly scoped otherwise.
 - [x] Define a cutover checklist for enabling any external provider in non-dev environments (staging soak, SLOs, rollback trigger).
 
