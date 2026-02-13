@@ -9,7 +9,7 @@ This is the active work queue.
 - [ ] Follow internal-first delivery policy: harden Shuma-native capability paths before completing external-provider parity for the same capability; use enterprise/Akamai patterns to inform design, not as baseline dependencies.
 - [ ] Evolve maze behavior toward Cloudflare-style selective covert decoys for suspicious traffic while keeping explicit `/maze` and `/trap` endpoints as fallback and test surface.
 - [ ] Build Shuma-native bounded slow-drip tarpit behavior in Rust/Spin; treat external projects (for example Finch/Sarracenia/caddy-defender) as design references, not runtime dependencies.
-- [ ] Strengthen fingerprinting by ingesting trusted upstream edge signals (JA3/JA4 and similar) and integrating them into scoring/policy.
+- [ ] Strengthen fingerprinting by hardening internal baseline signals first, then ingesting trusted upstream edge signals (JA3/JA4 and similar) with provenance checks and explicit internal fallback when edge headers are absent or untrusted.
 - [ ] Refactor to clearer in-repo modules first; defer multi-repo splits until module boundaries and interfaces are stable.
 
 ## P1 Research Dossiers (Paper-by-Paper TODOs)
@@ -108,10 +108,10 @@ Completion rule for every paper TODO below: capture key findings, map to `self_h
 - [ ] Add stronger admin controls for production tuning: split read/write privileges and keep audit visibility for write actions. (`src/auth.rs`, `src/admin.rs`, dashboard, docs)
 
 ## P1 Distributed State and Limiter Correctness
-- [ ] Design and implement atomic distributed rate limiting (Redis `INCR`/Lua) for main traffic and admin auth, aligned with edge-state sync work. (`src/rate.rs`, `src/auth.rs`, `spin.toml`)
-- [ ] Define outage posture for distributed limiter (`fail-open` vs `fail-closed`) and add monitoring/alerts for limiter backend health. (architecture, ops, `docs/deployment.md`)
-- [ ] Design strategy for syncing bans/unbans across global edge instances. (architecture, ops)
-- [ ] Add monitoring for limiter fallback usage, sync lag, and distributed state drift.
+- [ ] (Enterprise/hybrid track; non-blocking for `self_hosted_minimal`) Design and implement atomic distributed rate limiting (Redis `INCR`/Lua) for main traffic and admin auth, aligned with edge-state sync work. (`src/rate.rs`, `src/auth.rs`, `spin.toml`)
+- [ ] (Enterprise/hybrid track; non-blocking for `self_hosted_minimal`) Define outage posture for distributed limiter (`fail-open` vs `fail-closed`) and add monitoring/alerts for limiter backend health. (architecture, ops, `docs/deployment.md`)
+- [ ] (Enterprise/hybrid track; non-blocking for `self_hosted_minimal`) Design strategy for syncing bans/unbans across global edge instances. (architecture, ops)
+- [ ] (Enterprise/hybrid track) Add monitoring for limiter fallback usage, sync lag, and distributed state drift when distributed/external state paths are enabled.
 
 ## P1 Staged Adaptive Defence (maze to slow-drip)
 
