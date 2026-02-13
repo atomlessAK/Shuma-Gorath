@@ -78,7 +78,7 @@ Current maze generation in Shuma-Gorath is deterministic from a path hash (`path
 - Keep explicit `/maze` and `/trap` as fallback/test surface.
 - Ensure SEO-safe directives and avoid user-visible regressions.
 
-### D. Client-side expansion mode (cost shift to requester)
+### D. Client-side expansion foundation for suspicious tiers (cost shift to requester)
 
 Short answer: yes, we can generate maze branches on the visitor side with JS.
 
@@ -88,6 +88,15 @@ Recommended shape (hybrid, not JS-only):
 - Client sends periodic proof-of-execution/progress markers.
 - Server verifies proof before issuing deeper traversal nodes.
 
+Tier policy:
+- suspicious traffic entering maze (`medium` and `high` suspicion) uses client-side expansion by default.
+- low-suspicion or non-maze traffic does not require this path.
+
+Checkpoint cadence (explicit):
+- client must submit signed progress checkpoints every 3 generated nodes or every 1500 ms, whichever happens first.
+- server issues only bounded step-ahead allowance per checkpoint (max unverified depth 4).
+- if checkpoint is missing/late/invalid, server stops expansion and applies configured fallback (`challenge` then `block`, or `maze` then `block` by policy).
+
 Benefits:
 - Moves part of CPU/memory cost to scraper infrastructure.
 - Increases cost for bots that execute JS and quickly identifies bots that do not.
@@ -95,7 +104,8 @@ Benefits:
 Risks and mitigations:
 - Some legitimate users disable JS:
   - do not use this mode for low-risk traffic;
-  - keep fallback challenge path for high-risk + no-JS.
+  - for suspicious maze traffic with no JS, fall back to bounded server-side maze traversal (reduced depth/TTL) and then challenge escalation.
+  - do not hard-block solely on no-JS at first contact; require corroborating abuse signals or repeated failed fallbacks.
 - Advanced bots can run JS:
   - combine with timing/sequence/provenance checks and optional micro-PoW for deep traversal steps.
 
@@ -182,8 +192,9 @@ Add metrics/log dimensions for:
    - add layout/content/link-graph variant families with versioned selection.
 4. MZ-4 Covert decoy injection:
    - inject decoys into eligible HTML for medium-confidence suspicious traffic.
-5. MZ-5 Client-side expansion:
-   - add optional Web Worker branch generation + server verification endpoint.
+5. MZ-5 Client-side expansion foundation:
+   - make Web Worker branch generation + signed server verification the default maze path for suspicious tiers, with explicit checkpoint cadence and bounded step-ahead allowance.
+   - add explicit no-JS fallback rules (bounded server-side maze path first, then challenge escalation) without immediate no-JS-only hard block.
 6. MZ-6 Optional micro-PoW for deep traversal:
    - adaptive difficulty by risk/depth to increase attacker cost.
 7. MZ-7 Budget enforcement:
