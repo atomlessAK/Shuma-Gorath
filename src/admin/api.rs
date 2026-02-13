@@ -953,7 +953,29 @@ fn log_admin_write_denied<S: crate::challenge::KeyValueStore>(
     );
 }
 
-fn handle_admin_login<S: crate::challenge::KeyValueStore>(req: &Request, store: &S) -> Response {
+fn register_admin_auth_failure_with_selected_rate_limiter(
+    store: &Store,
+    req: &Request,
+    scope: crate::admin::auth::AdminAuthFailureScope,
+    provider_registry: Option<&crate::providers::registry::ProviderRegistry>,
+) -> bool {
+    if let Some(registry) = provider_registry {
+        return crate::admin::auth::register_admin_auth_failure_with_provider(
+            store, req, scope, registry,
+        );
+    }
+    crate::admin::auth::register_admin_auth_failure(store, req, scope)
+}
+
+fn handle_admin_login_with_failure_handler<S, F>(
+    req: &Request,
+    store: &S,
+    mut register_failure: F,
+) -> Response
+where
+    S: crate::challenge::KeyValueStore,
+    F: FnMut() -> bool,
+{
     if req.method() != &spin_sdk::http::Method::Post {
         return Response::new(405, "Method Not Allowed");
     }
@@ -967,11 +989,7 @@ fn handle_admin_login<S: crate::challenge::KeyValueStore>(req: &Request, store: 
     };
 
     if !crate::admin::auth::verify_admin_api_key_candidate(api_key) {
-        if crate::admin::auth::register_admin_auth_failure(
-            store,
-            req,
-            crate::admin::auth::AdminAuthFailureScope::Login,
-        ) {
+        if register_failure() {
             return too_many_admin_auth_attempts_response();
         }
         return Response::new(401, "Unauthorized");
@@ -996,6 +1014,17 @@ fn handle_admin_login<S: crate::challenge::KeyValueStore>(req: &Request, store: 
         .header("Set-Cookie", session_cookie_value(&session_id))
         .body(body)
         .build()
+}
+
+#[cfg(test)]
+fn handle_admin_login<S: crate::challenge::KeyValueStore>(req: &Request, store: &S) -> Response {
+    handle_admin_login_with_failure_handler(req, store, || {
+        crate::admin::auth::register_admin_auth_failure(
+            store,
+            req,
+            crate::admin::auth::AdminAuthFailureScope::Login,
+        )
+    })
 }
 
 fn handle_admin_session<S: crate::challenge::KeyValueStore>(req: &Request, store: &S) -> Response {
@@ -1031,18 +1060,22 @@ fn handle_admin_session<S: crate::challenge::KeyValueStore>(req: &Request, store
         .build()
 }
 
-fn handle_admin_logout<S: crate::challenge::KeyValueStore>(req: &Request, store: &S) -> Response {
+fn handle_admin_logout_with_failure_handler<S, F>(
+    req: &Request,
+    store: &S,
+    mut register_failure: F,
+) -> Response
+where
+    S: crate::challenge::KeyValueStore,
+    F: FnMut() -> bool,
+{
     if req.method() != &spin_sdk::http::Method::Post {
         return Response::new(405, "Method Not Allowed");
     }
 
     let auth = crate::admin::auth::authenticate_admin(req, store);
     if !auth.is_authorized() {
-        if crate::admin::auth::register_admin_auth_failure(
-            store,
-            req,
-            crate::admin::auth::AdminAuthFailureScope::Endpoint,
-        ) {
+        if register_failure() {
             return too_many_admin_auth_attempts_response();
         }
         return Response::new(401, "Unauthorized: Invalid or missing API key");
@@ -1065,6 +1098,17 @@ fn handle_admin_logout<S: crate::challenge::KeyValueStore>(req: &Request, store:
         .header("Set-Cookie", clear_session_cookie_value())
         .body(body)
         .build()
+}
+
+#[cfg(test)]
+fn handle_admin_logout<S: crate::challenge::KeyValueStore>(req: &Request, store: &S) -> Response {
+    handle_admin_logout_with_failure_handler(req, store, || {
+        crate::admin::auth::register_admin_auth_failure(
+            store,
+            req,
+            crate::admin::auth::AdminAuthFailureScope::Endpoint,
+        )
+    })
 }
 
 fn query_u64_param(query: &str, key: &str, default: u64) -> u64 {
@@ -2078,10 +2122,27 @@ pub fn handle_admin(req: &Request) -> Response {
             Ok(s) => s,
             Err(_) => return Response::new(500, "Key-value store error"),
         };
+        let provider_registry = crate::config::load_runtime_cached(&store, "default")
+            .ok()
+            .map(|cfg| crate::providers::registry::ProviderRegistry::from_config(&cfg));
         return match path {
-            "/admin/login" => handle_admin_login(req, &store),
+            "/admin/login" => handle_admin_login_with_failure_handler(req, &store, || {
+                register_admin_auth_failure_with_selected_rate_limiter(
+                    &store,
+                    req,
+                    crate::admin::auth::AdminAuthFailureScope::Login,
+                    provider_registry.as_ref(),
+                )
+            }),
             "/admin/session" => handle_admin_session(req, &store),
-            "/admin/logout" => handle_admin_logout(req, &store),
+            "/admin/logout" => handle_admin_logout_with_failure_handler(req, &store, || {
+                register_admin_auth_failure_with_selected_rate_limiter(
+                    &store,
+                    req,
+                    crate::admin::auth::AdminAuthFailureScope::Endpoint,
+                    provider_registry.as_ref(),
+                )
+            }),
             _ => Response::new(400, "Bad Request: Invalid admin endpoint"),
         };
     }
@@ -2096,14 +2157,18 @@ pub fn handle_admin(req: &Request) -> Response {
         Ok(s) => s,
         Err(_) => return Response::new(500, "Key-value store error"),
     };
+    let provider_registry = crate::config::load_runtime_cached(&store, "default")
+        .ok()
+        .map(|cfg| crate::providers::registry::ProviderRegistry::from_config(&cfg));
 
     // Require either a valid bearer token or a valid admin session cookie.
     let auth = crate::admin::auth::authenticate_admin(req, &store);
     if !auth.is_authorized() {
-        if crate::admin::auth::register_admin_auth_failure(
+        if register_admin_auth_failure_with_selected_rate_limiter(
             &store,
             req,
             crate::admin::auth::AdminAuthFailureScope::Endpoint,
+            provider_registry.as_ref(),
         ) {
             return too_many_admin_auth_attempts_response();
         }

@@ -3,6 +3,7 @@ use crate::signals::whitelist;
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
 use spin_sdk::http::{Method, Request};
+use spin_sdk::key_value::Store;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const INSECURE_DEFAULT_API_KEY: &str = "changeme-supersecret";
@@ -354,6 +355,24 @@ pub fn register_admin_auth_failure<S: KeyValueStore>(
     let ip = crate::extract_client_ip(req);
     let limit = admin_auth_failure_limit_per_minute();
     !crate::enforcement::rate::check_rate_limit(store, admin_auth_failure_site(scope), &ip, limit)
+}
+
+/// Records a failed admin auth attempt using the provider-selected rate limiter.
+/// Returns true when throttled.
+pub fn register_admin_auth_failure_with_provider(
+    store: &Store,
+    req: &Request,
+    scope: AdminAuthFailureScope,
+    provider_registry: &crate::providers::registry::ProviderRegistry,
+) -> bool {
+    let ip = crate::extract_client_ip(req);
+    let limit = admin_auth_failure_limit_per_minute();
+    provider_registry.rate_limiter_provider().check_rate_limit(
+        store,
+        admin_auth_failure_site(scope),
+        &ip,
+        limit,
+    ) == crate::providers::contracts::RateLimitDecision::Limited
 }
 
 /// Returns true if admin access is allowed from this IP.
