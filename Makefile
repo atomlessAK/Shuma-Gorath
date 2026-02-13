@@ -334,7 +334,7 @@ api-key-validate: ## Validate SHUMA_API_KEY for deployment (must be 64-char hex 
 	fi; \
 	echo "$(GREEN)✅ SHUMA_API_KEY format is valid for deployment.$(NC)"
 
-deploy-env-validate: ## Fail deployment when unsafe debug flags are enabled or admin allowlist is missing
+deploy-env-validate: ## Fail deployment when unsafe debug flags are enabled, admin allowlist is missing, or admin edge rate limits are unconfirmed
 	@DEBUG_VAL="$${SHUMA_DEBUG_HEADERS:-false}"; \
 	DEBUG_NORM="$$(printf '%s' "$$DEBUG_VAL" | tr '[:upper:]' '[:lower:]')"; \
 	case "$$DEBUG_NORM" in \
@@ -356,7 +356,16 @@ deploy-env-validate: ## Fail deployment when unsafe debug flags are enabled or a
 			echo "$(YELLOW)Use explicit trusted operator/VPN IPs or CIDRs only.$(NC)"; \
 			exit 1 ;; \
 	esac; \
-	echo "$(GREEN)✅ Deployment env guardrails passed (SHUMA_DEBUG_HEADERS, SHUMA_ADMIN_IP_ALLOWLIST).$(NC)"
+	EDGE_LIMITS_CONFIRMED_RAW="$${SHUMA_ADMIN_EDGE_RATE_LIMITS_CONFIRMED:-false}"; \
+	EDGE_LIMITS_CONFIRMED_NORM="$$(printf '%s' "$$EDGE_LIMITS_CONFIRMED_RAW" | tr '[:upper:]' '[:lower:]')"; \
+	case "$$EDGE_LIMITS_CONFIRMED_NORM" in \
+		1|true|yes|on) ;; \
+		*) \
+			echo "$(RED)❌ Refusing deployment: SHUMA_ADMIN_EDGE_RATE_LIMITS_CONFIRMED is not true.$(NC)"; \
+			echo "$(YELLOW)Before deploy, configure CDN/WAF limits for POST /admin/login and /admin/*, then set SHUMA_ADMIN_EDGE_RATE_LIMITS_CONFIRMED=true.$(NC)"; \
+			exit 1 ;; \
+	esac; \
+	echo "$(GREEN)✅ Deployment env guardrails passed (SHUMA_DEBUG_HEADERS, SHUMA_ADMIN_IP_ALLOWLIST, SHUMA_ADMIN_EDGE_RATE_LIMITS_CONFIRMED).$(NC)"
 
 #--------------------------
 # Help

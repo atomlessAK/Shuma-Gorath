@@ -67,6 +67,8 @@ make deploy-env-validate
 
 - `SHUMA_DEBUG_HEADERS=false`
 - non-empty and non-overbroad `SHUMA_ADMIN_IP_ALLOWLIST` (rejects wildcard and global-range entries)
+- explicit operator attestation that admin edge limits are configured:
+  `SHUMA_ADMIN_EDGE_RATE_LIMITS_CONFIRMED=true`
 
 ### 🐙 Admin Surface Pre-Deploy Checklist
 
@@ -80,6 +82,7 @@ Run this checklist for every production deployment:
 3. Login and admin edge rate limits:
    - Confirm edge/CDN policy exists for `POST /admin/login` (strict threshold).
    - Confirm edge/CDN policy exists for `/admin/*` (moderate threshold).
+   - Set `SHUMA_ADMIN_EDGE_RATE_LIMITS_CONFIRMED=true` in deploy-time environment after verification.
 4. App-side auth failure limiter:
    - Confirm `SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE` is set to a conservative value for the environment.
 

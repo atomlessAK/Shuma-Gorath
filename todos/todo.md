@@ -102,11 +102,12 @@ Completion rule for every paper TODO below: capture key findings, map to `self_h
 
 ## P0 Immediate (ops and abuse containment)
 - [x] Enforce `SHUMA_ADMIN_IP_ALLOWLIST` in every production environment.
-- [ ] Configure CDN/WAF rate limits for `POST /admin/login` and all `/admin/*` in every deployment (Cloudflare and Akamai guidance already documented).
+- [x] Configure CDN/WAF rate limits for `POST /admin/login` and all `/admin/*` in every deployment (Cloudflare and Akamai guidance already documented).
 - [ ] Rotate `SHUMA_API_KEY` using `make gen-admin-api-key` and set a regular rotation cadence.
 - [x] Add deployment runbook checks for admin exposure, allowlist status, and login rate-limit posture.
 - [ ] Add stronger admin controls for production tuning: split read/write privileges and keep audit visibility for write actions. (`src/auth.rs`, `src/admin.rs`, dashboard, docs)
 - [x] P0.1 slice completed: hardened `make deploy-env-validate` to require non-empty/non-overbroad `SHUMA_ADMIN_IP_ALLOWLIST` and expanded deployment runbook checklist coverage for admin exposure, allowlist status, and login rate-limit posture.
+- [x] P0.2 slice completed: added deploy-time edge-rate-limit attestation guard (`SHUMA_ADMIN_EDGE_RATE_LIMITS_CONFIRMED=true`) so production deploys fail until `/admin/login` and `/admin/*` CDN/WAF rate limits are explicitly confirmed.
 
 ## P1 Distributed State and Limiter Correctness
 - [ ] (Enterprise/hybrid track; non-blocking for `self_hosted_minimal`) Design and implement atomic distributed rate limiting (Redis `INCR`/Lua) for main traffic and admin auth, aligned with edge-state sync work. (`src/rate.rs`, `src/auth.rs`, `spin.toml`)
