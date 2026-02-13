@@ -31,7 +31,7 @@ const PROVIDER_OBSERVED_COMBINATIONS: [(
     (
         crate::providers::registry::ProviderCapability::RateLimiter,
         crate::config::ProviderBackend::External,
-        "external_stub_unsupported",
+        "external_redis_with_internal_fallback",
     ),
     (
         crate::providers::registry::ProviderCapability::BanStore,
@@ -114,7 +114,9 @@ impl MetricName {
             MetricName::BotnessSignalState => "botness_signal_state_total",
             MetricName::DefenceModeEffective => "defence_mode_effective_total",
             MetricName::EdgeIntegrationMode => "edge_integration_mode_total",
-            MetricName::ProviderImplementationEffective => "provider_implementation_effective_total",
+            MetricName::ProviderImplementationEffective => {
+                "provider_implementation_effective_total"
+            }
         }
     }
 }
@@ -187,7 +189,11 @@ fn record_defence_mode_effective(
         effective.signal_enabled as u8,
         effective.action_enabled as u8
     );
-    increment(store, MetricName::DefenceModeEffective, Some(label.as_str()));
+    increment(
+        store,
+        MetricName::DefenceModeEffective,
+        Some(label.as_str()),
+    );
 }
 
 pub fn record_botness_visibility(

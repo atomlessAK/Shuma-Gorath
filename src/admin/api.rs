@@ -308,6 +308,7 @@ mod admin_config_tests {
         std::env::set_var("SHUMA_KV_STORE_FAIL_OPEN", "false");
         std::env::set_var("SHUMA_ENFORCE_HTTPS", "true");
         std::env::set_var("SHUMA_DEBUG_HEADERS", "true");
+        std::env::set_var("SHUMA_RATE_LIMITER_REDIS_URL", "redis://redis:6379");
         std::env::set_var("SHUMA_POW_CONFIG_MUTABLE", "true");
         std::env::set_var("SHUMA_CHALLENGE_CONFIG_MUTABLE", "true");
         std::env::set_var("SHUMA_BOTNESS_CONFIG_MUTABLE", "true");
@@ -374,12 +375,17 @@ mod admin_config_tests {
             env.get("SHUMA_DEBUG_HEADERS"),
             Some(&serde_json::json!("true"))
         );
+        assert_eq!(
+            env.get("SHUMA_RATE_LIMITER_REDIS_URL"),
+            Some(&serde_json::json!("redis://redis:6379"))
+        );
 
         let env_text = body.get("env_text").and_then(|v| v.as_str()).unwrap();
         assert!(env_text.contains("SHUMA_RATE_LIMIT=321"));
         assert!(env_text.contains("SHUMA_MODE_RATE=signal"));
         assert!(env_text.contains("SHUMA_PROVIDER_FINGERPRINT_SIGNAL=external"));
         assert!(env_text.contains("SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE=17"));
+        assert!(env_text.contains("SHUMA_RATE_LIMITER_REDIS_URL=redis://redis:6379"));
 
         clear_env(&[
             "SHUMA_ADMIN_IP_ALLOWLIST",
@@ -389,6 +395,7 @@ mod admin_config_tests {
             "SHUMA_KV_STORE_FAIL_OPEN",
             "SHUMA_ENFORCE_HTTPS",
             "SHUMA_DEBUG_HEADERS",
+            "SHUMA_RATE_LIMITER_REDIS_URL",
             "SHUMA_POW_CONFIG_MUTABLE",
             "SHUMA_CHALLENGE_CONFIG_MUTABLE",
             "SHUMA_BOTNESS_CONFIG_MUTABLE",
@@ -461,10 +468,9 @@ mod admin_config_tests {
         assert!(body.get("defence_modes_effective").is_some());
         assert!(body.get("defence_mode_warnings").is_some());
         assert!(body.get("enterprise_multi_instance").is_some());
-        assert!(
-            body.get("enterprise_unsynced_state_exception_confirmed")
-                .is_some()
-        );
+        assert!(body
+            .get("enterprise_unsynced_state_exception_confirmed")
+            .is_some());
         assert!(body.get("enterprise_state_guardrail_warnings").is_some());
         assert!(body.get("enterprise_state_guardrail_error").is_some());
         assert!(body.get("botness_config_mutable").is_some());
@@ -676,7 +682,10 @@ mod admin_config_tests {
             saved_cfg.defence_modes.geo,
             crate::config::ComposabilityMode::Enforce
         );
-        assert_eq!(saved_cfg.defence_modes.js, crate::config::ComposabilityMode::Off);
+        assert_eq!(
+            saved_cfg.defence_modes.js,
+            crate::config::ComposabilityMode::Off
+        );
 
         std::env::remove_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED");
         std::env::remove_var("SHUMA_BOTNESS_CONFIG_MUTABLE");
@@ -814,9 +823,15 @@ mod admin_auth_tests {
         assert!(request_requires_admin_write("/admin/config", &Method::Post));
         assert!(request_requires_admin_write("/admin/ban", &Method::Post));
         assert!(request_requires_admin_write("/admin/unban", &Method::Post));
-        assert!(!request_requires_admin_write("/admin/events", &Method::Post));
+        assert!(!request_requires_admin_write(
+            "/admin/events",
+            &Method::Post
+        ));
         assert!(!request_requires_admin_write("/admin/config", &Method::Get));
-        assert!(!request_requires_admin_write("/admin/analytics", &Method::Get));
+        assert!(!request_requires_admin_write(
+            "/admin/analytics",
+            &Method::Get
+        ));
     }
 }
 
@@ -955,7 +970,8 @@ fn handle_admin_login<S: crate::challenge::KeyValueStore>(req: &Request, store: 
         return Response::new(401, "Unauthorized");
     }
 
-    let (session_id, csrf_token, expires_at) = match crate::admin::auth::create_admin_session(store) {
+    let (session_id, csrf_token, expires_at) = match crate::admin::auth::create_admin_session(store)
+    {
         Ok(v) => v,
         Err(_) => return Response::new(500, "Key-value store error"),
     };
@@ -982,14 +998,12 @@ fn handle_admin_session<S: crate::challenge::KeyValueStore>(req: &Request, store
 
     let auth = crate::admin::auth::authenticate_admin(req, store);
     let (authenticated, method, csrf_token, access) = match auth.method {
-        Some(crate::admin::auth::AdminAuthMethod::SessionCookie) => {
-            (
-                true,
-                "session",
-                auth.csrf_token.clone(),
-                crate::admin::auth::AdminAccessLevel::ReadWrite.as_str(),
-            )
-        }
+        Some(crate::admin::auth::AdminAuthMethod::SessionCookie) => (
+            true,
+            "session",
+            auth.csrf_token.clone(),
+            crate::admin::auth::AdminAccessLevel::ReadWrite.as_str(),
+        ),
         Some(crate::admin::auth::AdminAuthMethod::BearerToken) => {
             (true, "bearer", None, auth.access_label())
         }
@@ -1185,6 +1199,10 @@ fn config_export_env_entries(cfg: &crate::config::Config) -> Vec<(String, String
             bool_env(crate::config::debug_headers_enabled()).to_string(),
         ),
         (
+            "SHUMA_RATE_LIMITER_REDIS_URL".to_string(),
+            crate::config::rate_limiter_redis_url().unwrap_or_default(),
+        ),
+        (
             "SHUMA_POW_CONFIG_MUTABLE".to_string(),
             bool_env(crate::config::pow_config_mutable()).to_string(),
         ),
@@ -1234,7 +1252,10 @@ fn config_export_env_entries(cfg: &crate::config::Config) -> Vec<(String, String
         ),
         (
             "SHUMA_PROVIDER_FINGERPRINT_SIGNAL".to_string(),
-            cfg.provider_backends.fingerprint_signal.as_str().to_string(),
+            cfg.provider_backends
+                .fingerprint_signal
+                .as_str()
+                .to_string(),
         ),
         (
             "SHUMA_EDGE_INTEGRATION_MODE".to_string(),
@@ -2324,7 +2345,8 @@ pub fn handle_admin(req: &Request) -> Response {
                 Ok(cfg) => cfg,
                 Err(err) => return Response::new(500, err.user_message()),
             };
-            let ban_count = crate::enforcement::ban::list_active_bans_with_scan(&store, site_id).len();
+            let ban_count =
+                crate::enforcement::ban::list_active_bans_with_scan(&store, site_id).len();
             let fail_mode = if crate::config::kv_store_fail_open() {
                 "open"
             } else {

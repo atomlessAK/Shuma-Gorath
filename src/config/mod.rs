@@ -385,7 +385,20 @@ impl Config {
     }
 
     pub fn enterprise_state_guardrail_error(&self) -> Option<String> {
-        if !enterprise_multi_instance_enabled() || !self.enterprise_unsynced_state_active() {
+        if !enterprise_multi_instance_enabled() {
+            return None;
+        }
+
+        if self.provider_backends.rate_limiter == ProviderBackend::External
+            && rate_limiter_redis_url().is_none()
+        {
+            return Some(
+                "enterprise multi-instance rollout with SHUMA_PROVIDER_RATE_LIMITER=external requires SHUMA_RATE_LIMITER_REDIS_URL (redis:// or rediss://)"
+                    .to_string(),
+            );
+        }
+
+        if !self.enterprise_unsynced_state_active() {
             return None;
         }
 
@@ -423,12 +436,12 @@ impl Config {
     }
 
     pub fn defence_modes_effective(&self) -> DefenceModesEffective {
-        let js_note = if !self.js_required_enforced && self.defence_modes.js != ComposabilityMode::Off
-        {
-            Some("Overridden by js_required_enforced=false".to_string())
-        } else {
-            None
-        };
+        let js_note =
+            if !self.js_required_enforced && self.defence_modes.js != ComposabilityMode::Off {
+                Some("Overridden by js_required_enforced=false".to_string())
+            } else {
+                None
+            };
 
         DefenceModesEffective {
             rate: DefenceModeEffective {
@@ -618,6 +631,7 @@ fn validate_env_only_impl() -> Result<(), String> {
     validate_bool_like_var("SHUMA_BOTNESS_CONFIG_MUTABLE")?;
     validate_optional_bool_like_var("SHUMA_ENTERPRISE_MULTI_INSTANCE")?;
     validate_optional_bool_like_var("SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED")?;
+    validate_optional_redis_url_var("SHUMA_RATE_LIMITER_REDIS_URL")?;
 
     Ok(())
 }
@@ -654,6 +668,22 @@ fn validate_optional_bool_like_var(name: &str) -> Result<(), String> {
     };
     if parse_bool_like(&value).is_none() {
         return Err(format!("Invalid boolean env var {}={}", name, value));
+    }
+    Ok(())
+}
+
+fn validate_optional_redis_url_var(name: &str) -> Result<(), String> {
+    let Some(value) = env::var(name).ok() else {
+        return Ok(());
+    };
+    if value.trim().is_empty() {
+        return Ok(());
+    }
+    if parse_redis_url(&value).is_none() {
+        return Err(format!(
+            "Invalid Redis URL env var {}={} (expected redis://... or rediss://...)",
+            name, value
+        ));
     }
     Ok(())
 }
@@ -709,11 +739,30 @@ pub fn enterprise_unsynced_state_exception_confirmed() -> bool {
     env_bool_optional("SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED", false)
 }
 
+pub fn rate_limiter_redis_url() -> Option<String> {
+    env::var("SHUMA_RATE_LIMITER_REDIS_URL")
+        .ok()
+        .and_then(|value| parse_redis_url(&value))
+}
+
 fn parse_bool_like(value: &str) -> Option<bool> {
     match value.trim().to_ascii_lowercase().as_str() {
         "1" | "true" | "yes" | "on" => Some(true),
         "0" | "false" | "no" | "off" => Some(false),
         _ => None,
+    }
+}
+
+fn parse_redis_url(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.starts_with("redis://") || lower.starts_with("rediss://") {
+        Some(trimmed.to_string())
+    } else {
+        None
     }
 }
 

@@ -67,6 +67,7 @@ Use this when moving from internal-only to advisory/authoritative edge integrati
   - `bot_defence_edge_integration_mode_total{mode="off|advisory|authoritative"}`
 - Confirm active provider implementation by capability:
   - `bot_defence_provider_implementation_effective_total{capability="...",backend="...",implementation="..."}`
+  - For `rate_limiter` external mode, expect `implementation="external_redis_with_internal_fallback"`.
 - Use `increase(...)` windows in PromQL to verify recent behavior rather than cumulative lifetime totals.
 
 Example PromQL (last 10 minutes):

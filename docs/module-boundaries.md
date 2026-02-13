@@ -103,7 +103,8 @@ Backends currently supported at config/selection level:
 Current `external` behavior:
 
 - `fingerprint_signal` uses an explicit external stub contract (`/fingerprint-report`) until a concrete adapter is configured.
-- `rate_limiter`, `ban_store`, `challenge_engine`, and `maze_tarpit` use explicit unsupported external adapters that currently delegate to internal runtime behavior.
+- `rate_limiter` uses a Redis-backed distributed adapter (`INCR` + TTL) when `SHUMA_RATE_LIMITER_REDIS_URL` is configured, with fallback to internal rate behavior when unavailable.
+- `ban_store`, `challenge_engine`, and `maze_tarpit` still use explicit unsupported external adapters that currently delegate to internal runtime behavior.
 
 Implementation discipline for H4 coherence:
 

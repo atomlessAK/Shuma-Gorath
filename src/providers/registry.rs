@@ -1,10 +1,10 @@
 use crate::config::{Config, ProviderBackend, ProviderBackends};
-use crate::signals::botness::SignalAvailability;
 use crate::providers::contracts::{
     BanStoreProvider, ChallengeEngineProvider, FingerprintSignalProvider, MazeTarpitProvider,
     RateLimiterProvider,
 };
 use crate::providers::{external, internal};
+use crate::signals::botness::SignalAvailability;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ProviderCapability {
@@ -54,6 +54,9 @@ impl ProviderRegistry {
     pub fn implementation_for(&self, capability: ProviderCapability) -> &'static str {
         match (capability, self.backend_for(capability)) {
             (_, ProviderBackend::Internal) => "internal",
+            (ProviderCapability::RateLimiter, ProviderBackend::External) => {
+                "external_redis_with_internal_fallback"
+            }
             (ProviderCapability::FingerprintSignal, ProviderBackend::External) => {
                 "external_stub_fingerprint"
             }
@@ -80,7 +83,7 @@ impl ProviderRegistry {
     pub fn rate_limiter_provider(&self) -> &'static dyn RateLimiterProvider {
         match self.backend_for(ProviderCapability::RateLimiter) {
             ProviderBackend::Internal => &internal::RATE_LIMITER,
-            ProviderBackend::External => &external::UNSUPPORTED_RATE_LIMITER,
+            ProviderBackend::External => &external::RATE_LIMITER,
         }
     }
 
@@ -127,7 +130,10 @@ mod tests {
     fn provider_capability_has_stable_labels() {
         assert_eq!(ProviderCapability::RateLimiter.as_str(), "rate_limiter");
         assert_eq!(ProviderCapability::BanStore.as_str(), "ban_store");
-        assert_eq!(ProviderCapability::ChallengeEngine.as_str(), "challenge_engine");
+        assert_eq!(
+            ProviderCapability::ChallengeEngine.as_str(),
+            "challenge_engine"
+        );
         assert_eq!(ProviderCapability::MazeTarpit.as_str(), "maze_tarpit");
         assert_eq!(
             ProviderCapability::FingerprintSignal.as_str(),
@@ -192,10 +198,7 @@ mod tests {
         let provider = registry.fingerprint_signal_provider();
 
         assert_eq!(provider.report_path(), "/fingerprint-report");
-        assert_eq!(
-            provider.source_availability(&cfg).as_str(),
-            "unavailable"
-        );
+        assert_eq!(provider.source_availability(&cfg).as_str(), "unavailable");
         assert_eq!(provider.detection_script(), "");
         assert_eq!(provider.report_script("/report-endpoint"), "");
         assert_eq!(
@@ -256,7 +259,9 @@ mod tests {
             BanSyncResult::Failed
         );
         assert_eq!(
-            registry.ban_store_provider().sync_unban("default", "1.2.3.4"),
+            registry
+                .ban_store_provider()
+                .sync_unban("default", "1.2.3.4"),
             BanSyncResult::Failed
         );
         assert_eq!(
@@ -277,7 +282,7 @@ mod tests {
 
         assert_eq!(
             registry.implementation_for(ProviderCapability::RateLimiter),
-            "external_stub_unsupported"
+            "external_redis_with_internal_fallback"
         );
         assert_eq!(
             registry.implementation_for(ProviderCapability::FingerprintSignal),

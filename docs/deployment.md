@@ -28,7 +28,8 @@ Use one of these operating profiles as your baseline:
 Current implementation note:
 
 - `fingerprint_signal=external` is currently a stub contract and reports external signal state as unavailable (or disabled when CDP detection is disabled).
-- `rate_limiter`, `ban_store`, `challenge_engine`, and `maze_tarpit` currently use explicit unsupported external adapters with safe internal fallback semantics.
+- `rate_limiter=external` uses a Redis-backed distributed adapter when `SHUMA_RATE_LIMITER_REDIS_URL` is configured; it falls back to internal rate logic when external backend access fails.
+- `ban_store`, `challenge_engine`, and `maze_tarpit` still use explicit unsupported external adapters with safe internal fallback semantics.
 - Keep production deployments on internal providers unless you are explicitly exercising a staged integration plan.
 
 ### Profile Gate For Distributed State Risk
@@ -58,6 +59,7 @@ Set these in your deployment secret/config system:
 - `SHUMA_DEBUG_HEADERS`
 - `SHUMA_ENTERPRISE_MULTI_INSTANCE` (optional; required for enterprise multi-instance guardrail posture)
 - `SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED` (optional; temporary advisory/off exception attestation only)
+- `SHUMA_RATE_LIMITER_REDIS_URL` (optional generally; required when enterprise multi-instance uses `SHUMA_PROVIDER_RATE_LIMITER=external`)
 
 For the full env-only list and per-variable behavior, use `docs/configuration.md`.
 Template source: run `make setup` and use `.env.local` (gitignored) as your env-only override baseline.
@@ -88,6 +90,7 @@ make deploy-env-validate
   `SHUMA_ADMIN_API_KEY_ROTATION_CONFIRMED=true`
 - enterprise multi-instance state guardrail:
   - when `SHUMA_ENTERPRISE_MULTI_INSTANCE=true`, validate `SHUMA_EDGE_INTEGRATION_MODE` and provider backend values,
+  - require `SHUMA_RATE_LIMITER_REDIS_URL` (`redis://...` or `rediss://...`) when `SHUMA_PROVIDER_RATE_LIMITER=external`,
   - block local-only rate/ban state in authoritative mode,
   - require `SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED=true` for temporary advisory/off exceptions when distributed state is not yet enabled.
 
@@ -114,6 +117,7 @@ Run this checklist for every production deployment:
    - Prefer distributed state backends for both:
      - `SHUMA_PROVIDER_RATE_LIMITER=external`
      - `SHUMA_PROVIDER_BAN_STORE=external`
+   - When using `SHUMA_PROVIDER_RATE_LIMITER=external`, set `SHUMA_RATE_LIMITER_REDIS_URL` to a reachable Redis endpoint.
    - Do not run local-only rate/ban state with `SHUMA_EDGE_INTEGRATION_MODE=authoritative`.
    - If you must run temporary advisory/off posture without distributed state, set `SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED=true` and track a time-bounded remediation plan.
 

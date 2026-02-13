@@ -56,6 +56,7 @@ These are read from process env at runtime (not from KV).
 | `SHUMA_DEBUG_HEADERS` | Yes | `false` | Enables internal debug headers (keep `false` in production). |
 | `SHUMA_ENTERPRISE_MULTI_INSTANCE` | No | `false` | Marks deployment as enterprise multi-instance for runtime/deploy state guardrails. |
 | `SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED` | No | `false` | Explicit temporary attestation for advisory/off operation when enterprise multi-instance still uses local-only rate/ban state. |
+| `SHUMA_RATE_LIMITER_REDIS_URL` | No | empty | Redis endpoint for external distributed rate limiter mode (`redis://...` or `rediss://...`). |
 | `SHUMA_POW_CONFIG_MUTABLE` | Yes | `false` | Allows runtime edits of PoW difficulty/TTL from admin config. |
 | `SHUMA_CHALLENGE_CONFIG_MUTABLE` | Yes | `false` | Allows runtime edits of challenge transform count/threshold from admin config. |
 | `SHUMA_BOTNESS_CONFIG_MUTABLE` | Yes | `false` | Allows runtime edits of botness thresholds/weights from admin config. |
@@ -172,7 +173,8 @@ Default seeded modes are `both` for all three modules as the current pre-launch 
   - Fingerprint source availability is explicit:
     - internal provider reports `active` when `cdp_detection_enabled=true`, `disabled` when `cdp_detection_enabled=false`.
     - external stub reports `unavailable` when `cdp_detection_enabled=true`, `disabled` when `cdp_detection_enabled=false`.
-  - `rate_limiter=external`, `ban_store=external`, `challenge_engine=external`, and `maze_tarpit=external` route through explicit unsupported external adapters that currently fall back to internal runtime behavior.
+  - `rate_limiter=external` uses a Redis-backed distributed adapter (`INCR` + window TTL) when `SHUMA_RATE_LIMITER_REDIS_URL` is configured, with explicit fallback to internal behavior when unavailable/unconfigured.
+  - `ban_store=external`, `challenge_engine=external`, and `maze_tarpit=external` still route through explicit unsupported external adapters that currently fall back to internal runtime behavior.
   - `ban_store` external sync methods currently return `failed` to surface unimplemented external sync semantics.
 - `edge_integration_mode` defaults to `off` for self-hosted baseline.
 - `advisory` and `authoritative` are currently telemetry/runtime metadata posture values in this slice; request decision precedence remains unchanged.
@@ -184,7 +186,7 @@ This matrix is meant to answer: "What actually happens if I change this setting?
 | Capability | `internal` backend | `external` backend (current) | Advisory mode intent | Authoritative mode intent | Safe fallback behavior |
 | --- | --- | --- | --- | --- | --- |
 | `fingerprint_signal` | Uses internal CDP scripts and `/cdp-report` | Uses external stub (`/fingerprint-report`), no detection injection, returns `501` on report handler | Treat external edge fingerprinting as an input to Shuma policy | Allow selected edge fingerprint outcomes to short-circuit local flow only after adapter hardening | If external is unavailable, treat signal as unavailable/disabled and keep local controls active |
-| `rate_limiter` | Internal local rate logic | Explicit unsupported external adapter currently delegates to internal behavior | Consume distributed rate state as advisory pressure once implemented | External authoritative limit decisions only after semantic parity is proven | Unsupported external path currently degrades to internal behavior |
+| `rate_limiter` | Internal local rate logic | Redis-backed distributed limiter (`INCR` + TTL) with fallback to internal when external backend is unavailable/unconfigured | Consume distributed rate state as advisory pressure | External authoritative limit decisions only after semantic parity and outage posture are validated | Falls back to internal limiter on Redis unavailability/misconfiguration |
 | `ban_store` | Internal ban persistence and checks | Explicit unsupported external adapter currently delegates to internal checks; sync calls report `failed` | Use external ban sync state as advisory input once implemented | External authoritative ban sync only with explicit outage controls | Unsupported external path keeps internal enforcement active |
 | `challenge_engine` | Internal challenge rendering/verification | Explicit unsupported external adapter currently delegates to internal behavior | External challenge attestations may inform policy once implemented | Authoritative external challenge only when replay/expiry semantics are parity-tested | Unsupported external path keeps internal challenge path |
 | `maze_tarpit` | Internal Shuma-native maze/tarpit | Explicit unsupported external adapter delegates to internal behavior | Keep internal (no practical external target currently) | Keep internal | Internal-only path remains the source of truth |
@@ -215,6 +217,7 @@ Use these as startup presets, then tune incrementally:
 - Deploy-time guardrail keys for this posture are documented in `docs/deployment.md`:
   - `SHUMA_ENTERPRISE_MULTI_INSTANCE`
   - `SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED`
+  - `SHUMA_RATE_LIMITER_REDIS_URL` (required when `SHUMA_PROVIDER_RATE_LIMITER=external` under enterprise multi-instance posture)
 
 ### Observability surfaces for composability
 

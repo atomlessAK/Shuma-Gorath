@@ -21,18 +21,27 @@ impl CountingStore {
 impl KeyValueStore for CountingStore {
     fn get(&self, key: &str) -> Result<Option<Vec<u8>>, ()> {
         self.get_count.fetch_add(1, Ordering::SeqCst);
-        let map = self.map.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let map = self
+            .map
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         Ok(map.get(key).cloned())
     }
 
     fn set(&self, key: &str, value: &[u8]) -> Result<(), ()> {
-        let mut map = self.map.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut map = self
+            .map
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         map.insert(key.to_string(), value.to_vec());
         Ok(())
     }
 
     fn delete(&self, key: &str) -> Result<(), ()> {
-        let mut map = self.map.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut map = self
+            .map
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         map.remove(key);
         Ok(())
     }
@@ -150,10 +159,21 @@ fn parse_edge_integration_mode_accepts_expected_values() {
     assert_eq!(parse_edge_integration_mode("invalid"), None);
     assert_eq!(EdgeIntegrationMode::Off.as_str(), "off");
     assert_eq!(EdgeIntegrationMode::Advisory.as_str(), "advisory");
+    assert_eq!(EdgeIntegrationMode::Authoritative.as_str(), "authoritative");
+}
+
+#[test]
+fn parse_redis_url_accepts_expected_values() {
     assert_eq!(
-        EdgeIntegrationMode::Authoritative.as_str(),
-        "authoritative"
+        parse_redis_url("redis://localhost:6379"),
+        Some("redis://localhost:6379".to_string())
     );
+    assert_eq!(
+        parse_redis_url(" rediss://cache.example:6379 "),
+        Some("rediss://cache.example:6379".to_string())
+    );
+    assert_eq!(parse_redis_url("http://example.com"), None);
+    assert_eq!(parse_redis_url(""), None);
 }
 
 #[test]
@@ -179,7 +199,10 @@ fn defaults_enable_both_signal_and_action_paths() {
     assert!(effective.js.signal_enabled);
     assert!(effective.js.action_enabled);
     assert!(cfg.defence_mode_warnings().is_empty());
-    assert_eq!(cfg.provider_backends.rate_limiter, ProviderBackend::Internal);
+    assert_eq!(
+        cfg.provider_backends.rate_limiter,
+        ProviderBackend::Internal
+    );
     assert_eq!(cfg.provider_backends.ban_store, ProviderBackend::Internal);
     assert_eq!(
         cfg.provider_backends.challenge_engine,
@@ -198,6 +221,7 @@ fn enterprise_state_guardrail_errors_without_exception_for_unsynced_multi_instan
     clear_env(&[
         "SHUMA_ENTERPRISE_MULTI_INSTANCE",
         "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+        "SHUMA_RATE_LIMITER_REDIS_URL",
     ]);
     std::env::set_var("SHUMA_ENTERPRISE_MULTI_INSTANCE", "true");
 
@@ -212,6 +236,7 @@ fn enterprise_state_guardrail_errors_without_exception_for_unsynced_multi_instan
     clear_env(&[
         "SHUMA_ENTERPRISE_MULTI_INSTANCE",
         "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+        "SHUMA_RATE_LIMITER_REDIS_URL",
     ]);
 }
 
@@ -221,6 +246,7 @@ fn enterprise_state_guardrail_warns_for_exceptioned_advisory_unsynced_posture() 
     clear_env(&[
         "SHUMA_ENTERPRISE_MULTI_INSTANCE",
         "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+        "SHUMA_RATE_LIMITER_REDIS_URL",
     ]);
     std::env::set_var("SHUMA_ENTERPRISE_MULTI_INSTANCE", "true");
     std::env::set_var(
@@ -238,6 +264,7 @@ fn enterprise_state_guardrail_warns_for_exceptioned_advisory_unsynced_posture() 
     clear_env(&[
         "SHUMA_ENTERPRISE_MULTI_INSTANCE",
         "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+        "SHUMA_RATE_LIMITER_REDIS_URL",
     ]);
 }
 
@@ -247,6 +274,7 @@ fn enterprise_state_guardrail_errors_for_authoritative_unsynced_posture_even_wit
     clear_env(&[
         "SHUMA_ENTERPRISE_MULTI_INSTANCE",
         "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+        "SHUMA_RATE_LIMITER_REDIS_URL",
     ]);
     std::env::set_var("SHUMA_ENTERPRISE_MULTI_INSTANCE", "true");
     std::env::set_var(
@@ -264,6 +292,7 @@ fn enterprise_state_guardrail_errors_for_authoritative_unsynced_posture_even_wit
     clear_env(&[
         "SHUMA_ENTERPRISE_MULTI_INSTANCE",
         "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+        "SHUMA_RATE_LIMITER_REDIS_URL",
     ]);
 }
 
@@ -273,8 +302,10 @@ fn enterprise_state_guardrail_is_clear_for_synced_multi_instance_posture() {
     clear_env(&[
         "SHUMA_ENTERPRISE_MULTI_INSTANCE",
         "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+        "SHUMA_RATE_LIMITER_REDIS_URL",
     ]);
     std::env::set_var("SHUMA_ENTERPRISE_MULTI_INSTANCE", "true");
+    std::env::set_var("SHUMA_RATE_LIMITER_REDIS_URL", "redis://redis:6379");
 
     let mut cfg = defaults().clone();
     cfg.provider_backends.rate_limiter = ProviderBackend::External;
@@ -286,6 +317,36 @@ fn enterprise_state_guardrail_is_clear_for_synced_multi_instance_posture() {
     clear_env(&[
         "SHUMA_ENTERPRISE_MULTI_INSTANCE",
         "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+        "SHUMA_RATE_LIMITER_REDIS_URL",
+    ]);
+}
+
+#[test]
+fn enterprise_state_guardrail_requires_redis_url_for_external_rate_limiter() {
+    let _lock = crate::test_support::lock_env();
+    clear_env(&[
+        "SHUMA_ENTERPRISE_MULTI_INSTANCE",
+        "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+        "SHUMA_RATE_LIMITER_REDIS_URL",
+    ]);
+    std::env::set_var("SHUMA_ENTERPRISE_MULTI_INSTANCE", "true");
+    std::env::set_var(
+        "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+        "true",
+    );
+
+    let mut cfg = defaults().clone();
+    cfg.provider_backends.rate_limiter = ProviderBackend::External;
+    cfg.edge_integration_mode = EdgeIntegrationMode::Advisory;
+
+    let error = cfg.enterprise_state_guardrail_error();
+    assert!(error.is_some());
+    assert!(error.unwrap().contains("SHUMA_RATE_LIMITER_REDIS_URL"));
+
+    clear_env(&[
+        "SHUMA_ENTERPRISE_MULTI_INSTANCE",
+        "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+        "SHUMA_RATE_LIMITER_REDIS_URL",
     ]);
 }
 
@@ -346,6 +407,7 @@ fn validate_env_rejects_invalid_optional_enterprise_bool() {
         "SHUMA_BOTNESS_CONFIG_MUTABLE",
         "SHUMA_ENTERPRISE_MULTI_INSTANCE",
         "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+        "SHUMA_RATE_LIMITER_REDIS_URL",
     ]);
 
     std::env::set_var("SHUMA_VALIDATE_ENV_IN_TESTS", "true");
@@ -384,6 +446,125 @@ fn validate_env_rejects_invalid_optional_enterprise_bool() {
         "SHUMA_BOTNESS_CONFIG_MUTABLE",
         "SHUMA_ENTERPRISE_MULTI_INSTANCE",
         "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+        "SHUMA_RATE_LIMITER_REDIS_URL",
+    ]);
+}
+
+#[test]
+fn validate_env_rejects_invalid_optional_redis_url() {
+    let _lock = crate::test_support::lock_env();
+    clear_env(&[
+        "SHUMA_VALIDATE_ENV_IN_TESTS",
+        "SHUMA_API_KEY",
+        "SHUMA_JS_SECRET",
+        "SHUMA_FORWARDED_IP_SECRET",
+        "SHUMA_EVENT_LOG_RETENTION_HOURS",
+        "SHUMA_ADMIN_CONFIG_WRITE_ENABLED",
+        "SHUMA_KV_STORE_FAIL_OPEN",
+        "SHUMA_ENFORCE_HTTPS",
+        "SHUMA_DEBUG_HEADERS",
+        "SHUMA_POW_CONFIG_MUTABLE",
+        "SHUMA_CHALLENGE_CONFIG_MUTABLE",
+        "SHUMA_BOTNESS_CONFIG_MUTABLE",
+        "SHUMA_ENTERPRISE_MULTI_INSTANCE",
+        "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+        "SHUMA_RATE_LIMITER_REDIS_URL",
+    ]);
+
+    std::env::set_var("SHUMA_VALIDATE_ENV_IN_TESTS", "true");
+    std::env::set_var("SHUMA_API_KEY", "test-admin-key");
+    std::env::set_var("SHUMA_JS_SECRET", "test-js-secret");
+    std::env::set_var("SHUMA_FORWARDED_IP_SECRET", "test-forwarded-secret");
+    std::env::set_var("SHUMA_EVENT_LOG_RETENTION_HOURS", "168");
+    std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "false");
+    std::env::set_var("SHUMA_KV_STORE_FAIL_OPEN", "true");
+    std::env::set_var("SHUMA_ENFORCE_HTTPS", "false");
+    std::env::set_var("SHUMA_DEBUG_HEADERS", "false");
+    std::env::set_var("SHUMA_POW_CONFIG_MUTABLE", "false");
+    std::env::set_var("SHUMA_CHALLENGE_CONFIG_MUTABLE", "false");
+    std::env::set_var("SHUMA_BOTNESS_CONFIG_MUTABLE", "false");
+    std::env::set_var("SHUMA_RATE_LIMITER_REDIS_URL", "https://not-redis.example");
+
+    let result = validate_env_only_once();
+    assert!(result.is_err());
+    assert!(result
+        .err()
+        .unwrap()
+        .contains("SHUMA_RATE_LIMITER_REDIS_URL"));
+
+    clear_env(&[
+        "SHUMA_VALIDATE_ENV_IN_TESTS",
+        "SHUMA_API_KEY",
+        "SHUMA_JS_SECRET",
+        "SHUMA_FORWARDED_IP_SECRET",
+        "SHUMA_EVENT_LOG_RETENTION_HOURS",
+        "SHUMA_ADMIN_CONFIG_WRITE_ENABLED",
+        "SHUMA_KV_STORE_FAIL_OPEN",
+        "SHUMA_ENFORCE_HTTPS",
+        "SHUMA_DEBUG_HEADERS",
+        "SHUMA_POW_CONFIG_MUTABLE",
+        "SHUMA_CHALLENGE_CONFIG_MUTABLE",
+        "SHUMA_BOTNESS_CONFIG_MUTABLE",
+        "SHUMA_ENTERPRISE_MULTI_INSTANCE",
+        "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+        "SHUMA_RATE_LIMITER_REDIS_URL",
+    ]);
+}
+
+#[test]
+fn validate_env_accepts_empty_optional_redis_url() {
+    let _lock = crate::test_support::lock_env();
+    clear_env(&[
+        "SHUMA_VALIDATE_ENV_IN_TESTS",
+        "SHUMA_API_KEY",
+        "SHUMA_JS_SECRET",
+        "SHUMA_FORWARDED_IP_SECRET",
+        "SHUMA_EVENT_LOG_RETENTION_HOURS",
+        "SHUMA_ADMIN_CONFIG_WRITE_ENABLED",
+        "SHUMA_KV_STORE_FAIL_OPEN",
+        "SHUMA_ENFORCE_HTTPS",
+        "SHUMA_DEBUG_HEADERS",
+        "SHUMA_POW_CONFIG_MUTABLE",
+        "SHUMA_CHALLENGE_CONFIG_MUTABLE",
+        "SHUMA_BOTNESS_CONFIG_MUTABLE",
+        "SHUMA_ENTERPRISE_MULTI_INSTANCE",
+        "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+        "SHUMA_RATE_LIMITER_REDIS_URL",
+    ]);
+
+    std::env::set_var("SHUMA_VALIDATE_ENV_IN_TESTS", "true");
+    std::env::set_var("SHUMA_API_KEY", "test-admin-key");
+    std::env::set_var("SHUMA_JS_SECRET", "test-js-secret");
+    std::env::set_var("SHUMA_FORWARDED_IP_SECRET", "test-forwarded-secret");
+    std::env::set_var("SHUMA_EVENT_LOG_RETENTION_HOURS", "168");
+    std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "false");
+    std::env::set_var("SHUMA_KV_STORE_FAIL_OPEN", "true");
+    std::env::set_var("SHUMA_ENFORCE_HTTPS", "false");
+    std::env::set_var("SHUMA_DEBUG_HEADERS", "false");
+    std::env::set_var("SHUMA_POW_CONFIG_MUTABLE", "false");
+    std::env::set_var("SHUMA_CHALLENGE_CONFIG_MUTABLE", "false");
+    std::env::set_var("SHUMA_BOTNESS_CONFIG_MUTABLE", "false");
+    std::env::set_var("SHUMA_RATE_LIMITER_REDIS_URL", "");
+
+    let result = validate_env_only_once();
+    assert!(result.is_ok());
+
+    clear_env(&[
+        "SHUMA_VALIDATE_ENV_IN_TESTS",
+        "SHUMA_API_KEY",
+        "SHUMA_JS_SECRET",
+        "SHUMA_FORWARDED_IP_SECRET",
+        "SHUMA_EVENT_LOG_RETENTION_HOURS",
+        "SHUMA_ADMIN_CONFIG_WRITE_ENABLED",
+        "SHUMA_KV_STORE_FAIL_OPEN",
+        "SHUMA_ENFORCE_HTTPS",
+        "SHUMA_DEBUG_HEADERS",
+        "SHUMA_POW_CONFIG_MUTABLE",
+        "SHUMA_CHALLENGE_CONFIG_MUTABLE",
+        "SHUMA_BOTNESS_CONFIG_MUTABLE",
+        "SHUMA_ENTERPRISE_MULTI_INSTANCE",
+        "SHUMA_ENTERPRISE_UNSYNCED_STATE_EXCEPTION_CONFIRMED",
+        "SHUMA_RATE_LIMITER_REDIS_URL",
     ]);
 }
 
