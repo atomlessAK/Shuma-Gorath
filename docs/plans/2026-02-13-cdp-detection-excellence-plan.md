@@ -74,6 +74,18 @@ CDP detection exists as a client-side script and report endpoint, with score tie
 9. CDP-9: Integrate Akamai bot-confidence as optional corroborating input.
 10. CDP-10: Publish rotation cadence and rollback runbook.
 
+## Enterprise Offering Snapshot (Akamai and Cloudflare)
+
+- Akamai:
+  - App and API Protector now includes Browser Impersonation Detection capabilities to identify tooling that mimics browsers.
+  - Bot Manager already contributes browser fingerprinting and behavioral risk signals that can corroborate CDP findings.
+- Cloudflare:
+  - Cloudflare does not expose a dedicated "CDP detected" flag, but provides adjacent anti-automation surfaces (`js_detection.passed`, bot score, detection IDs, JA3/JA4) that are useful corroborating signals.
+  - Managed challenge flows can enforce step-up when corroborated risk rises.
+- Planning implication:
+  - Keep CDP probe execution and scoring as Shuma-native logic.
+  - Treat Akamai/Cloudflare outputs as corroboration inputs in the fused model, not as a CDP replacement signal.
+
 ## Source References
 
 - https://rebrowser.net/blog/how-to-fix-runtime-enable-cdp-detection-of-puppeteer-playwright-and-other-automation-libraries
@@ -81,3 +93,8 @@ CDP detection exists as a client-side script and report endpoint, with score tie
 - https://doi.org/10.1007/978-3-030-29962-0_28
 - https://arxiv.org/abs/2406.07647
 - https://techdocs.akamai.com/cloud-security/docs/handle-adversarial-bots
+- https://www.akamai.com/products/bot-manager
+- https://www.akamai.com/newsroom/press-release/akamai-strengthens-app-and-api-protector-with-new-capabilities
+- https://developers.cloudflare.com/bots/reference/bot-management-variables/
+- https://developers.cloudflare.com/bots/additional-configurations/detection-ids/
+- https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/

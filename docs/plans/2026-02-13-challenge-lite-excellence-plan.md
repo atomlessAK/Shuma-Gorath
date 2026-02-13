@@ -76,6 +76,18 @@ Challenge Lite (`/challenge/not-a-bot-checkbox`) has a detailed spec but is not 
 9. CL-9: Add full lifecycle and replay regression tests.
 10. CL-10: Add operator docs and threshold tuning runbook.
 
+## Enterprise Offering Snapshot (Akamai and Cloudflare)
+
+- Akamai:
+  - Bot Manager uses risk scoring with configurable response segments that include challenge enforcement at the edge.
+  - This is useful as upstream triage for when Shuma should trigger challenge-lite.
+- Cloudflare:
+  - Challenge Pages provide managed challenge flows for suspicious requests.
+  - Turnstile provides explicit token attestation with mandatory server-side verification, useful as optional external corroboration.
+- Planning implication:
+  - Keep challenge-lite scoring and nonce semantics internal for explainability and deterministic policy behavior.
+  - In enterprise profiles, use Akamai/Cloudflare challenge outcomes as threshold modifiers and escalation signals, not as authoritative replacements.
+
 ## Source References
 
 - `todos/challenge-lite-spec.md`
@@ -83,3 +95,7 @@ Challenge Lite (`/challenge/not-a-bot-checkbox`) has a detailed spec but is not 
 - https://doi.org/10.1126/science.1160379
 - https://doi.org/10.1145/2556288.2557322
 - https://doi.org/10.3390/app13074602
+- https://www.akamai.com/products/bot-manager
+- https://techdocs.akamai.com/cloud-security/docs/handle-adversarial-bots
+- https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/
+- https://developers.cloudflare.com/turnstile/get-started/server-side-validation/

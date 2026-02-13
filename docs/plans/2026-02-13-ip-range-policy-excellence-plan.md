@@ -77,9 +77,26 @@ IP range policy controls are on the roadmap (CIDR matching, managed sets, custom
 9. IP-9: Add enterprise Akamai authoritative mapping hooks.
 10. IP-10: Document operational safety runbook.
 
+## Enterprise Offering Snapshot (Akamai and Cloudflare)
+
+- Akamai:
+  - Application Security exposes Network Lists and IP/Geo Firewall APIs for reusable CIDR and location controls in edge policy.
+  - Request Control Cloudlet provides production edge routing controls for IP/geo allow/deny/challenge style patterns.
+- Cloudflare:
+  - Cloudflare Lists support reusable IP/ASN/hostname sets for WAF custom rules.
+  - IP Access Rules support quick allow/block/challenge actions by IP, ASN, country, or user agent, while Cloudflare recommends custom WAF rules for finer policy control.
+- Planning implication:
+  - Keep Shuma precedence and dry-run/rollback controls internal so policy safety is consistent across deployments.
+  - Use enterprise list ingestion as an optional signal/enforcement source, but preserve explicit Shuma override ordering.
+
 ## Source References
 
 - https://doi.org/10.14722/ndss.2020.24232
 - https://www.usenix.org/conference/usenixsecurity20/presentation/oest-phishtime
 - https://doi.org/10.14722/ndss.2025.242156
 - https://research.ibm.com/publications/evaluating-ip-blacklists-effectiveness
+- https://techdocs.akamai.com/application-security/reference/get-network-lists
+- https://techdocs.akamai.com/application-security/reference/get-policy-ip-geo-firewall
+- https://techdocs.akamai.com/cloudlets/docs/request-control
+- https://developers.cloudflare.com/waf/tools/lists/
+- https://developers.cloudflare.com/waf/tools/ip-access-rules/

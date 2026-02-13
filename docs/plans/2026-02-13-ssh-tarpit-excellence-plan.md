@@ -75,9 +75,22 @@ SSH tarpit/honeypot capability is not implemented in the current Shuma HTTP runt
 9. SSH-9: Add deployment runbook for isolated hosting.
 10. SSH-10: Add incident rollback and emergency disable procedures.
 
+## Enterprise Offering Snapshot (Akamai and Cloudflare)
+
+- Akamai:
+  - Akamai application-security portfolio documentation is centered on web/API edge protection and bot mitigation, not managed SSH tarpit execution.
+- Cloudflare:
+  - Cloudflare Spectrum supports proxied SSH/TCP/UDP protection, but it is a transport-security and access surface, not a deception/tarpit runtime.
+- Planning implication:
+  - Keep SSH tarpit as a separate Shuma-managed component with strict isolation.
+  - Use enterprise providers for network shielding and telemetry where useful, but keep interaction realism and intelligence collection internal.
+
 ## Source References
 
 - https://doi.org/10.1145/3584976
 - https://doi.org/10.1109/SoutheastCon51012.2023.10115143
 - https://doi.org/10.3390/app12105224
 - https://doi.org/10.23919/TMA66427.2025.11097018
+- https://www.akamai.com/products/app-and-api-protector
+- https://www.akamai.com/products/bot-manager
+- https://developers.cloudflare.com/spectrum/reference/configuration-options/

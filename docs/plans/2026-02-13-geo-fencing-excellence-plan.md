@@ -74,6 +74,18 @@ GEO controls currently rely on trusted edge country headers and country-list rou
 9. GEO-9: Add dry-run tooling for geo/asn enforcement changes.
 10. GEO-10: Publish GEO policy safety and rollback runbook.
 
+## Enterprise Offering Snapshot (Akamai and Cloudflare)
+
+- Akamai:
+  - EdgeScape provides edge geolocation/network attributes (including ASN context) as request metadata.
+  - Application Security IP/Geo Firewall and Request Control Cloudlet provide edge-native country/geo control surfaces.
+- Cloudflare:
+  - Cloudflare sends country and optional visitor-location headers (for enterprise geolocation use cases) and exposes geo fields in WAF expressions.
+  - WAF custom rules can directly enforce country/ASN-based policy actions.
+- Planning implication:
+  - Treat edge-provided geo/ASN as high-value provenance signals in enterprise mode.
+  - Keep Shuma confidence modeling, precedence, and fallback logic internal to avoid hard coupling to one provider's geo semantics.
+
 ## Source References
 
 - https://doi.org/10.1145/2398776.2398790
@@ -81,3 +93,8 @@ GEO controls currently rely on trusted edge country headers and country-list rou
 - https://doi.org/10.1016/j.comnet.2017.02.006
 - https://arxiv.org/abs/2105.13389
 - https://techdocs.akamai.com/cloud-security/docs/handle-adversarial-bots
+- https://techdocs.akamai.com/edge-diagnostics/docs/data-in-edgescape-and-cloudlets-headers
+- https://techdocs.akamai.com/application-security/reference/get-policy-ip-geo-firewall
+- https://techdocs.akamai.com/cloudlets/docs/request-control
+- https://developers.cloudflare.com/network/ip-geolocation/
+- https://developers.cloudflare.com/waf/custom-rules/use-cases/block-by-geographical-location/

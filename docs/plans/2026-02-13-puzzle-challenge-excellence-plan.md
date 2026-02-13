@@ -74,6 +74,16 @@ Puzzle challenge is implemented (`/challenge/puzzle`) with signed seed, determin
 9. PZ-9: Add adversarial solver regression tests.
 10. PZ-10: Publish operator tuning and rollback guidance.
 
+## Enterprise Offering Snapshot (Akamai and Cloudflare)
+
+- Akamai:
+  - Akamai's challenge controls are strong for edge gating, but challenge internals are provider-managed rather than operator-defined puzzle families.
+- Cloudflare:
+  - Challenge Pages and Turnstile provide managed challenge outcomes and attestation, but not a customizable puzzle-engine surface equivalent to Shuma's internal challenge model.
+- Planning implication:
+  - Keep puzzle generation/verification as Shuma-native capability.
+  - Use Akamai/Cloudflare risk/challenge outcomes only to influence whether/when puzzle is served, not how puzzle correctness is determined.
+
 ## Source References
 
 - https://doi.org/10.1145/1455770.1455838
@@ -81,3 +91,6 @@ Puzzle challenge is implemented (`/challenge/puzzle`) with signed seed, determin
 - https://doi.org/10.3390/electronics14224403
 - https://doi.org/10.3390/app13074602
 - `docs/challenge-verification.md`
+- https://techdocs.akamai.com/cloud-security/docs/handle-adversarial-bots
+- https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/
+- https://developers.cloudflare.com/turnstile/

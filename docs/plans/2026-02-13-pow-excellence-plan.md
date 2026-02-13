@@ -85,6 +85,16 @@ PoW is currently available as an optional JS interstitial step (`/pow` and `/pow
 9. POW-9: Add enterprise Akamai-aware trigger policy hooks.
 10. POW-10: Document rollout thresholds and rollback conditions.
 
+## Enterprise Offering Snapshot (Akamai and Cloudflare)
+
+- Akamai:
+  - Akamai bot controls provide edge challenge/deny workflows, but public operator docs emphasize risk-based challenge orchestration rather than tenant-defined PoW difficulty controls.
+- Cloudflare:
+  - Cloudflare managed challenges and Turnstile provide adaptive challenge outcomes and attestation, but do not expose first-class, tenant-tunable PoW difficulty policies.
+- Planning implication:
+  - Keep PoW issuance/verification and difficulty control internal to Shuma.
+  - Use Akamai/Cloudflare signals to decide if PoW is required, while preserving Shuma-native replay controls and fallback routing.
+
 ## Source References
 
 - https://www.microsoft.com/en-us/research/publication/pricing-via-processing-or-combatting-junk-mail/
@@ -92,3 +102,6 @@ PoW is currently available as an optional JS interstitial step (`/pow` and `/pow
 - https://nakamotoinstitute.org/library/hashcash/
 - https://doi.org/10.1016/j.simpa.2022.100335
 - https://techdocs.akamai.com/cloud-security/docs/handle-adversarial-bots
+- https://www.akamai.com/products/bot-manager
+- https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/
+- https://developers.cloudflare.com/turnstile/

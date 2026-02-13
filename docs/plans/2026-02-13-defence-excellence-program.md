@@ -59,3 +59,30 @@ Each plan is structured to answer:
 - Avoid rebuilding global edge-native capabilities inside Shuma when that effort does not materially improve self-hosted outcomes.
 - Keep fallback-to-internal behavior explicit and observable.
 - Ensure every plan has rollback thresholds before enforcement expansion.
+
+## Enterprise Offering Baseline (Akamai and Cloudflare)
+
+- Fingerprint and JS/challenge corroboration:
+  - Akamai Bot Manager and Cloudflare Bot Management both provide edge telemetry and challenge outcomes suitable for advisory or authoritative ingestion modes.
+- Rate/IP/GEO first-pass controls:
+  - Both providers offer strong edge controls for rate limits and network/location policy; Shuma should preserve app-context and override safety internally.
+- Puzzle, PoW, and deception internals:
+  - Both providers focus on managed challenge outcomes, not Shuma-specific puzzle/PoW/tarpit semantics; keep these internal-first.
+- SSH tarpit:
+  - Cloudflare has SSH transport support (Spectrum), but neither provider presents a managed SSH tarpit equivalent to Shuma's planned standalone component.
+
+## Source References
+
+- https://www.akamai.com/products/bot-manager
+- https://www.akamai.com/products/app-and-api-protector
+- https://techdocs.akamai.com/cloud-security/docs/handle-adversarial-bots
+- https://techdocs.akamai.com/application-security/reference/get-rate-policies
+- https://techdocs.akamai.com/application-security/reference/get-network-lists
+- https://techdocs.akamai.com/application-security/reference/get-policy-ip-geo-firewall
+- https://www.cloudflare.com/application-services/products/bot-management/
+- https://developers.cloudflare.com/bots/reference/bot-management-variables/
+- https://developers.cloudflare.com/waf/rate-limiting-rules/
+- https://developers.cloudflare.com/waf/tools/lists/
+- https://developers.cloudflare.com/network/ip-geolocation/
+- https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/
+- https://developers.cloudflare.com/spectrum/reference/configuration-options/

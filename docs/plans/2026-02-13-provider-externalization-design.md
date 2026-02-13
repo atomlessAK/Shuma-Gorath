@@ -79,6 +79,20 @@ Guardrails:
 - Effective mode and provider/backend selection must be observable in metrics/logs.
 - Fallback behavior must degrade to internal logic on external unavailability.
 
+## Enterprise Offering Snapshot (Akamai and Cloudflare)
+
+- Akamai:
+  - App and API Protector + Bot Manager provide strong enterprise edge posture for bot, WAF, API, and challenge control.
+  - Application Security APIs expose edge policy resources relevant to this design (`rate-policies`, `network-lists`, IP/Geo firewall).
+  - Akamai Functions supports Spin-based workloads, which keeps Fermyon/Spin-aligned deployment paths realistic.
+- Cloudflare:
+  - Bot Management exposes rich bot telemetry fields and detection IDs.
+  - Rate Limiting Rules, Lists, and Challenge surfaces provide broad edge controls with strong rule programmability.
+  - Workers/Ruleset ecosystem is powerful but has different semantics from Akamai's model, reinforcing the need for capability-scoped adapters instead of universal parity.
+- Planning implication:
+  - Keep Akamai as the first enterprise integration target.
+  - Keep provider contracts narrow and semantics-first (signal ingestion, rate state, ban sync), with explicit unsupported behavior for non-targeted features.
+
 ## Sequenced Implementation Plan
 
 1. Document persona + precedence model in runtime/config/deployment docs.
@@ -97,3 +111,17 @@ Guardrails:
 - Make-based verification path:
   `make test` (with mandatory integration and dashboard e2e expectations per repo workflow).
 
+## Source References
+
+- https://www.akamai.com/products/app-and-api-protector
+- https://www.akamai.com/products/bot-manager
+- https://techdocs.akamai.com/application-security/reference/get-rate-policies
+- https://techdocs.akamai.com/application-security/reference/get-network-lists
+- https://techdocs.akamai.com/application-security/reference/get-policy-ip-geo-firewall
+- https://techdocs.akamai.com/akamai-functions/docs
+- https://www.cloudflare.com/application-services/products/bot-management/
+- https://developers.cloudflare.com/bots/reference/bot-management-variables/
+- https://developers.cloudflare.com/waf/rate-limiting-rules/
+- https://developers.cloudflare.com/waf/tools/lists/
+- https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/
+- https://developers.cloudflare.com/workers/

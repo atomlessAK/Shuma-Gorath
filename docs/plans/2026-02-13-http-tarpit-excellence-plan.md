@@ -97,9 +97,22 @@ Non-duplication rule:
 11. TP-9: Add observability dashboards for tarpit cost attribution.
 12. TP-10: Document operational runbook and emergency disable path.
 
+## Enterprise Offering Snapshot (Akamai and Cloudflare)
+
+- Akamai:
+  - Akamai's adversarial-bot handling guidance includes tarpit-style response actions in edge mitigation strategy.
+  - This creates a viable enterprise signal/trigger source, but the behavior model is provider-specific and not a portable contract.
+- Cloudflare:
+  - Cloudflare provides strong challenge and rate-limiting primitives, but no equivalent first-class "tarpit mode" control surface for app-layer deception pacing.
+- Planning implication:
+  - Keep tarpit execution internal so response pacing, budgets, and fallback semantics stay deterministic across personas.
+  - In enterprise mode, treat edge outcomes as eligibility inputs for internal tarpit activation.
+
 ## Source References
 
 - https://doi.org/10.1016/j.cose.2008.07.004
 - https://doi.org/10.1016/j.comnet.2010.05.002
 - https://doi.org/10.3390/electronics10172105
 - https://techdocs.akamai.com/cloud-security/docs/handle-adversarial-bots
+- https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/
+- https://developers.cloudflare.com/waf/rate-limiting-rules/

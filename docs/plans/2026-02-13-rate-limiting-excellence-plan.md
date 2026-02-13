@@ -74,6 +74,18 @@ Current rate limiting is fixed-window KV-based and non-atomic across distributed
 9. RL-9: Add operator runbook for threshold tuning and rollback.
 10. RL-10: Document distributed-state SLOs and alerts.
 
+## Enterprise Offering Snapshot (Akamai and Cloudflare)
+
+- Akamai:
+  - Application Security APIs expose first-class rate-policy resources (`/appsec/v1/rate-policies`) for centralized edge-side enforcement.
+  - App and API Protector Hybrid has added app-layer rate limiting support, reinforcing enterprise-first edge control patterns.
+- Cloudflare:
+  - Rate Limiting Rules support multiple counting characteristics and enterprise controls, including bot-score-aware expressions and JA3/JA4 characteristics.
+  - Cloudflare documents that counters are not globally shared between all PoPs, which matters for strict global correctness assumptions.
+- Planning implication:
+  - Keep Shuma distributed limiter work (atomic backend + outage posture) as the correctness anchor for app-context decisions.
+  - In enterprise profiles, use edge rate limiting as first-pass shedding while preserving internal fallback and drift monitoring.
+
 ## Source References
 
 - https://www.microsoft.com/en-us/research/publication/cloud-control-with-distributed-rate-limiting/
@@ -81,3 +93,9 @@ Current rate limiting is fixed-window KV-based and non-atomic across distributed
 - https://doi.org/10.1016/j.comnet.2010.05.002
 - https://doi.org/10.3390/electronics10172105
 - https://techdocs.akamai.com/cloud-security/docs/handle-adversarial-bots
+- https://techdocs.akamai.com/application-security/reference/get-rate-policies
+- https://techdocs.akamai.com/application-security/reference/post-rate-policy
+- https://techdocs.akamai.com/app-api-protector/changelog/release-2024-11-27
+- https://developers.cloudflare.com/waf/rate-limiting-rules/
+- https://developers.cloudflare.com/waf/rate-limiting-rules/parameters/#counting-characteristics
+- https://developers.cloudflare.com/waf/rate-limiting-rules/request-rate/

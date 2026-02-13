@@ -88,6 +88,18 @@ Fingerprinting currently relies on a limited set of in-app signals and an extern
 9. FP-9: Add advisory vs authoritative integration tests.
 10. FP-10: Publish rollback criteria and runbook for edge-authoritative mode.
 
+## Enterprise Offering Snapshot (Akamai and Cloudflare)
+
+- Akamai:
+  - Bot Manager provides edge-side bot scoring, behavioral analysis, and browser fingerprinting, with threshold-based response segments (`cautious`, `strict`, `aggressive`) that can drive challenge/deny decisions.
+  - Akamai bot controls are API-addressable and designed for edge-first enforcement and reporting.
+- Cloudflare:
+  - Bot Management exposes a request-level bot score (`1..99`) and rule-consumable bot fields (`verified_bot`, `static_resource`, `detection_ids`, JA3/JA4) for custom rule and Worker logic.
+  - Detection IDs give stable heuristic identifiers that map well to Shuma detection-taxonomy goals.
+- Planning implication:
+  - Keep Shuma as the normalization/correlation owner while ingesting Akamai or Cloudflare edge outcomes as provenance-tagged signals.
+  - Prioritize adapter support for edge attributes that Shuma cannot observe natively (for example JA3/JA4 and provider detection IDs).
+
 ## Source References
 
 - https://link.springer.com/chapter/10.1007/978-3-642-14527-8_1
@@ -96,3 +108,7 @@ Fingerprinting currently relies on a limited set of in-app signals and an extern
 - https://arxiv.org/abs/2406.07647
 - https://cybersecurity.springeropen.com/articles/10.1186/s42400-019-0023-1
 - https://techdocs.akamai.com/cloud-security/docs/handle-adversarial-bots
+- https://www.akamai.com/products/bot-manager
+- https://developers.cloudflare.com/bots/reference/bot-management-variables/
+- https://developers.cloudflare.com/bots/additional-configurations/detection-ids/
+- https://developers.cloudflare.com/bots/additional-configurations/ja3-ja4-fingerprint/

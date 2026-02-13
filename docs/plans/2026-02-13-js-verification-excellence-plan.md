@@ -81,9 +81,26 @@ JS verification currently issues an IP-bound cookie (`js_verified`) after client
 9. JS-9: Add integration tests for token expiry, replay, and downgrade paths.
 10. JS-10: Document operational runbook and rollback thresholds.
 
+## Enterprise Offering Snapshot (Akamai and Cloudflare)
+
+- Akamai:
+  - Bot Manager supports browser-side signal collection and configurable response strategy bands that can route requests to challenge/deny paths at the edge.
+  - App and API Protector groups these controls with WAF/API protections for unified edge policy.
+- Cloudflare:
+  - JavaScript Detections can inject lightweight JS on HTML page views and issue a short-lived `cf_clearance` outcome that must still be enforced by WAF/custom rules.
+  - Interstitial Challenge Pages provide managed challenge escalation.
+  - Turnstile provides token-based challenge attestation and requires server-side Siteverify validation for security.
+- Planning implication:
+  - Keep Shuma JS verification token and replay model internal-first.
+  - In enterprise mode, consume Akamai/Cloudflare outcomes as trigger modifiers and corroboration, not replacements for Shuma's policy and fallback routing.
+
 ## Source References
 
 - https://developers.cloudflare.com/cloudflare-challenges/challenge-types/javascript-detections/
+- https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/
+- https://developers.cloudflare.com/turnstile/get-started/server-side-validation/
 - https://techdocs.akamai.com/cloud-security/docs/handle-adversarial-bots
+- https://www.akamai.com/products/app-and-api-protector
+- https://www.akamai.com/products/bot-manager
 - https://arxiv.org/abs/2406.07647
 - https://pmc.ncbi.nlm.nih.gov/articles/PMC7338186/
