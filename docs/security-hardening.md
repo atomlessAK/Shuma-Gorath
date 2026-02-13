@@ -38,7 +38,7 @@ This is a **policy decision** and should be explicitly chosen for each deploymen
 
 ## 🐙 Admin API Protection
 
-- Generate `SHUMA_API_KEY` with `make api-key-generate` (64-char hex), and rotate with `make api-key-rotate`
+- Generate `SHUMA_API_KEY` with `make api-key-generate`/`make gen-admin-api-key` (64-char hex), and rotate on a regular cadence (recommended 90 days) with `make api-key-rotate`
 - Optionally set `SHUMA_ADMIN_READONLY_API_KEY` for operators/automation that only need read access to `/admin/*`
 - Restrict access with `SHUMA_ADMIN_IP_ALLOWLIST`
 - Add CDN/WAF rate limits for `POST /admin/login` and all `/admin/*`

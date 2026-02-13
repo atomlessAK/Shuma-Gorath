@@ -70,6 +70,8 @@ make deploy-env-validate
 - non-empty and non-overbroad `SHUMA_ADMIN_IP_ALLOWLIST` (rejects wildcard and global-range entries)
 - explicit operator attestation that admin edge limits are configured:
   `SHUMA_ADMIN_EDGE_RATE_LIMITS_CONFIRMED=true`
+- explicit operator attestation that admin API key rotation is complete for the deployment cadence:
+  `SHUMA_ADMIN_API_KEY_ROTATION_CONFIRMED=true`
 
 ### 🐙 Admin Surface Pre-Deploy Checklist
 
@@ -86,6 +88,9 @@ Run this checklist for every production deployment:
    - Set `SHUMA_ADMIN_EDGE_RATE_LIMITS_CONFIRMED=true` in deploy-time environment after verification.
 4. App-side auth failure limiter:
    - Confirm `SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE` is set to a conservative value for the environment.
+5. API key rotation cadence:
+   - Rotate `SHUMA_API_KEY` on a regular cadence (recommended 90 days) using `make gen-admin-api-key` / `make api-key-rotate`.
+   - Set `SHUMA_ADMIN_API_KEY_ROTATION_CONFIRMED=true` in deploy-time environment after rotation verification.
 
 ## 🐙 External Provider Rollout & Rollback Runbook
 

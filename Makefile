@@ -1,4 +1,4 @@
-.PHONY: dev local run run-prebuilt build prod clean test test-unit unit-test test-integration integration-test test-coverage test-dashboard test-dashboard-e2e deploy logs status stop help setup verify config-seed env-help api-key-generate api-key-show api-key-rotate api-key-validate deploy-env-validate
+.PHONY: dev local run run-prebuilt build prod clean test test-unit unit-test test-integration integration-test test-coverage test-dashboard test-dashboard-e2e deploy logs status stop help setup verify config-seed env-help api-key-generate gen-admin-api-key api-key-show api-key-rotate api-key-validate deploy-env-validate
 
 # Default target
 .DEFAULT_GOAL := help
@@ -283,6 +283,8 @@ api-key-generate: ## Generate a high-entropy SHUMA_API_KEY using system CSPRNG t
 	echo ""; \
 	echo "$(YELLOW)Set in your secret store as: SHUMA_API_KEY=$$KEY$(NC)"
 
+gen-admin-api-key: api-key-generate ## Alias for generating a strong SHUMA_API_KEY
+
 api-key-show: ## Show SHUMA_API_KEY from .env.local (dashboard login key for local dev)
 	@KEY="$$(grep -E '^SHUMA_API_KEY=' .env.local 2>/dev/null | tail -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$$//')"; \
 	if [ -z "$$KEY" ]; then \
@@ -336,7 +338,7 @@ api-key-validate: ## Validate SHUMA_API_KEY for deployment (must be 64-char hex 
 	fi; \
 	echo "$(GREEN)✅ SHUMA_API_KEY format is valid for deployment.$(NC)"
 
-deploy-env-validate: ## Fail deployment when unsafe debug flags are enabled, admin allowlist is missing, or admin edge rate limits are unconfirmed
+deploy-env-validate: ## Fail deployment when unsafe debug flags are enabled, admin allowlist is missing, admin edge limits are unconfirmed, or API-key rotation is unconfirmed
 	@DEBUG_VAL="$${SHUMA_DEBUG_HEADERS:-false}"; \
 	DEBUG_NORM="$$(printf '%s' "$$DEBUG_VAL" | tr '[:upper:]' '[:lower:]')"; \
 	case "$$DEBUG_NORM" in \
@@ -367,7 +369,16 @@ deploy-env-validate: ## Fail deployment when unsafe debug flags are enabled, adm
 			echo "$(YELLOW)Before deploy, configure CDN/WAF limits for POST /admin/login and /admin/*, then set SHUMA_ADMIN_EDGE_RATE_LIMITS_CONFIRMED=true.$(NC)"; \
 			exit 1 ;; \
 	esac; \
-	echo "$(GREEN)✅ Deployment env guardrails passed (SHUMA_DEBUG_HEADERS, SHUMA_ADMIN_IP_ALLOWLIST, SHUMA_ADMIN_EDGE_RATE_LIMITS_CONFIRMED).$(NC)"
+	API_KEY_ROTATION_CONFIRMED_RAW="$${SHUMA_ADMIN_API_KEY_ROTATION_CONFIRMED:-false}"; \
+	API_KEY_ROTATION_CONFIRMED_NORM="$$(printf '%s' "$$API_KEY_ROTATION_CONFIRMED_RAW" | tr '[:upper:]' '[:lower:]')"; \
+	case "$$API_KEY_ROTATION_CONFIRMED_NORM" in \
+		1|true|yes|on) ;; \
+		*) \
+			echo "$(RED)❌ Refusing deployment: SHUMA_ADMIN_API_KEY_ROTATION_CONFIRMED is not true.$(NC)"; \
+			echo "$(YELLOW)Rotate SHUMA_API_KEY on your cadence (recommended 90 days) with make gen-admin-api-key / make api-key-rotate, then set SHUMA_ADMIN_API_KEY_ROTATION_CONFIRMED=true.$(NC)"; \
+			exit 1 ;; \
+	esac; \
+	echo "$(GREEN)✅ Deployment env guardrails passed (SHUMA_DEBUG_HEADERS, SHUMA_ADMIN_IP_ALLOWLIST, SHUMA_ADMIN_EDGE_RATE_LIMITS_CONFIRMED, SHUMA_ADMIN_API_KEY_ROTATION_CONFIRMED).$(NC)"
 
 #--------------------------
 # Help
@@ -389,4 +400,4 @@ help: ## Show this help message
 	@grep -E '^test.*:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-15s %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Utilities:$(NC)"
-	@grep -E '^(stop|status|clean|logs|env-help|api-key-generate|api-key-show|api-key-rotate|api-key-validate|deploy-env-validate|help):.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-15s %s\n", $$1, $$2}'
+	@grep -E '^(stop|status|clean|logs|env-help|api-key-generate|gen-admin-api-key|api-key-show|api-key-rotate|api-key-validate|deploy-env-validate|help):.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-15s %s\n", $$1, $$2}'
