@@ -34,6 +34,34 @@ Used in concert, and sensibly configured, they limit human friction while increa
   externalize state and upstream signals where edge providers have superior reach,
   keep Shuma-owned policy composition (botness scoring, escalation routing, module mode composition) internal.
 
+## 🐙 Architectural Ownership Policy (2026-02-13)
+
+This policy is the default for `enterprise_akamai` planning and implementation. Any exception should be documented in a plan/ADR before implementation.
+
+### Leaning Akamai (especially in `enterprise_akamai`)
+
+- Fingerprint signal ingestion (edge transport/bot telemetry is strongest there).
+- Rate limiting first-pass enforcement at the edge (with Shuma app-context fallback/control).
+- IP range policy enforcement for managed network blocks/reputation sets.
+- GEO attribution/enforcement when edge geo confidence is higher.
+
+### Leaning Internal (Shuma-native)
+
+- Puzzle challenge engine.
+- Challenge Lite scoring/verification flow.
+- PoW issuance/verification logic.
+- CDP detection execution/scoring.
+- HTTP tarpit behavior.
+- SSH tarpit (as a separate Shuma-managed component).
+- Maze/deception internals (already planned as internal-first).
+
+### Hybrid (Akamai informs, Shuma decides)
+
+- JS verification trigger policy.
+- CDP corroboration.
+- Challenge escalation routing.
+- Overall botness/policy orchestration.
+
 ## 🐙 Where Shuma-Gorath Adds Unique Value (Not Just Duplication)
 
 When Akamai Bot Manager (or equivalent) is already in place, Shuma-Gorath should focus on controls that are highly application-specific and hard to get from generic edge policy alone:
