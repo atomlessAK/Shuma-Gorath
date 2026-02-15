@@ -163,9 +163,10 @@ pub fn handle_cdp_report(store: &Store, req: &Request) -> Response {
                 "cdp_detected:tier={} score={:.2}",
                 tier_label, report.score
             )),
-            outcome: Some(detection_policy_match.annotate_outcome(
-                format!("checks:{}", report.checks.join(",")).as_str(),
-            )),
+            outcome: Some(
+                detection_policy_match
+                    .annotate_outcome(format!("checks:{}", report.checks.join(",")).as_str()),
+            ),
             admin: None,
         },
     );

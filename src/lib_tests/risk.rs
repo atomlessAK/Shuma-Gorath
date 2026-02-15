@@ -113,8 +113,10 @@ mod tests {
         let mut cfg = crate::config::defaults().clone();
         cfg.botness_weights.maze_behavior = 3;
 
-        let assessment =
-            crate::compute_botness_assessment(context_with_maze(false, true, false, 0, 80, 3), &cfg);
+        let assessment = crate::compute_botness_assessment(
+            context_with_maze(false, true, false, 0, 80, 3),
+            &cfg,
+        );
         let maze_behavior = contribution(&assessment, "maze_behavior");
         assert_eq!(
             maze_behavior.availability,

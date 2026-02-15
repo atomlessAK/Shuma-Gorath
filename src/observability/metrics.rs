@@ -37,7 +37,12 @@ const MAZE_TOKEN_OUTCOMES: [&str; 10] = [
     "budget_exceeded",
     "micro_pow_failed",
 ];
-const MAZE_CHECKPOINT_OUTCOMES: [&str; 4] = ["accepted", "invalid", "binding_mismatch", "method_not_allowed"];
+const MAZE_CHECKPOINT_OUTCOMES: [&str; 4] = [
+    "accepted",
+    "invalid",
+    "binding_mismatch",
+    "method_not_allowed",
+];
 const MAZE_BUDGET_OUTCOMES: [&str; 3] = ["acquired", "saturated", "response_cap_exceeded"];
 const MAZE_PROOF_OUTCOMES: [&str; 3] = ["required", "passed", "failed"];
 const PROVIDER_OBSERVED_COMBINATIONS: [(
@@ -292,10 +297,7 @@ pub fn record_provider_backend_visibility(
     }
 }
 
-pub fn record_policy_signal(
-    store: &Store,
-    signal_id: crate::runtime::policy_taxonomy::SignalId,
-) {
+pub fn record_policy_signal(store: &Store, signal_id: crate::runtime::policy_taxonomy::SignalId) {
     increment(store, MetricName::PolicySignals, Some(signal_id.as_str()));
 }
 
@@ -487,7 +489,10 @@ pub fn render_metrics(store: &Store) -> String {
         "# HELP bot_defence_maze_checkpoint_outcomes_total Maze checkpoint submission outcomes\n",
     );
     for outcome in MAZE_CHECKPOINT_OUTCOMES {
-        let key = format!("{}maze_checkpoint_outcomes_total:{}", METRICS_PREFIX, outcome);
+        let key = format!(
+            "{}maze_checkpoint_outcomes_total:{}",
+            METRICS_PREFIX, outcome
+        );
         let count = get_counter(store, &key);
         output.push_str(&format!(
             "bot_defence_maze_checkpoint_outcomes_total{{outcome=\"{}\"}} {}\n",

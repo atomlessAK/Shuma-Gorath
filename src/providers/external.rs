@@ -940,6 +940,7 @@ impl MazeTarpitProvider for UnsupportedExternalMazeTarpitProvider {
         path: &str,
         event_reason: &str,
         event_outcome: &str,
+        botness_hint: Option<u8>,
     ) -> Response {
         internal::MAZE_TARPIT.serve_maze_with_tracking(
             req,
@@ -950,6 +951,7 @@ impl MazeTarpitProvider for UnsupportedExternalMazeTarpitProvider {
             path,
             event_reason,
             event_outcome,
+            botness_hint,
         )
     }
 }
@@ -1074,10 +1076,12 @@ impl FingerprintSignalProvider for ExternalFingerprintSignalProvider {
                     event: crate::admin::EventType::Ban,
                     ip: Some(ip),
                     reason: Some("edge_fingerprint_automation".to_string()),
-                    outcome: Some(ban_policy_match.annotate_outcome(
-                        format!("banned:tier={} score={:.2}", tier_label, cdp_report.score)
-                            .as_str(),
-                    )),
+                    outcome: Some(
+                        ban_policy_match.annotate_outcome(
+                            format!("banned:tier={} score={:.2}", tier_label, cdp_report.score)
+                                .as_str(),
+                        ),
+                    ),
                     admin: None,
                 },
             );

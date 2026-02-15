@@ -212,10 +212,15 @@ pub(crate) fn maybe_handle_geo_policy(
                     event: crate::admin::EventType::Block,
                     ip: Some(ip.to_string()),
                     reason: Some("geo_policy_block".to_string()),
-                    outcome: Some(policy_match.annotate_outcome(
-                        format!("country={}", geo_assessment.country.as_deref().unwrap_or("unknown"))
+                    outcome: Some(
+                        policy_match.annotate_outcome(
+                            format!(
+                                "country={}",
+                                geo_assessment.country.as_deref().unwrap_or("unknown")
+                            )
                             .as_str(),
-                    )),
+                        ),
+                    ),
                     admin: None,
                 },
             );
@@ -227,7 +232,10 @@ pub(crate) fn maybe_handle_geo_policy(
             ))
         }
         crate::signals::geo::GeoPolicyRoute::Maze => {
-            let country_summary = format!("country={}", geo_assessment.country.as_deref().unwrap_or("unknown"));
+            let country_summary = format!(
+                "country={}",
+                geo_assessment.country.as_deref().unwrap_or("unknown")
+            );
             if cfg.maze_enabled {
                 let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
                     crate::runtime::policy_taxonomy::PolicyTransition::GeoRouteMaze,
@@ -248,6 +256,7 @@ pub(crate) fn maybe_handle_geo_policy(
                             "/maze/geo-policy",
                             "geo_policy_maze",
                             event_outcome.as_str(),
+                            None,
                         ),
                 );
             }
@@ -304,10 +313,15 @@ pub(crate) fn maybe_handle_geo_policy(
                     event: crate::admin::EventType::Challenge,
                     ip: Some(ip.to_string()),
                     reason: Some("geo_policy_challenge".to_string()),
-                    outcome: Some(policy_match.annotate_outcome(
-                        format!("country={}", geo_assessment.country.as_deref().unwrap_or("unknown"))
+                    outcome: Some(
+                        policy_match.annotate_outcome(
+                            format!(
+                                "country={}",
+                                geo_assessment.country.as_deref().unwrap_or("unknown")
+                            )
                             .as_str(),
-                    )),
+                        ),
+                    ),
                     admin: None,
                 },
             );
@@ -412,6 +426,7 @@ pub(crate) fn maybe_handle_botness(
                     "/maze/botness-gate",
                     "botness_gate_maze",
                     event_outcome.as_str(),
+                    Some(botness.score),
                 ),
         );
     }
@@ -440,17 +455,19 @@ pub(crate) fn maybe_handle_botness(
                 event: crate::admin::EventType::Challenge,
                 ip: Some(ip.to_string()),
                 reason: Some("botness_gate_challenge".to_string()),
-                outcome: Some(policy_match.annotate_outcome(
-                    format!(
-                        "score={} signals={} signal_states={} {} providers={}",
-                        botness.score,
-                        botness_summary,
-                        botness_state_summary,
-                        runtime_metadata_summary,
-                        provider_summary
-                    )
-                    .as_str(),
-                )),
+                outcome: Some(
+                    policy_match.annotate_outcome(
+                        format!(
+                            "score={} signals={} signal_states={} {} providers={}",
+                            botness.score,
+                            botness_summary,
+                            botness_state_summary,
+                            runtime_metadata_summary,
+                            provider_summary
+                        )
+                        .as_str(),
+                    ),
+                ),
                 admin: None,
             },
         );

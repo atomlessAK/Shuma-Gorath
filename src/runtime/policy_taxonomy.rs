@@ -279,7 +279,11 @@ pub struct PolicyMatch {
 }
 
 impl PolicyMatch {
-    fn new(level: EscalationLevelId, detection: DetectionId, mut signal_ids: Vec<SignalId>) -> Self {
+    fn new(
+        level: EscalationLevelId,
+        detection: DetectionId,
+        mut signal_ids: Vec<SignalId>,
+    ) -> Self {
         signal_ids.sort_by_key(|signal| signal.as_str());
         signal_ids.dedup();
         Self {
@@ -303,7 +307,10 @@ impl PolicyMatch {
     }
 
     pub fn signal_ids(&self) -> Vec<&'static str> {
-        self.signal_ids.iter().map(|signal| signal.as_str()).collect()
+        self.signal_ids
+            .iter()
+            .map(|signal| signal.as_str())
+            .collect()
     }
 
     pub fn annotate_outcome(&self, outcome: &str) -> String {
@@ -312,10 +319,7 @@ impl PolicyMatch {
             self.level_id(),
             self.action_id(),
             self.detection_id(),
-            self.signal_ids()
-                .into_iter()
-                .collect::<Vec<_>>()
-                .join(",")
+            self.signal_ids().into_iter().collect::<Vec<_>>().join(",")
         );
         if outcome.trim().is_empty() {
             taxonomy
@@ -649,11 +653,7 @@ mod tests {
         ]));
         assert_eq!(
             matched.signal_ids(),
-            vec![
-                "S_GEO_RISK",
-                "S_JS_REQUIRED_MISSING",
-                "S_RATE_USAGE_HIGH"
-            ]
+            vec!["S_GEO_RISK", "S_JS_REQUIRED_MISSING", "S_RATE_USAGE_HIGH"]
         );
     }
 

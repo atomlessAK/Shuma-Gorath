@@ -208,3 +208,17 @@ Moved from active TODO files on 2026-02-14.
 - [x] MZ-R1: Complete and summarize the highest-impact Maze/Tarpit research items (`R-FP-10`, `R-RL-02`, `R-RL-04`, `R-RL-08`, `R-SSH-01`) with concrete anti-fingerprinting and bounded-cost implications.
 - [x] MZ-R2: Map research outcomes to `self_hosted_minimal` vs `enterprise_akamai` ownership and explicitly define what remains internal-first for Stage 2.
 - [x] MZ-R3: Convert research findings into enforceable implementation guardrails (budget caps, replay windows, fallback policy, rollout abort thresholds) and update Stage 2 acceptance criteria before coding.
+
+## Additional completions (2026-02-15)
+
+### todos/todo.md (Stage 2.5 completion)
+
+- [x] MZ-X0.R through MZ-X10.R completed via Stage 2.5 research synthesis memo in `/docs/research/2026-02-15-stage2.5-maze-efficiency-and-asymmetry.md`.
+- [x] MZ-X0.I completed: Web Worker-first client expansion now uses compact signed seed bootstrap with deterministic fallback behavior when worker/proof cannot complete.
+- [x] MZ-X1.I + MZ-X5.I completed: exact path commitment, chain marker checks, sibling edge-operation uniqueness, replay enforcement, and branch-budget-aware progressive issuance checks.
+- [x] MZ-X2.I + MZ-X9.I completed: compact maze shell with external versioned shared assets and adaptive styling tiers (full/lite/machine, optional no-CSS deep tier).
+- [x] MZ-X3.I completed: hidden links are no longer shipped in bootstrap payload; links are issued progressively via proof/checkpoint-gated `/maze/issue-links`.
+- [x] MZ-X4.I + MZ-X6.I completed: proactive pre-render budget/degrade controls and bounded host-write behavior were implemented to reduce per-hop synthesis pressure.
+- [x] MZ-X7.I completed: deterministic maze asymmetry benchmark harness + CI gate added (`make test-maze-benchmark`, included in `make test`) with regression-threshold enforcement.
+- [x] MZ-X8.I completed: deep-tier micro-PoW and link expansion compute moved off main thread with constrained-device safeguards.
+- [x] MZ-X10.I completed: high-confidence violation accumulation now triggers deterministic early fallback before expensive maze serving continues.

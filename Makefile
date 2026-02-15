@@ -1,4 +1,4 @@
-.PHONY: dev local run run-prebuilt build prod clean test test-unit unit-test test-integration integration-test test-coverage test-dashboard test-dashboard-e2e spin-wait-ready deploy logs status stop help setup verify config-seed env-help api-key-generate gen-admin-api-key api-key-show api-key-rotate api-key-validate deploy-env-validate
+.PHONY: dev local run run-prebuilt build prod clean test test-unit unit-test test-integration integration-test test-coverage test-dashboard test-dashboard-e2e test-maze-benchmark spin-wait-ready deploy logs status stop help setup verify config-seed env-help api-key-generate gen-admin-api-key api-key-show api-key-rotate api-key-validate deploy-env-validate
 
 # Default target
 .DEFAULT_GOAL := help
@@ -170,7 +170,7 @@ deploy: build ## Deploy to Fermyon Cloud
 spin-wait-ready: ## Wait for the existing local Spin server to pass /health
 	@SHUMA_FORWARDED_IP_SECRET="$(SHUMA_FORWARDED_IP_SECRET)" SHUMA_HEALTH_SECRET="$(SHUMA_HEALTH_SECRET)" ./scripts/tests/wait_for_spin_ready.sh --timeout-seconds "$(SPIN_READY_TIMEOUT_SECONDS)"
 
-test: ## Run ALL tests in series: unit, integration, and dashboard e2e (waits for existing server readiness)
+test: ## Run ALL tests in series: unit, maze benchmark, integration, and dashboard e2e (waits for existing server readiness)
 	@echo "$(CYAN)============================================$(NC)"
 	@echo "$(CYAN)  RUNNING ALL TESTS$(NC)"
 	@echo "$(CYAN)============================================$(NC)"
@@ -183,12 +183,16 @@ test: ## Run ALL tests in series: unit, integration, and dashboard e2e (waits fo
 	fi
 	@echo "$(GREEN)✅ Preflight: Spin server is ready; integration and dashboard e2e tests will be executed.$(NC)"
 	@echo ""
-	@echo "$(CYAN)Step 1/3: Rust Unit Tests$(NC)"
+	@echo "$(CYAN)Step 1/4: Rust Unit Tests$(NC)"
 	@echo "$(CYAN)--------------------------------------------$(NC)"
 	@./scripts/set_crate_type.sh rlib
 	@cargo test || exit 1
 	@echo ""
-	@echo "$(CYAN)Step 2/3: Integration Tests (Spin HTTP scenarios)$(NC)"
+	@echo "$(CYAN)Step 2/4: Maze Asymmetry Benchmark Gate$(NC)"
+	@echo "$(CYAN)--------------------------------------------$(NC)"
+	@$(MAKE) --no-print-directory test-maze-benchmark || exit 1
+	@echo ""
+	@echo "$(CYAN)Step 3/4: Integration Tests (Spin HTTP scenarios)$(NC)"
 	@echo "$(CYAN)--------------------------------------------$(NC)"
 	@if $(MAKE) --no-print-directory spin-wait-ready; then \
 		SHUMA_API_KEY="$(SHUMA_API_KEY)" SHUMA_FORWARDED_IP_SECRET="$(SHUMA_FORWARDED_IP_SECRET)" SHUMA_HEALTH_SECRET="$(SHUMA_HEALTH_SECRET)" ./scripts/tests/integration.sh || exit 1; \
@@ -199,7 +203,7 @@ test: ## Run ALL tests in series: unit, integration, and dashboard e2e (waits fo
 		exit 1; \
 	fi
 	@echo ""
-	@echo "$(CYAN)Step 3/3: Dashboard E2E Smoke Tests$(NC)"
+	@echo "$(CYAN)Step 4/4: Dashboard E2E Smoke Tests$(NC)"
 	@echo "$(CYAN)--------------------------------------------$(NC)"
 	@$(MAKE) --no-print-directory test-dashboard-e2e || exit 1
 	@echo ""
@@ -211,6 +215,11 @@ test-unit: ## Run Rust unit tests only (34 tests)
 	@echo "$(CYAN)🧪 Running Rust unit tests...$(NC)"
 	@./scripts/set_crate_type.sh rlib
 	@cargo test
+
+test-maze-benchmark: ## Run deterministic maze asymmetry benchmark gate
+	@echo "$(CYAN)🧪 Running maze asymmetry benchmark gate...$(NC)"
+	@./scripts/set_crate_type.sh rlib
+	@cargo test maze::benchmark::tests::maze_asymmetry_benchmark_guardrails_hold -- --nocapture
 
 unit-test: test-unit ## Alias for Rust unit tests
 

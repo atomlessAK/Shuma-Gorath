@@ -1,7 +1,9 @@
 use super::content::{
     capitalize, generate_link_text, generate_paragraph, generate_title, DEPARTMENTS, NOUNS,
 };
-use super::renders::{generate_polymorphic_maze_page, AdvancedMazeLink, AdvancedMazeRenderOptions};
+use super::renders::{
+    generate_polymorphic_maze_page, AdvancedMazeLink, AdvancedMazeRenderOptions, MazeStyleTier,
+};
 use super::rng::{generate_path_segment, SeededRng};
 use super::types::MazeConfig;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
@@ -30,9 +32,9 @@ fn preview_secret_from_env() -> String {
 fn is_safe_preview_path(path: &str) -> bool {
     !path.is_empty()
         && path.len() <= 256
-        && path.chars().all(|ch| {
-            ch.is_ascii_alphanumeric() || matches!(ch, '/' | '-' | '_' | '.' | '~')
-        })
+        && path
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '/' | '-' | '_' | '.' | '~'))
 }
 
 pub(crate) fn normalize_preview_path(requested_path: Option<&str>) -> String {
@@ -107,7 +109,11 @@ pub(crate) fn render_admin_preview(
 
     let mut links = Vec::with_capacity(link_count);
     for _ in 0..link_count {
-        let next_path = format!("{}{}", path_prefix, generate_path_segment(&mut rng, segment_len));
+        let next_path = format!(
+            "{}{}",
+            path_prefix,
+            generate_path_segment(&mut rng, segment_len)
+        );
         let topical_suffix = if rng.next() % 2 == 0 {
             Some(capitalize(rng.pick(NOUNS)))
         } else {
@@ -119,7 +125,11 @@ pub(crate) fn render_admin_preview(
             generate_link_text(&mut rng)
         };
         let link_description = if let Some(term) = topical_suffix.as_deref() {
-            format!("{} Coordination lane: {}.", generate_paragraph(&mut rng), term)
+            format!(
+                "{} Coordination lane: {}.",
+                generate_paragraph(&mut rng),
+                term
+            )
         } else {
             generate_paragraph(&mut rng)
         };
@@ -131,15 +141,23 @@ pub(crate) fn render_admin_preview(
         });
     }
 
-    let visible_links = cfg
-        .maze_server_visible_links
-        .max(1)
-        .min(links.len() as u32) as usize;
     let bootstrap_json = serde_json::json!({
         "flow_id": "maze-preview",
         "depth": 0,
         "checkpoint_token": "",
-        "hidden_links": []
+        "path_prefix": path_prefix,
+        "entropy_nonce": "preview",
+        "assets": {
+            "worker_url": super::assets::MAZE_WORKER_PATH
+        },
+        "client_expansion": {
+            "enabled": false,
+            "seed": seed,
+            "seed_sig": "",
+            "hidden_count": 0,
+            "segment_len": segment_len,
+            "issue_path": "/maze/issue-links"
+        }
     })
     .to_string();
 
@@ -150,10 +168,12 @@ pub(crate) fn render_admin_preview(
         breadcrumb: preview_breadcrumb(&mut rng),
         paragraphs,
         links,
-        server_visible_links: visible_links,
         bootstrap_json,
         variant_layout,
         variant_palette,
+        style_tier: MazeStyleTier::Full,
+        style_sheet_url: Some(super::assets::MAZE_STYLE_PATH.to_string()),
+        script_url: super::assets::MAZE_SCRIPT_PATH.to_string(),
     };
 
     generate_polymorphic_maze_page(&options)

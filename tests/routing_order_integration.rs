@@ -96,6 +96,9 @@ fn static_asset_path_bypasses_expensive_bot_checks() {
         let resp = shuma_gorath::handle_bot_defence_impl(&req);
 
         assert_eq!(*resp.status(), 200u16);
-        assert_eq!(String::from_utf8_lossy(resp.body()), "OK (passed bot defence)");
+        assert_eq!(
+            String::from_utf8_lossy(resp.body()),
+            "OK (passed bot defence)"
+        );
     });
 }

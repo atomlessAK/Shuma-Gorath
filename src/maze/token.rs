@@ -11,6 +11,7 @@ const TOKEN_VERSION_V1: u8 = 1;
 const TOKEN_PREFIX: &str = "mzt1";
 const MAX_TOKEN_BYTES: usize = 4096;
 const OPERATION_ID_HEX_BYTES: usize = 12;
+const EXPANSION_SEED_SIG_HEX_BYTES: usize = 16;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct MazeTraversalToken {
@@ -18,6 +19,7 @@ pub(crate) struct MazeTraversalToken {
     pub operation_id: String,
     pub flow_id: String,
     pub path_prefix: String,
+    pub path_digest: String,
     pub ip_bucket: String,
     pub ua_bucket: String,
     pub issued_at: u64,
@@ -67,6 +69,17 @@ fn hmac_sign(secret: &str, payload: &[u8]) -> Vec<u8> {
         HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC accepts any secret length");
     mac.update(payload);
     mac.finalize().into_bytes().to_vec()
+}
+
+fn constant_time_eq(a: &str, b: &str) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (lhs, rhs) in a.bytes().zip(b.bytes()) {
+        diff |= lhs ^ rhs;
+    }
+    diff == 0
 }
 
 pub(crate) fn secret_from_env() -> String {
@@ -136,9 +149,9 @@ pub(crate) fn sign(token: &MazeTraversalToken, secret: &str) -> String {
     format!("{TOKEN_PREFIX}.{payload_b64}.{signature_b64}")
 }
 
-fn operation_id(path: &str, flow_id: &str, depth: u16, now: u64) -> String {
+fn operation_id(target_path: &str, flow_id: &str, depth: u16, now: u64) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(path.as_bytes());
+    hasher.update(target_path.as_bytes());
     hasher.update(flow_id.as_bytes());
     hasher.update(depth.to_le_bytes());
     hasher.update(now.to_le_bytes());
@@ -173,6 +186,7 @@ pub(crate) fn flow_id_from(ip_bucket: &str, ua_bucket: &str, path: &str, now: u6
 
 pub(crate) fn issue_child_token(
     parent: Option<&MazeTraversalToken>,
+    target_path: &str,
     path_prefix: &str,
     ip_bucket: &str,
     ua_bucket: &str,
@@ -188,15 +202,17 @@ pub(crate) fn issue_child_token(
     let flow_id = parent
         .map(|token| token.flow_id.clone())
         .unwrap_or_else(|| flow_id_from(ip_bucket, ua_bucket, path_prefix, now));
+    let path_digest = digest(target_path);
     let parent_digest = parent
         .map(|token| digest(format!("{}:{}", token.flow_id, token.operation_id).as_str()))
         .unwrap_or_else(|| digest(path_prefix));
 
     MazeTraversalToken {
         version: TOKEN_VERSION_V1,
-        operation_id: operation_id(path_prefix, flow_id.as_str(), depth, now),
+        operation_id: operation_id(target_path, flow_id.as_str(), depth, now),
         flow_id,
         path_prefix: path_prefix.to_string(),
+        path_digest,
         ip_bucket: ip_bucket.to_string(),
         ua_bucket: ua_bucket.to_string(),
         issued_at: now,
@@ -246,39 +262,120 @@ pub(crate) fn entropy_seed(
     minute_bucket: u64,
     chain_nonce: &str,
 ) -> u64 {
-    let payload = format!(
-        "{site_id}|{ip_bucket}|{ua_bucket}|{path}|{minute_bucket}|{chain_nonce}"
-    );
+    let payload = format!("{site_id}|{ip_bucket}|{ua_bucket}|{path}|{minute_bucket}|{chain_nonce}");
     let digest = hmac_sign(secret, payload.as_bytes());
     let mut seed_bytes = [0u8; 8];
     seed_bytes.copy_from_slice(&digest[..8]);
     u64::from_le_bytes(seed_bytes)
 }
 
+fn expansion_seed_payload(
+    flow_id: &str,
+    path_prefix: &str,
+    entropy_nonce: &str,
+    depth: u16,
+    seed: u64,
+    hidden_count: usize,
+    segment_len: usize,
+) -> String {
+    format!("{flow_id}|{path_prefix}|{entropy_nonce}|{depth}|{seed}|{hidden_count}|{segment_len}")
+}
+
+pub(crate) fn sign_expansion_seed(
+    secret: &str,
+    flow_id: &str,
+    path_prefix: &str,
+    entropy_nonce: &str,
+    depth: u16,
+    seed: u64,
+    hidden_count: usize,
+    segment_len: usize,
+) -> String {
+    let payload = expansion_seed_payload(
+        flow_id,
+        path_prefix,
+        entropy_nonce,
+        depth,
+        seed,
+        hidden_count,
+        segment_len,
+    );
+    let digest = hmac_sign(secret, payload.as_bytes());
+    hex_lower(&digest[..EXPANSION_SEED_SIG_HEX_BYTES])
+}
+
+pub(crate) fn verify_expansion_seed_signature(
+    signature: &str,
+    secret: &str,
+    flow_id: &str,
+    path_prefix: &str,
+    entropy_nonce: &str,
+    depth: u16,
+    seed: u64,
+    hidden_count: usize,
+    segment_len: usize,
+) -> bool {
+    if signature.trim().is_empty() {
+        return false;
+    }
+    let expected = sign_expansion_seed(
+        secret,
+        flow_id,
+        path_prefix,
+        entropy_nonce,
+        depth,
+        seed,
+        hidden_count,
+        segment_len,
+    );
+    constant_time_eq(expected.as_str(), signature)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        digest, entropy_seed, issue_child_token, secret_from_env, sign, verify, verify_micro_pow,
-        MazeTokenError,
+        digest, entropy_seed, issue_child_token, secret_from_env, sign, sign_expansion_seed,
+        verify, verify_expansion_seed_signature, verify_micro_pow, MazeTokenError,
     };
 
     #[test]
     fn token_round_trip_succeeds() {
         let secret = "maze-test-secret";
         let token = issue_child_token(
-            None, "/maze/", "ipb", "uab", 120, 8, 3, "nonce", 2, 1_735_000_000,
+            None,
+            "/maze/a",
+            "/maze/",
+            "ipb",
+            "uab",
+            120,
+            8,
+            3,
+            "nonce",
+            2,
+            1_735_000_000,
         );
         let raw = sign(&token, secret);
         let parsed = verify(&raw, secret, Some(1_735_000_010)).expect("token should verify");
         assert_eq!(parsed.flow_id, token.flow_id);
         assert_eq!(parsed.depth, token.depth);
+        assert_eq!(parsed.path_digest, digest("/maze/a"));
     }
 
     #[test]
     fn token_rejects_signature_mismatch() {
         let secret = "maze-test-secret";
         let token = issue_child_token(
-            None, "/maze/", "ipb", "uab", 120, 8, 3, "nonce", 2, 1_735_000_000,
+            None,
+            "/maze/a",
+            "/maze/",
+            "ipb",
+            "uab",
+            120,
+            8,
+            3,
+            "nonce",
+            2,
+            1_735_000_000,
         );
         let mut raw = sign(&token, secret);
         raw.push('x');
@@ -290,7 +387,17 @@ mod tests {
     fn token_rejects_expired() {
         let secret = "maze-test-secret";
         let token = issue_child_token(
-            None, "/maze/", "ipb", "uab", 1, 8, 3, "nonce", 2, 1_735_000_000,
+            None,
+            "/maze/a",
+            "/maze/",
+            "ipb",
+            "uab",
+            1,
+            8,
+            3,
+            "nonce",
+            2,
+            1_735_000_000,
         );
         let raw = sign(&token, secret);
         let err = verify(&raw, secret, Some(1_735_000_100)).unwrap_err();
@@ -329,5 +436,79 @@ mod tests {
     fn secret_fallback_never_empty() {
         let secret = secret_from_env();
         assert!(!secret.trim().is_empty());
+    }
+
+    #[test]
+    fn expansion_seed_signatures_verify_and_reject_tampering() {
+        let secret = "maze-test-secret";
+        let signature = sign_expansion_seed(secret, "flow-a", "/maze/", "nonce-1", 2, 1234, 6, 16);
+        assert!(verify_expansion_seed_signature(
+            signature.as_str(),
+            secret,
+            "flow-a",
+            "/maze/",
+            "nonce-1",
+            2,
+            1234,
+            6,
+            16
+        ));
+        assert!(!verify_expansion_seed_signature(
+            signature.as_str(),
+            secret,
+            "flow-a",
+            "/maze/",
+            "nonce-1",
+            2,
+            9999,
+            6,
+            16
+        ));
+    }
+
+    #[test]
+    fn sibling_tokens_are_operation_unique_per_link_edge() {
+        let now = 1_735_000_000;
+        let parent = issue_child_token(
+            None,
+            "/maze/root",
+            "/maze/",
+            "ipb",
+            "uab",
+            120,
+            8,
+            3,
+            "nonce",
+            2,
+            now,
+        );
+        let first = issue_child_token(
+            Some(&parent),
+            "/maze/first-edge",
+            "/maze/",
+            "ipb",
+            "uab",
+            120,
+            8,
+            3,
+            "nonce",
+            2,
+            now,
+        );
+        let second = issue_child_token(
+            Some(&parent),
+            "/maze/second-edge",
+            "/maze/",
+            "ipb",
+            "uab",
+            120,
+            8,
+            3,
+            "nonce",
+            2,
+            now,
+        );
+        assert_ne!(first.operation_id, second.operation_id);
+        assert_eq!(first.prev_digest, second.prev_digest);
     }
 }

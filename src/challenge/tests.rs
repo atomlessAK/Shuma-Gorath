@@ -4,10 +4,10 @@
 #[cfg(test)]
 mod tests {
     use super::super::{
-        apply_transform, build_puzzle, generate_pair, handle_challenge_submit, make_seed_token,
-        parse_submission, parse_transform_count, render_challenge, select_transform_pair,
-        serve_challenge_page, transforms_for_count, ChallengeSeed, ChallengeSubmitOutcome, Transform,
-        handle_challenge_submit_with_outcome,
+        apply_transform, build_puzzle, generate_pair, handle_challenge_submit,
+        handle_challenge_submit_with_outcome, make_seed_token, parse_submission,
+        parse_transform_count, render_challenge, select_transform_pair, serve_challenge_page,
+        transforms_for_count, ChallengeSeed, ChallengeSubmitOutcome, Transform,
     };
     use rand::rngs::StdRng;
     use rand::SeedableRng;
@@ -63,9 +63,8 @@ mod tests {
             token_version: crate::challenge::operation_envelope::TOKEN_VERSION_V1,
             ip_bucket: "bucket".to_string(),
             ua_bucket: crate::challenge::operation_envelope::user_agent_bucket(""),
-            path_class:
-                crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
-                    .to_string(),
+            path_class: crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
+                .to_string(),
             grid_size: 4,
             active_cells: 4,
             transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
@@ -90,9 +89,8 @@ mod tests {
             token_version: crate::challenge::operation_envelope::TOKEN_VERSION_V1,
             ip_bucket: "bucket".to_string(),
             ua_bucket: crate::challenge::operation_envelope::user_agent_bucket(""),
-            path_class:
-                crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
-                    .to_string(),
+            path_class: crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
+                .to_string(),
             grid_size: 4,
             active_cells: 5,
             transforms: vec![Transform::ShiftLeft, Transform::ShiftDown],
@@ -385,9 +383,8 @@ mod tests {
             token_version: crate::challenge::operation_envelope::TOKEN_VERSION_V1,
             ip_bucket: crate::signals::ip_identity::bucket_ip("unknown"),
             ua_bucket: crate::challenge::operation_envelope::user_agent_bucket(""),
-            path_class:
-                crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
-                    .to_string(),
+            path_class: crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
+                .to_string(),
             grid_size: 4,
             active_cells: 4,
             transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
@@ -427,9 +424,8 @@ mod tests {
             token_version: crate::challenge::operation_envelope::TOKEN_VERSION_V1,
             ip_bucket: crate::signals::ip_identity::bucket_ip("unknown"),
             ua_bucket: crate::challenge::operation_envelope::user_agent_bucket(""),
-            path_class:
-                crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
-                    .to_string(),
+            path_class: crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
+                .to_string(),
             grid_size: 4,
             active_cells: 4,
             transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
@@ -466,9 +462,8 @@ mod tests {
             token_version: crate::challenge::operation_envelope::TOKEN_VERSION_V1,
             ip_bucket: crate::signals::ip_identity::bucket_ip("unknown"),
             ua_bucket: crate::challenge::operation_envelope::user_agent_bucket(""),
-            path_class:
-                crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
-                    .to_string(),
+            path_class: crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
+                .to_string(),
             grid_size: 4,
             active_cells: 7,
             transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
@@ -527,9 +522,8 @@ mod tests {
             token_version: crate::challenge::operation_envelope::TOKEN_VERSION_V1,
             ip_bucket: crate::signals::ip_identity::bucket_ip("unknown"),
             ua_bucket: crate::challenge::operation_envelope::user_agent_bucket(""),
-            path_class:
-                crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
-                    .to_string(),
+            path_class: crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
+                .to_string(),
             grid_size: 4,
             active_cells: 7,
             transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
@@ -590,9 +584,8 @@ mod tests {
             token_version: crate::challenge::operation_envelope::TOKEN_VERSION_V1,
             ip_bucket: crate::signals::ip_identity::bucket_ip("unknown"),
             ua_bucket: crate::challenge::operation_envelope::user_agent_bucket(""),
-            path_class:
-                crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
-                    .to_string(),
+            path_class: crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
+                .to_string(),
             grid_size: 4,
             active_cells: 4,
             transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
@@ -630,9 +623,8 @@ mod tests {
             token_version: crate::challenge::operation_envelope::TOKEN_VERSION_V1,
             ip_bucket: crate::signals::ip_identity::bucket_ip("unknown"),
             ua_bucket: crate::challenge::operation_envelope::user_agent_bucket("Mozilla/5.0"),
-            path_class:
-                crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
-                    .to_string(),
+            path_class: crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
+                .to_string(),
             grid_size: 4,
             active_cells: 4,
             transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
@@ -669,9 +661,8 @@ mod tests {
             token_version: crate::challenge::operation_envelope::TOKEN_VERSION_V1,
             ip_bucket: crate::signals::ip_identity::bucket_ip("unknown"),
             ua_bucket: crate::challenge::operation_envelope::user_agent_bucket(""),
-            path_class:
-                crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
-                    .to_string(),
+            path_class: crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
+                .to_string(),
             grid_size: 4,
             active_cells: 4,
             transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
@@ -711,9 +702,8 @@ mod tests {
             token_version: crate::challenge::operation_envelope::TOKEN_VERSION_V1,
             ip_bucket: crate::signals::ip_identity::bucket_ip("unknown"),
             ua_bucket: crate::challenge::operation_envelope::user_agent_bucket(""),
-            path_class:
-                crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
-                    .to_string(),
+            path_class: crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
+                .to_string(),
             grid_size: 4,
             active_cells: 4,
             transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
@@ -750,9 +740,8 @@ mod tests {
             token_version: crate::challenge::operation_envelope::TOKEN_VERSION_V1,
             ip_bucket: crate::signals::ip_identity::bucket_ip("unknown"),
             ua_bucket: crate::challenge::operation_envelope::user_agent_bucket(""),
-            path_class:
-                crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
-                    .to_string(),
+            path_class: crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
+                .to_string(),
             grid_size: 4,
             active_cells: 4,
             transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
@@ -789,9 +778,8 @@ mod tests {
             token_version: crate::challenge::operation_envelope::TOKEN_VERSION_V1,
             ip_bucket: crate::signals::ip_identity::bucket_ip("unknown"),
             ua_bucket: crate::challenge::operation_envelope::user_agent_bucket(""),
-            path_class:
-                crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
-                    .to_string(),
+            path_class: crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
+                .to_string(),
             grid_size: 4,
             active_cells: 4,
             transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
@@ -828,9 +816,8 @@ mod tests {
             token_version: crate::challenge::operation_envelope::TOKEN_VERSION_V1,
             ip_bucket: crate::signals::ip_identity::bucket_ip("unknown"),
             ua_bucket: crate::challenge::operation_envelope::user_agent_bucket(""),
-            path_class:
-                crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
-                    .to_string(),
+            path_class: crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
+                .to_string(),
             grid_size: 4,
             active_cells: 4,
             transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
@@ -881,9 +868,8 @@ mod tests {
             token_version: crate::challenge::operation_envelope::TOKEN_VERSION_V1,
             ip_bucket: crate::signals::ip_identity::bucket_ip("unknown"),
             ua_bucket: crate::challenge::operation_envelope::user_agent_bucket(""),
-            path_class:
-                crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
-                    .to_string(),
+            path_class: crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
+                .to_string(),
             grid_size: 4,
             active_cells: 4,
             transforms: vec![Transform::RotateCw90, Transform::ShiftDown],

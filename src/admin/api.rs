@@ -825,7 +825,9 @@ mod admin_config_tests {
         let post_resp = handle_admin_config(&post_req, &store, "default");
         assert_eq!(*post_resp.status(), 200u16);
         let post_json: serde_json::Value = serde_json::from_slice(post_resp.body()).unwrap();
-        let cfg = post_json.get("config").expect("config payload should exist");
+        let cfg = post_json
+            .get("config")
+            .expect("config payload should exist");
         assert_eq!(
             cfg.get("ai_policy_block_training"),
             Some(&serde_json::Value::Bool(false))
@@ -2221,11 +2223,11 @@ fn handle_admin_config(
             changed = true;
         }
         if let Some(value) = json.get("maze_rollout_phase") {
-            cfg.maze_rollout_phase = match parse_maze_rollout_phase_json("maze_rollout_phase", value)
-            {
-                Ok(phase) => phase,
-                Err(msg) => return Response::new(400, msg),
-            };
+            cfg.maze_rollout_phase =
+                match parse_maze_rollout_phase_json("maze_rollout_phase", value) {
+                    Ok(phase) => phase,
+                    Err(msg) => return Response::new(400, msg),
+                };
             changed = true;
         }
         if let Some(v) = json.get("maze_token_ttl_seconds").and_then(|v| v.as_u64()) {
@@ -2236,7 +2238,10 @@ fn handle_admin_config(
             cfg.maze_token_max_depth = v as u16;
             changed = true;
         }
-        if let Some(v) = json.get("maze_token_branch_budget").and_then(|v| v.as_u64()) {
+        if let Some(v) = json
+            .get("maze_token_branch_budget")
+            .and_then(|v| v.as_u64())
+        {
             cfg.maze_token_branch_budget = v as u8;
             changed = true;
         }
@@ -2244,7 +2249,10 @@ fn handle_admin_config(
             cfg.maze_replay_ttl_seconds = v;
             changed = true;
         }
-        if let Some(v) = json.get("maze_entropy_window_seconds").and_then(|v| v.as_u64()) {
+        if let Some(v) = json
+            .get("maze_entropy_window_seconds")
+            .and_then(|v| v.as_u64())
+        {
             cfg.maze_entropy_window_seconds = v;
             changed = true;
         }
@@ -2262,7 +2270,10 @@ fn handle_admin_config(
             cfg.maze_checkpoint_every_nodes = v;
             changed = true;
         }
-        if let Some(v) = json.get("maze_checkpoint_every_ms").and_then(|v| v.as_u64()) {
+        if let Some(v) = json
+            .get("maze_checkpoint_every_ms")
+            .and_then(|v| v.as_u64())
+        {
             cfg.maze_checkpoint_every_ms = v;
             changed = true;
         }
@@ -2350,11 +2361,11 @@ fn handle_admin_config(
             changed = true;
         }
         if let Some(value) = json.get("maze_seed_provider") {
-            cfg.maze_seed_provider = match parse_maze_seed_provider_json("maze_seed_provider", value)
-            {
-                Ok(provider) => provider,
-                Err(msg) => return Response::new(400, msg),
-            };
+            cfg.maze_seed_provider =
+                match parse_maze_seed_provider_json("maze_seed_provider", value) {
+                    Ok(provider) => provider,
+                    Err(msg) => return Response::new(400, msg),
+                };
             changed = true;
         }
         if let Some(v) = json
@@ -2378,7 +2389,10 @@ fn handle_admin_config(
             cfg.maze_seed_refresh_max_sources = v as u32;
             changed = true;
         }
-        if let Some(v) = json.get("maze_seed_metadata_only").and_then(|v| v.as_bool()) {
+        if let Some(v) = json
+            .get("maze_seed_metadata_only")
+            .and_then(|v| v.as_bool())
+        {
             cfg.maze_seed_metadata_only = v;
             changed = true;
         }
@@ -3107,7 +3121,9 @@ where
                 Ok(sources) => sources,
                 Err(err) => return Response::new(400, err),
             };
-            if let Err(err) = crate::maze::seeds::save_operator_sources(store, &cfg, sources.clone()) {
+            if let Err(err) =
+                crate::maze::seeds::save_operator_sources(store, &cfg, sources.clone())
+            {
                 return Response::new(400, err);
             }
             log_event(

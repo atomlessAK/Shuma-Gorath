@@ -33,10 +33,7 @@ fn is_search_engine_user_agent(cfg: &crate::config::Config, user_agent: &str) ->
         .any(|needle| normalized.contains(needle))
 }
 
-fn medium_suspicion_score(
-    cfg: &crate::config::Config,
-    suspicion_score: u8,
-) -> bool {
+fn medium_suspicion_score(cfg: &crate::config::Config, suspicion_score: u8) -> bool {
     suspicion_score >= cfg.challenge_risk_threshold && suspicion_score < cfg.botness_maze_threshold
 }
 
@@ -53,7 +50,9 @@ fn is_html_like_response(response: &Response) -> bool {
     let raw = response.body();
     raw.starts_with(b"<html")
         || raw.starts_with(b"<!DOCTYPE html")
-        || raw.windows(5).any(|window| window.eq_ignore_ascii_case(b"<html"))
+        || raw
+            .windows(5)
+            .any(|window| window.eq_ignore_ascii_case(b"<html"))
 }
 
 fn covert_decoy_href(
@@ -66,8 +65,12 @@ fn covert_decoy_href(
     let ip_bucket = crate::signals::ip_identity::bucket_ip(ip);
     let ua_bucket = token::ua_bucket(user_agent);
     let nonce = token::flow_id_from(ip_bucket.as_str(), ua_bucket.as_str(), request_path, now);
+    let path_digest = token::digest(format!("{request_path}:{ip_bucket}:{now}").as_str());
+    let segment = &path_digest[..12];
+    let decoy_path = format!("/maze/decoy/{segment}");
     let child = token::issue_child_token(
         None,
+        decoy_path.as_str(),
         "/maze/",
         ip_bucket.as_str(),
         ua_bucket.as_str(),
@@ -79,9 +82,7 @@ fn covert_decoy_href(
         now,
     );
     let signed = token::sign(&child, token::secret_from_env().as_str());
-    let path_digest = token::digest(format!("{request_path}:{ip_bucket}:{now}").as_str());
-    let segment = &path_digest[..12];
-    format!("/maze/decoy/{segment}?mt={signed}&dc=1")
+    format!("{decoy_path}?mt={signed}&dc=1")
 }
 
 fn inject_decoy_html(html: &str, href: &str) -> String {

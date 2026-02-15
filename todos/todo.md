@@ -117,6 +117,30 @@ Completion rule for every paper TODO below: capture key findings, map to `self_h
 - [x] MZ-PV4: Add dashboard UX affordance in the Maze config pane ("Preview Maze") that opens the admin preview safely and clearly indicates auth/session requirements.
 - [x] MZ-PV5: Add deterministic tests for preview safety guarantees (route auth/read-only behavior, no-live-token markers, and no state mutation) and update docs/API references.
 
+### Stage 2.5 follow-up: Maze excellence shortfall closure (research-first)
+- [x] MZ-X0.R Research optimal client-side branch generation architecture (Web Worker-first, compact signed seed bootstrap, verification cadence) using current state-of-the-art anti-bot/anti-fingerprinting references; publish decision memo with host-cost, attacker-cost, and UX tradeoffs.
+- [x] MZ-X0.I Implement Web Worker-based branch generation from compact signed seed for suspicious maze tiers, with server verification protocol and deterministic fallback when worker/proof path fails.
+- [x] MZ-X1.R Research optimal signed traversal-token semantics (path commitment granularity, operation-id uniqueness, chain integrity, replay windows, branch budget accounting) and select robust envelope design.
+- [x] MZ-X1.I Enforce exact per-link path commitment and full chain constraints in runtime token validation (including `branch_budget` and `prev_digest`) with deterministic fallback and compatibility migration.
+- [x] MZ-X2.R Research low-bandwidth maze response delivery patterns (static shell + versioned assets, compression, cache partitioning, anti-fingerprint constraints under no-store policy) and choose target payload budget.
+- [x] MZ-X2.I Replace per-hop full inline HTML/CSS/JS with a compact shell + reusable static assets where safe, while preserving deception variability and no-index semantics; include explicit hashed asset/version strategy and cache policy acceptance criteria (for example immutable long-cache static assets with controlled cache-busting on deploy).
+- [x] MZ-X3.R Research concealed link-delivery strategies that preserve attacker cost asymmetry (progressive on-demand expansion, encrypted/obfuscated manifests, proof-gated link issuance) without obvious giveaway markers.
+- [x] MZ-X3.I Stop shipping the full hidden-link set in bootstrap JSON; move to proof/checkpoint-gated progressive link issuance so bandwidth and traversal state are requester-amortized.
+- [x] MZ-X4.R Research host-cost minimization strategies for per-hop maze serving (pre-generation pools, fragment caches, bounded KV write coalescing, lazy state persistence) and pick target CPU/write budgets.
+- [x] MZ-X4.I Reduce per-hop host synthesis and write cost by implementing selected caching/pre-generation/write-coalescing strategy with hard budget guardrails.
+- [x] MZ-X5.R Research operation-id construction and sibling-token uniqueness patterns to prevent cross-link token reuse and branch-collapse artifacts.
+- [x] MZ-X5.I Issue unique child tokens per link edge (operation/path-bound), enforce single-edge replay semantics, and add regression tests for sibling traversal correctness.
+- [x] MZ-X6.R Research proactive overload controls for deception systems (pre-render admission control, queue/latency-aware throttles, deterministic degrade ladders) to avoid post-render-only cap enforcement.
+- [x] MZ-X6.I Add pre-render admission and deterministic degrade controls so byte/time caps are enforced proactively, not only after render cost is incurred.
+- [x] MZ-X7.R Research measurable attacker-vs-defender cost models for maze/tarpit systems (CPU, bandwidth, latency, energy) and define project SLO/SLA thresholds and acceptance tests.
+- [x] MZ-X7.I Add repeatable benchmark harness + CI gates that report host and attacker-side cost deltas and fail regressions against defined asymmetry targets.
+- [x] MZ-X8.R Research client-side compute fairness controls (battery/thermal sensitivity, mobile safeguards, main-thread impact) for deep-tier micro-PoW and JS expansion.
+- [x] MZ-X8.I Move deep-tier proof and expansion compute fully off the main thread, add adaptive safeguards for constrained clients, and validate no significant human UX regression.
+- [x] MZ-X9.R Research deception-page styling minimalism: quantify anti-fingerprint benefit vs byte/energy cost of CSS, determine when no-CSS is safe, and define tiered styling policy by botness confidence + traversal depth.
+- [x] MZ-X9.I Implement adaptive maze styling tiers: minified external shared stylesheet at low/medium suspicion, ultra-minimal style at high suspicion, and optional no-CSS templates at high-confidence deep traversal before ban threshold; tier selection must key on botness score + traversal depth + violation history, and no-CSS variants must remain plausible machine-oriented surfaces (not obviously broken or synthetic giveaway pages).
+- [x] MZ-X10.R Research confidence-accumulation escalation models for deception systems (stacked violation semantics, false-positive controls, rollback criteria) to stop expensive maze serving earlier without premature giveaway.
+- [x] MZ-X10.I Add pre-ban high-confidence early-escalation matrix (for example replay + binding mismatch + checkpoint/proof failures) that deterministically degrades from maze serving to lower-cost challenge/block actions.
+
 ### Stage 3: Bounded slow-drip tarpit
 - [ ] TP-C1: Reuse shared deception token primitives from maze scope (`MZ-2`) for tarpit progression; do not introduce a tarpit-only token format.
 - [ ] TP-C2: Reuse shared budget/fallback primitives from maze scope (`MZ-7`) for tarpit limits and deterministic fallback; do not fork budget logic by mode.

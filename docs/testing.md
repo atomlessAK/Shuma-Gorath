@@ -3,9 +3,10 @@
 ## 🐙 Quick Commands (Official)
 
 ```bash
-make test             # Full umbrella suite: unit + Spin integration + dashboard e2e (waits for existing Spin readiness)
+make test             # Full umbrella suite: unit + maze benchmark + Spin integration + dashboard e2e
 make test-unit        # Unit tests only (native Rust)
 make unit-test        # alias for make test-unit
+make test-maze-benchmark # Deterministic maze asymmetry benchmark gate
 make test-integration # Integration tests only (waits for existing Spin readiness)
 make integration-test # alias for make test-integration
 make test-coverage    # Unit coverage to lcov.info (requires cargo-llvm-cov)
@@ -17,7 +18,7 @@ Notes:
 - Use Makefile commands only (avoid running scripts directly)
 - Integration tests require a running Spin server (`make dev`); test targets do not start Spin.
 - `make test`, `make test-integration`, and `make test-dashboard-e2e` wait for `/health` readiness before failing.
-- `make test` includes Playwright dashboard e2e and fails if any stage cannot run.
+- `make test` includes maze asymmetry benchmark gating plus Playwright dashboard e2e and fails if any stage cannot run.
 
 ## 🐙 Test Layers
 

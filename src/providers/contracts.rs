@@ -109,6 +109,7 @@ pub(crate) trait MazeTarpitProvider {
         path: &str,
         event_reason: &str,
         event_outcome: &str,
+        botness_hint: Option<u8>,
     ) -> Response;
 
     fn maybe_handle_tarpit(

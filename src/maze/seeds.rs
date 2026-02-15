@@ -150,7 +150,10 @@ fn normalized_source(source: OperatorSeedSource) -> Result<OperatorSeedSource, S
         .chars()
         .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
     {
-        return Err(format!("seed source id '{}' has invalid characters", source.id));
+        return Err(format!(
+            "seed source id '{}' has invalid characters",
+            source.id
+        ));
     }
 
     if let Some(url) = source.url.as_deref() {
@@ -238,8 +241,8 @@ pub(crate) fn save_operator_sources(
         .into_iter()
         .map(normalized_source)
         .collect::<Result<Vec<_>, _>>()?;
-    let payload =
-        serde_json::to_vec(&normalized).map_err(|_| "failed to serialize seed sources".to_string())?;
+    let payload = serde_json::to_vec(&normalized)
+        .map_err(|_| "failed to serialize seed sources".to_string())?;
     store
         .set(OPERATOR_SOURCES_KEY, payload.as_slice())
         .map_err(|_| "failed to persist seed sources".to_string())
@@ -307,7 +310,10 @@ fn refresh_operator_corpus_impl(
     if terms.is_empty() {
         return Err("no metadata terms extracted from operator seed sources".to_string());
     }
-    let terms = terms.into_iter().take(MAX_EXTRACTED_TERMS).collect::<Vec<_>>();
+    let terms = terms
+        .into_iter()
+        .take(MAX_EXTRACTED_TERMS)
+        .collect::<Vec<_>>();
     let stored = StoredSeedCorpus {
         version: now_secs,
         refreshed_at: now_secs,
@@ -316,8 +322,8 @@ fn refresh_operator_corpus_impl(
         source_count: accepted_sources,
         terms: terms.clone(),
     };
-    let raw =
-        serde_json::to_vec(&stored).map_err(|_| "failed to serialize seed corpus cache".to_string())?;
+    let raw = serde_json::to_vec(&stored)
+        .map_err(|_| "failed to serialize seed corpus cache".to_string())?;
     store
         .set(OPERATOR_CORPUS_KEY, raw.as_slice())
         .map_err(|_| "failed to persist seed corpus cache".to_string())?;
@@ -391,7 +397,9 @@ pub(crate) fn load_seed_corpus(
 
 #[cfg(test)]
 mod tests {
-    use super::{load_seed_corpus, manual_refresh_operator_corpus, save_operator_sources, OperatorSeedSource};
+    use super::{
+        load_seed_corpus, manual_refresh_operator_corpus, save_operator_sources, OperatorSeedSource,
+    };
     use crate::maze::state::MazeStateStore;
     use std::collections::HashMap;
     use std::sync::Mutex;
@@ -443,8 +451,8 @@ mod tests {
             }],
         )
         .expect("seed sources should save");
-        let refreshed =
-            manual_refresh_operator_corpus(&store, &cfg, 1_735_000_000).expect("refresh should pass");
+        let refreshed = manual_refresh_operator_corpus(&store, &cfg, 1_735_000_000)
+            .expect("refresh should pass");
         assert!(refreshed.terms.iter().any(|term| term == "routing"));
         assert!(!refreshed.terms.iter().any(|term| term == "private"));
     }

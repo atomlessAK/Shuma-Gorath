@@ -38,18 +38,24 @@ Current Stage 2 behavior combines polymorphic rendering, signed traversal state,
    Variant selection uses HMAC-backed entropy inputs (path, IP bucket, UA bucket, short entropy window, and flow nonce), not path-only deterministic hashes.
 3. **Signed traversal links**
    Maze links carry signed `mt` traversal tokens with TTL/depth/branch budget/previous-node binding and replay tracking.
-4. **Client-side expansion + checkpoints**
-   Suspicious-tier traversal renders visible + hidden link sets and emits checkpoint state via `/maze/checkpoint` to validate ongoing traversal cadence.
-5. **No-JS bounded fallback**
+4. **Compact shell + shared assets**
+   Maze pages now ship a compact HTML shell and reuse versioned static maze assets (`/maze/assets/...`) instead of full inline CSS/JS on every hop.
+5. **Client-side expansion + checkpoints**
+   Suspicious-tier traversal serves server-visible links only; hidden links are issued progressively via `/maze/issue-links` from a compact signed seed after checkpoint-aware validation.
+6. **Signed client expansion seed**
+   Worker expansion uses a signed bootstrap seed envelope (`seed` + `seed_sig`) bound to flow/path/depth/entropy, and server issuance rejects tampering.
+7. **No-JS bounded fallback**
    Missing checkpoints allow bounded no-JS progress up to configured depth, then deterministically trigger fallback.
-6. **Adaptive deep-tier micro-PoW**
+8. **Adaptive deep-tier micro-PoW**
    Optional per-link micro-PoW is required at deeper traversal depths, verified server-side via token-bound nonce checks.
-7. **Pluggable seed corpora**
-   Content seeding supports internal corpus defaults and operator-fed sources with metadata-first extraction and refresh/rate-limit guardrails.
-8. **Strict budget governor**
-   Maze runtime enforces global and per-IP-bucket concurrency caps plus response byte/time caps.
-9. **Covert decoys in non-maze HTML**
-   Medium-suspicion challenge responses can include hidden decoy links (`dc=1`) to detect covert decoy-follow behavior while preserving visible UX.
+9. **Worker/off-main-thread compute safeguards**
+   Deep-tier proof and expansion work runs in a Web Worker with constrained-device safeguards (reduced expansion/proof work) and deterministic navigation fallback when proof cannot be produced.
+10. **Pluggable seed corpora**
+    Content seeding supports internal corpus defaults and operator-fed sources with metadata-first extraction and refresh/rate-limit guardrails.
+11. **Strict budget governor**
+    Maze runtime enforces global and per-IP-bucket concurrency caps plus proactive response byte/time pre-admission limits.
+12. **Covert decoys in non-maze HTML**
+    Medium-suspicion challenge responses can include hidden decoy links (`dc=1`) to detect covert decoy-follow behavior while preserving visible UX.
 
 ### Content Sources and Safety Rules
 
@@ -119,6 +125,12 @@ Env-only key:
 - `GET /admin/maze/seeds` - Lists operator seed sources and cached corpus snapshot.
 - `POST /admin/maze/seeds` - Upserts operator seed sources.
 - `POST /admin/maze/seeds/refresh` - Triggers manual operator-corpus refresh.
+- `POST /maze/issue-links` - Proof/checkpoint-gated progressive hidden-link issuance endpoint (used by maze worker path).
+
+Public static maze assets:
+- `GET /maze/assets/maze.<hash>.min.css`
+- `GET /maze/assets/maze.<hash>.min.js`
+- `GET /maze/assets/maze-worker.<hash>.min.js`
 
 Preview safety guarantees:
 - links stay inside `/admin/maze/preview?path=...`,
@@ -135,6 +147,11 @@ Preview safety guarantees:
 - `bot_defence_maze_budget_outcomes_total{outcome=...}` tracks budget acquisition/saturation/cap outcomes.
 - `bot_defence_maze_proof_outcomes_total{outcome=...}` tracks micro-PoW proof requirements/outcomes.
 - `bot_defence_maze_entropy_variants_total{variant,provider,metadata_only}` tracks entropy-family/provider use.
+
+## 🐙 Stage 2.5 Guardrails
+
+- `make test-maze-benchmark` runs deterministic asymmetry guardrails and prints benchmark deltas (`avg_page_bytes`, `host_set_ops`, `attacker_requests`, `attacker_pow_iterations`).
+- `make test` now includes this benchmark gate and fails on host-cost or asymmetry regressions.
 
 ## 🐙 Notes
 

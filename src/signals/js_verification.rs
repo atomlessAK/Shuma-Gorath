@@ -104,13 +104,12 @@ pub fn inject_js_challenge(
     let cdp_script = crate::signals::cdp::get_cdp_detection_script();
 
     if pow_enabled {
-        let challenge =
-            crate::challenge::pow::issue_pow_challenge(
-                ip,
-                user_agent,
-                pow_difficulty,
-                pow_ttl_seconds,
-            );
+        let challenge = crate::challenge::pow::issue_pow_challenge(
+            ip,
+            user_agent,
+            pow_difficulty,
+            pow_ttl_seconds,
+        );
         let html = format!(
             r#"
         <html><head><script>{cdp_script}</script></head><body>

@@ -1,8 +1,8 @@
 use spin_sdk::http::Method;
 
 use crate::{
-    extract_health_client_ip, forwarded_ip_trusted, health_secret_authorized,
-    maze_response, response_with_optional_debug_headers, should_bypass_expensive_bot_checks_for_static,
+    extract_health_client_ip, forwarded_ip_trusted, health_secret_authorized, maze_response,
+    response_with_optional_debug_headers, should_bypass_expensive_bot_checks_for_static,
 };
 
 #[test]
@@ -57,8 +57,14 @@ fn maze_response_never_exposes_identifying_headers() {
     });
 
     assert_eq!(*resp.status(), 200u16);
-    assert!(!crate::test_support::has_header(&resp, "X-Shuma-Maze-Variant"));
-    assert!(!crate::test_support::has_header(&resp, "X-Shuma-Maze-Token"));
+    assert!(!crate::test_support::has_header(
+        &resp,
+        "X-Shuma-Maze-Variant"
+    ));
+    assert!(!crate::test_support::has_header(
+        &resp,
+        "X-Shuma-Maze-Token"
+    ));
     assert!(!crate::test_support::has_header(
         &resp,
         "X-Shuma-Maze-Seed-Provider"
@@ -344,11 +350,8 @@ fn static_bypass_detects_obvious_asset_paths_for_get_and_head() {
 
 #[test]
 fn static_bypass_excludes_admin_and_non_get_requests() {
-    let admin_like = crate::test_support::request_with_method_and_headers(
-        Method::Get,
-        "/admin/app.js",
-        &[],
-    );
+    let admin_like =
+        crate::test_support::request_with_method_and_headers(Method::Get, "/admin/app.js", &[]);
     assert!(!should_bypass_expensive_bot_checks_for_static(
         &admin_like,
         "/admin/app.js"

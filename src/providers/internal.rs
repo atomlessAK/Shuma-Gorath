@@ -144,6 +144,7 @@ impl MazeTarpitProvider for InternalMazeTarpitProvider {
         path: &str,
         event_reason: &str,
         event_outcome: &str,
+        botness_hint: Option<u8>,
     ) -> Response {
         crate::serve_maze_with_tracking(
             req,
@@ -154,6 +155,7 @@ impl MazeTarpitProvider for InternalMazeTarpitProvider {
             path,
             event_reason,
             event_outcome,
+            botness_hint,
         )
     }
 }

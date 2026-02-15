@@ -39,6 +39,10 @@ If `SHUMA_HEALTH_SECRET` is configured, `/health` also requires:
 - `POST /pow/verify` - PoW verification (sets js_verified cookie)
 - `POST /cdp-report` - Client automation reports (JSON)
 - `POST /maze/checkpoint` - Maze traversal checkpoint submission
+- `POST /maze/issue-links` - Maze progressive hidden-link issuance (signed seed + checkpoint gated)
+- `GET /maze/assets/maze.<hash>.min.css` - Shared maze stylesheet asset (immutable cache)
+- `GET /maze/assets/maze.<hash>.min.js` - Shared maze runtime script asset (immutable cache)
+- `GET /maze/assets/maze-worker.<hash>.min.js` - Maze worker asset (expansion + micro-PoW off-main-thread)
 - `GET /robots.txt` - robots.txt (configurable)
 - `GET /dashboard/...` - Dashboard static assets
 - `GET /challenge/puzzle` - Dev-only puzzle challenge page (`test_mode=true` in runtime config)
@@ -54,6 +58,23 @@ Output encoding:
 - `0` = empty
 - `1` = black cell
 - `2` = pink cell
+
+### 🐙 Maze Progressive Link Issuance
+
+`POST /maze/issue-links` expects JSON fields:
+
+- `parent_token` (current page `mt` token)
+- `flow_id`, `entropy_nonce`, `path_prefix`
+- `seed`, `seed_sig`, `hidden_count`, `segment_len`
+- optional `requested_hidden_count` (must be <= signed hidden count)
+- optional `candidates` (worker-generated candidate metadata)
+
+Behavior:
+
+- request is binding-validated against parent token (`ip_bucket`, `ua_bucket`, path prefix),
+- expansion seed signature is verified before issuing links,
+- checkpoint posture is enforced before deep hidden issuance,
+- response returns `{"links":[...]}` with signed child `mt` tokens (and optional `pow_difficulty`).
 
 ### 🐙 Challenge Seed Lifecycle
 

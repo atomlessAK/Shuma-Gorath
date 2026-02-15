@@ -58,6 +58,7 @@ mod tests {
                 self.ip.as_str(),
                 self.ua.as_str(),
                 path,
+                None,
             )
         }
 
@@ -87,12 +88,17 @@ mod tests {
     }
 
     fn first_maze_link(html: &str) -> Option<String> {
-        let marker = r#"href="/maze/"#;
-        let idx = html.find(marker)?;
-        let start = idx + 6; // start at /maze...
-        let rest = &html[start..];
-        let end = rest.find('"')?;
-        Some(rest[..end].to_string())
+        for fragment in html.split("<a ") {
+            if !fragment.contains("data-link-kind=\"maze\"") {
+                continue;
+            }
+            let href_idx = fragment.find("href=\"")?;
+            let start = href_idx + 6;
+            let rest = &fragment[start..];
+            let end = rest.find('"')?;
+            return Some(rest[..end].to_string());
+        }
+        None
     }
 
     fn mt_token_from_uri(uri: &str) -> Option<String> {
@@ -159,7 +165,8 @@ mod tests {
         for _ in 0..8 {
             match harness.serve(uri.as_str()) {
                 MazeServeDecision::Serve(page) => {
-                    uri = first_maze_link(page.html.as_str()).expect("expected navigable maze link");
+                    uri =
+                        first_maze_link(page.html.as_str()).expect("expected navigable maze link");
                 }
                 MazeServeDecision::Fallback(reason) => {
                     assert_eq!(reason, MazeFallbackReason::CheckpointMissing);
@@ -207,7 +214,8 @@ mod tests {
         let MazeServeDecision::Serve(entry_page) = entry else {
             panic!("source crawler should get maze entry page");
         };
-        let tokenized_link = first_maze_link(entry_page.html.as_str()).expect("tokenized maze link");
+        let tokenized_link =
+            first_maze_link(entry_page.html.as_str()).expect("tokenized maze link");
 
         let bypass_attempt = second_harness.serve(tokenized_link.as_str());
         match bypass_attempt {

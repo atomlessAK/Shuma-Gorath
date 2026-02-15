@@ -17,10 +17,19 @@ pub(crate) struct AdvancedMazeRenderOptions {
     pub breadcrumb: String,
     pub paragraphs: Vec<String>,
     pub links: Vec<AdvancedMazeLink>,
-    pub server_visible_links: usize,
     pub bootstrap_json: String,
     pub variant_layout: u8,
     pub variant_palette: u8,
+    pub style_tier: MazeStyleTier,
+    pub style_sheet_url: Option<String>,
+    pub script_url: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MazeStyleTier {
+    Full,
+    Lite,
+    Machine,
 }
 
 /// Generate a maze page HTML response.
@@ -199,24 +208,28 @@ fn palette(variant_palette: u8) -> (&'static str, &'static str, &'static str, &'
     }
 }
 
-fn escape_json(value: &str) -> String {
-    value
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r")
+fn escape_script_json(value: &str) -> String {
+    value.replace("</", "<\\/")
 }
 
 pub(crate) fn generate_polymorphic_maze_page(options: &AdvancedMazeRenderOptions) -> String {
-    let (header_bg, header_fg, accent, panel_bg) = palette(options.variant_palette);
+    let (_header_bg, _header_fg, _accent, _panel_bg) = palette(options.variant_palette);
     let layout_class = match options.variant_layout % 3 {
         0 => "layout-grid",
         1 => "layout-stacked",
         _ => "layout-ribbon",
     };
-
-    let server_visible = options.server_visible_links.min(options.links.len());
-    let visible_links = &options.links[..server_visible];
+    let style_class = match options.style_tier {
+        MazeStyleTier::Full => "style-full",
+        MazeStyleTier::Lite => "style-lite",
+        MazeStyleTier::Machine => "style-machine",
+    };
+    let mut head_assets = String::new();
+    if let Some(url) = &options.style_sheet_url {
+        head_assets.push_str(format!(r#"<link rel="stylesheet" href="{}">"#, url).as_str());
+    }
+    head_assets
+        .push_str(format!(r#"<script defer src="{}"></script>"#, options.script_url).as_str());
 
     let mut html = format!(
         r#"<!DOCTYPE html>
@@ -226,95 +239,10 @@ pub(crate) fn generate_polymorphic_maze_page(options: &AdvancedMazeRenderOptions
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{}</title>
     <meta name="robots" content="noindex,nofollow,noarchive">
-    <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{
-            font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
-            min-height: 100vh;
-            padding: 24px;
-            background: radial-gradient(circle at 15% 15%, #0b1020 0%, #020617 70%);
-            color: #111827;
-        }}
-        .wrap {{
-            max-width: 1120px;
-            margin: 0 auto;
-            background: #ffffff;
-            border-radius: 16px;
-            overflow: hidden;
-            border: 1px solid #e5e7eb;
-            box-shadow: 0 28px 60px rgba(2, 6, 23, 0.35);
-        }}
-        header {{
-            background: {};
-            color: {};
-            padding: 24px 30px;
-        }}
-        header h1 {{ font-size: 1.7rem; letter-spacing: 0.01em; }}
-        .crumb {{ margin-top: 8px; opacity: 0.82; font-size: 0.9rem; }}
-        .content {{ padding: 28px; background: {}; }}
-        .description {{
-            background: #fff;
-            border-left: 4px solid {};
-            border-radius: 8px;
-            padding: 14px;
-            line-height: 1.7;
-            margin-bottom: 14px;
-        }}
-        .nav-grid {{
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-            gap: 14px;
-            margin-top: 16px;
-        }}
-        .layout-stacked .nav-grid {{
-            grid-template-columns: 1fr;
-        }}
-        .layout-ribbon .nav-grid {{
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        }}
-        .nav-card {{
-            display: block;
-            text-decoration: none;
-            color: inherit;
-            border: 1px solid #e5e7eb;
-            border-radius: 10px;
-            background: #ffffff;
-            padding: 16px;
-            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-        }}
-        .nav-card:hover {{
-            transform: translateY(-2px);
-            border-color: {};
-            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.15);
-        }}
-        .nav-card h3 {{ color: #0f172a; font-size: 0.98rem; margin-bottom: 6px; }}
-        .nav-card p {{ color: #475569; font-size: 0.86rem; line-height: 1.5; }}
-        .nav-card .arrow {{ margin-top: 8px; color: {}; font-size: 0.84rem; }}
-        .pow-hint {{
-            margin-top: 6px;
-            font-size: 0.75rem;
-            color: #7c2d12;
-            background: #ffedd5;
-            border-radius: 999px;
-            display: inline-block;
-            padding: 2px 8px;
-        }}
-        .hidden-link {{
-            position: absolute !important;
-            width: 1px;
-            height: 1px;
-            margin: -1px;
-            padding: 0;
-            border: 0;
-            clip: rect(0 0 0 0);
-            clip-path: inset(50%);
-            overflow: hidden;
-            white-space: nowrap;
-        }}
-    </style>
+    {}
 </head>
-<body>
-    <div class="wrap {}">
+<body class="{}">
+    <div class="wrap {} {}">
         <header>
             <h1>{}</h1>
             <div class="crumb">{}</div>
@@ -322,13 +250,10 @@ pub(crate) fn generate_polymorphic_maze_page(options: &AdvancedMazeRenderOptions
         <div class="content">
 "#,
         options.title,
-        header_bg,
-        header_fg,
-        panel_bg,
-        accent,
-        accent,
-        accent,
+        head_assets,
+        style_class,
         layout_class,
+        style_class,
         options.title,
         options.breadcrumb
     );
@@ -341,10 +266,12 @@ pub(crate) fn generate_polymorphic_maze_page(options: &AdvancedMazeRenderOptions
         ));
     }
 
-    html.push_str(r#"            <div class="nav-grid" id="maze-nav-grid">
-"#);
+    html.push_str(
+        r#"            <div class="nav-grid" id="maze-nav-grid">
+"#,
+    );
 
-    for link in visible_links {
+    for link in &options.links {
         let pow_hint = link
             .pow_difficulty
             .map(|difficulty| {
@@ -376,105 +303,14 @@ pub(crate) fn generate_polymorphic_maze_page(options: &AdvancedMazeRenderOptions
 "#,
     );
     html.push_str(
-        r#"
-    </div>
-    <script>
-        (function () {
-"#,
+        r#"    </div>
+    <script id="maze-bootstrap" type="application/json">"#,
     );
-    html.push_str("            const bootstrap = JSON.parse(\"");
-    html.push_str(escape_json(options.bootstrap_json.as_str()).as_str());
+    html.push_str(escape_script_json(options.bootstrap_json.as_str()).as_str());
     html.push_str(
-        r#"\");
-            const navGrid = document.getElementById('maze-nav-grid');
-            if (!bootstrap || !Array.isArray(bootstrap.hidden_links) || !navGrid) {
-                return;
-            }
-
-            async function sendCheckpoint() {
-                if (!bootstrap.checkpoint_token) return;
-                try {
-                    await fetch('/maze/checkpoint', {{
-                        method: 'POST',
-                        headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify({{
-                            token: bootstrap.checkpoint_token,
-                            flow_id: bootstrap.flow_id,
-                            depth: bootstrap.depth,
-                            checkpoint_reason: 'page_load'
-                        }})
-                    }});
-                }} catch (_e) {{
-                    // Best effort only.
-                }}
-            }
-
-            function attachPowHandler(anchor) {
-                const difficultyRaw = anchor.getAttribute('data-pow-difficulty');
-                if (!difficultyRaw) return;
-                const difficulty = parseInt(difficultyRaw, 10);
-                if (!Number.isFinite(difficulty) || difficulty <= 0) return;
-
-                anchor.addEventListener('click', async function (event) {
-                    if (anchor.dataset.powReady === '1') return;
-                    event.preventDefault();
-                    anchor.dataset.powReady = '0';
-
-                    const href = new URL(anchor.href, window.location.origin);
-                    const token = href.searchParams.get('mt') || '';
-                    let nonce = 0;
-                    const maxIterations = 600000;
-
-                    while (nonce < maxIterations) {
-                        const raw = new TextEncoder().encode(`${token}:${nonce}`);
-                        const hash = await crypto.subtle.digest('SHA-256', raw);
-                        const bytes = new Uint8Array(hash);
-                        let bits = difficulty;
-                        let ok = true;
-                        for (let i = 0; i < bytes.length; i += 1) {
-                            if (bits <= 0) break;
-                            const value = bytes[i];
-                            if (bits >= 8) {
-                                if (value !== 0) {{ ok = false; break; }}
-                                bits -= 8;
-                            } else {
-                                const mask = 0xff << (8 - bits);
-                                if ((value & mask) !== 0) {{ ok = false; }}
-                                break;
-                            }
-                        }
-                        if (ok) {{
-                            href.searchParams.set('mpn', String(nonce));
-                            anchor.dataset.powReady = '1';
-                            window.location.assign(href.toString());
-                            return;
-                        }}
-                        nonce += 1;
-                    }
-                    anchor.dataset.powReady = '0';
-                });
-            }
-
-            for (const hidden of bootstrap.hidden_links) {
-                const link = document.createElement('a');
-                link.href = hidden.href;
-                link.className = 'hidden-link';
-                link.textContent = hidden.text || 'detail';
-                if (hidden.pow_difficulty) {
-                    link.setAttribute('data-pow-difficulty', String(hidden.pow_difficulty));
-                }
-                navGrid.appendChild(link);
-                attachPowHandler(link);
-            }
-
-            const anchors = navGrid.querySelectorAll('a[data-pow-difficulty]');
-            anchors.forEach(attachPowHandler);
-            sendCheckpoint();
-        })();
-    </script>
+        r#"</script>
 </body>
-</html>
-"#,
+</html>"#,
     );
 
     html

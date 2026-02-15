@@ -182,6 +182,13 @@ These keys are seeded into KV and loaded from KV at runtime.
 
 Recommended promotion order is `instrument -> advisory -> enforce` with explicit rollback criteria.
 
+## 🐙 Maze Stage 2.5 Runtime Notes
+
+- Maze pages now use a compact HTML shell with versioned shared assets under `/maze/assets/...` (immutable cache policy).
+- Hidden-link expansion is progressive via `POST /maze/issue-links` using signed expansion-seed envelopes (`seed` + `seed_sig`) instead of shipping full hidden-link sets in bootstrap payloads.
+- Branch-budget controls now bound progressive hidden-link issuance volume per traversal token.
+- Deep-tier proof/expansion compute executes in a Web Worker, with constrained-device safeguards that reduce requested expansion/proof work before hard fallback.
+
 ## 🐙 Static Resource Bypass Defaults
 
 To avoid expensive bot checks on obvious static resources, Shuma bypasses JS/botness/geo challenge paths by default for:

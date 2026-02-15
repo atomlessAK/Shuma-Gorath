@@ -714,7 +714,9 @@ static DEFAULT_CONFIG: Lazy<Config> = Lazy::new(|| {
         maze_path_entropy_segment_len: defaults_u8("SHUMA_MAZE_PATH_ENTROPY_SEGMENT_LEN"),
         maze_covert_decoys_enabled: defaults_bool("SHUMA_MAZE_COVERT_DECOYS_ENABLED"),
         maze_seed_provider: default_maze_seed_provider(),
-        maze_seed_refresh_interval_seconds: defaults_u64("SHUMA_MAZE_SEED_REFRESH_INTERVAL_SECONDS"),
+        maze_seed_refresh_interval_seconds: defaults_u64(
+            "SHUMA_MAZE_SEED_REFRESH_INTERVAL_SECONDS",
+        ),
         maze_seed_refresh_rate_limit_per_hour: defaults_u32(
             "SHUMA_MAZE_SEED_REFRESH_RATE_LIMIT_PER_HOUR",
         ),
@@ -1138,8 +1140,9 @@ fn clamp_config_values(cfg: &mut Config) {
     cfg.maze_max_links = cfg.maze_max_links.clamp(1, 64);
     cfg.maze_max_paragraphs = cfg.maze_max_paragraphs.clamp(1, 24);
     cfg.maze_path_entropy_segment_len = cfg.maze_path_entropy_segment_len.clamp(8, 64);
-    cfg.maze_seed_refresh_interval_seconds =
-        cfg.maze_seed_refresh_interval_seconds.clamp(60, 7 * 24 * 3600);
+    cfg.maze_seed_refresh_interval_seconds = cfg
+        .maze_seed_refresh_interval_seconds
+        .clamp(60, 7 * 24 * 3600);
     cfg.maze_seed_refresh_rate_limit_per_hour =
         cfg.maze_seed_refresh_rate_limit_per_hour.clamp(1, 1000);
     cfg.maze_seed_refresh_max_sources = cfg.maze_seed_refresh_max_sources.clamp(1, 500);

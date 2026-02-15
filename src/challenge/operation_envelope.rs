@@ -165,7 +165,10 @@ pub(crate) fn validate_ordering_window(
     expected_step_index: u8,
     max_step_window_seconds: u64,
 ) -> Result<(), OrderingValidationError> {
-    if flow_id != expected_flow_id || step_id != expected_step_id || step_index != expected_step_index {
+    if flow_id != expected_flow_id
+        || step_id != expected_step_id
+        || step_index != expected_step_index
+    {
         return Err(OrderingValidationError::OrderViolation);
     }
     let step_window_end = std::cmp::min(
@@ -203,7 +206,10 @@ pub(crate) fn validate_timing_primitives<S: crate::challenge::KeyValueStore + ?S
         return Err(TimingValidationError::TooSlow);
     }
 
-    if cadence_window_size < 2 || cadence_history_ttl_seconds == 0 || timing_bucket.trim().is_empty() {
+    if cadence_window_size < 2
+        || cadence_history_ttl_seconds == 0
+        || timing_bucket.trim().is_empty()
+    {
         return Ok(());
     }
 
@@ -261,7 +267,10 @@ pub(crate) fn validate_operation_replay<S: crate::challenge::KeyValueStore + ?Si
             }
         }
         if store.delete(replay_key.as_str()).is_err() {
-            eprintln!("[sequence] failed to delete stale replay marker {}", replay_key);
+            eprintln!(
+                "[sequence] failed to delete stale replay marker {}",
+                replay_key
+            );
         }
     }
 
@@ -307,9 +316,9 @@ fn is_valid_operation_id(operation_id: &str) -> bool {
     if operation_id.len() > MAX_OPERATION_ID_LEN {
         return false;
     }
-    operation_id.chars().all(|ch| {
-        ch.is_ascii_hexdigit() || ch == '_' || ch == '-' || ch == ':'
-    })
+    operation_id
+        .chars()
+        .all(|ch| ch.is_ascii_hexdigit() || ch == '_' || ch == '-' || ch == ':')
 }
 
 fn hex_nibble(nibble: u8) -> char {
@@ -324,10 +333,10 @@ mod tests {
     use super::{
         user_agent_bucket, validate_operation_replay, validate_ordering_window,
         validate_request_binding, validate_signed_operation_envelope, validate_timing_primitives,
-        BindingValidationError, EnvelopeValidationError, FLOW_CHALLENGE_PUZZLE,
-        OrderingValidationError, PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT, ReplayValidationError,
-        STEP_CHALLENGE_PUZZLE_SUBMIT, STEP_INDEX_CHALLENGE_PUZZLE_SUBMIT, TimingValidationError,
-        TOKEN_VERSION_V1,
+        BindingValidationError, EnvelopeValidationError, OrderingValidationError,
+        ReplayValidationError, TimingValidationError, FLOW_CHALLENGE_PUZZLE,
+        PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT, STEP_CHALLENGE_PUZZLE_SUBMIT,
+        STEP_INDEX_CHALLENGE_PUZZLE_SUBMIT, TOKEN_VERSION_V1,
     };
     use std::cell::RefCell;
     use std::collections::HashMap;
@@ -546,36 +555,18 @@ mod tests {
     #[test]
     fn replay_primitive_rejects_duplicate_and_expired_operations() {
         let store = TestStore::default();
-        let first = validate_operation_replay(
-            &store,
-            FLOW_CHALLENGE_PUZZLE,
-            "abc123",
-            100,
-            300,
-            300,
-        );
+        let first =
+            validate_operation_replay(&store, FLOW_CHALLENGE_PUZZLE, "abc123", 100, 300, 300);
         assert!(first.is_ok());
 
-        let replay_err = validate_operation_replay(
-            &store,
-            FLOW_CHALLENGE_PUZZLE,
-            "abc123",
-            101,
-            300,
-            300,
-        )
-        .unwrap_err();
+        let replay_err =
+            validate_operation_replay(&store, FLOW_CHALLENGE_PUZZLE, "abc123", 101, 300, 300)
+                .unwrap_err();
         assert_eq!(replay_err, ReplayValidationError::ReplayDetected);
 
-        let expired_err = validate_operation_replay(
-            &store,
-            FLOW_CHALLENGE_PUZZLE,
-            "xyz999",
-            400,
-            300,
-            300,
-        )
-        .unwrap_err();
+        let expired_err =
+            validate_operation_replay(&store, FLOW_CHALLENGE_PUZZLE, "xyz999", 400, 300, 300)
+                .unwrap_err();
         assert_eq!(expired_err, ReplayValidationError::ExpiredOperation);
     }
 

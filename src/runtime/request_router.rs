@@ -23,6 +23,10 @@ fn record_sequence_violation_for_challenge_submit(
 }
 
 pub(crate) fn maybe_handle_early_route(req: &Request, path: &str) -> Option<Response> {
+    if let Some(response) = crate::maze::assets::maybe_handle_asset(path, req.method()) {
+        return Some(response);
+    }
+
     // Health check endpoint
     if path == "/health" {
         if !crate::health_secret_authorized(req) {
