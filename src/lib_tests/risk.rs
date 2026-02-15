@@ -21,12 +21,31 @@ mod tests {
         rate_count: u32,
         rate_limit: u32,
     ) -> crate::BotnessSignalContext {
+        context_with_maze(
+            js_needed,
+            geo_signal_available,
+            geo_risk,
+            rate_count,
+            rate_limit,
+            0,
+        )
+    }
+
+    fn context_with_maze(
+        js_needed: bool,
+        geo_signal_available: bool,
+        geo_risk: bool,
+        rate_count: u32,
+        rate_limit: u32,
+        maze_behavior_score: u8,
+    ) -> crate::BotnessSignalContext {
         crate::BotnessSignalContext {
             js_needed,
             geo_signal_available,
             geo_risk,
             rate_count,
             rate_limit,
+            maze_behavior_score,
         }
     }
 
@@ -87,6 +106,22 @@ mod tests {
             high.score,
             cfg.botness_weights.rate_medium + cfg.botness_weights.rate_high
         );
+    }
+
+    #[test]
+    fn botness_assessment_includes_maze_behavior_signal() {
+        let mut cfg = crate::config::defaults().clone();
+        cfg.botness_weights.maze_behavior = 3;
+
+        let assessment =
+            crate::compute_botness_assessment(context_with_maze(false, true, false, 0, 80, 3), &cfg);
+        let maze_behavior = contribution(&assessment, "maze_behavior");
+        assert_eq!(
+            maze_behavior.availability,
+            crate::signals::botness::SignalAvailability::Active
+        );
+        assert!(maze_behavior.active);
+        assert_eq!(maze_behavior.contribution, 3);
     }
 
     #[test]

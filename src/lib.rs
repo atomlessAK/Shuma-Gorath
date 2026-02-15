@@ -371,6 +371,7 @@ pub struct BotnessSignalContext {
     pub geo_risk: bool,
     pub rate_count: u32,
     pub rate_limit: u32,
+    pub maze_behavior_score: u8,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -405,7 +406,7 @@ pub(crate) fn collect_botness_contributions(
     context: BotnessSignalContext,
     cfg: &config::Config,
 ) -> Vec<BotnessContribution> {
-    let mut accumulator = crate::signals::botness::SignalAccumulator::with_capacity(4);
+    let mut accumulator = crate::signals::botness::SignalAccumulator::with_capacity(5);
 
     accumulator.push(js::bot_signal(
         cfg.js_signal_enabled(),
@@ -438,6 +439,18 @@ pub(crate) fn collect_botness_contributions(
     for rate_signal in rate_signals {
         accumulator.push(rate_signal);
     }
+
+    let maze_behavior_signal = if cfg.maze_enabled {
+        crate::signals::botness::BotSignal::scored(
+            "maze_behavior",
+            "Maze traversal behavior",
+            context.maze_behavior_score >= 2,
+            cfg.botness_weights.maze_behavior,
+        )
+    } else {
+        crate::signals::botness::BotSignal::disabled("maze_behavior", "Maze traversal behavior")
+    };
+    accumulator.push(maze_behavior_signal);
 
     let (_score, contributions) = accumulator.finish();
     contributions
@@ -555,15 +568,134 @@ fn log_line(msg: &str) {
 }
 
 pub(crate) fn serve_maze_with_tracking(
+    req: &Request,
     store: &Store,
     cfg: &config::Config,
     ip: &str,
+    user_agent: &str,
     path: &str,
     event_reason: &str,
     event_outcome: &str,
 ) -> Response {
-    observability::metrics::increment(store, observability::metrics::MetricName::MazeHits, None);
+    let maze_decision = crate::maze::runtime::serve(store, cfg, req, ip, user_agent, path);
+    let served = match maze_decision {
+        crate::maze::runtime::MazeServeDecision::Serve(served) => served,
+        crate::maze::runtime::MazeServeDecision::Fallback(reason) => {
+            let transition = match reason {
+                crate::maze::runtime::MazeFallbackReason::TokenInvalid => {
+                    runtime::policy_taxonomy::PolicyTransition::MazeTokenInvalid
+                }
+                crate::maze::runtime::MazeFallbackReason::TokenExpired => {
+                    runtime::policy_taxonomy::PolicyTransition::MazeTokenExpired
+                }
+                crate::maze::runtime::MazeFallbackReason::TokenReplay => {
+                    runtime::policy_taxonomy::PolicyTransition::MazeTokenReplay
+                }
+                crate::maze::runtime::MazeFallbackReason::TokenBindingMismatch => {
+                    runtime::policy_taxonomy::PolicyTransition::MazeTokenBindingMismatch
+                }
+                crate::maze::runtime::MazeFallbackReason::TokenDepthExceeded => {
+                    runtime::policy_taxonomy::PolicyTransition::MazeDepthExceeded
+                }
+                crate::maze::runtime::MazeFallbackReason::BudgetExceeded => {
+                    runtime::policy_taxonomy::PolicyTransition::MazeBudgetExceeded
+                }
+                crate::maze::runtime::MazeFallbackReason::CheckpointMissing => {
+                    runtime::policy_taxonomy::PolicyTransition::MazeCheckpointMissing
+                }
+                crate::maze::runtime::MazeFallbackReason::MicroPowFailed => {
+                    runtime::policy_taxonomy::PolicyTransition::MazeMicroPowFailed
+                }
+            };
+            let token_outcome = match reason {
+                crate::maze::runtime::MazeFallbackReason::TokenInvalid => "invalid",
+                crate::maze::runtime::MazeFallbackReason::TokenExpired => "expired",
+                crate::maze::runtime::MazeFallbackReason::TokenReplay => "replay",
+                crate::maze::runtime::MazeFallbackReason::TokenBindingMismatch => "binding_mismatch",
+                crate::maze::runtime::MazeFallbackReason::TokenDepthExceeded => "depth_exceeded",
+                crate::maze::runtime::MazeFallbackReason::BudgetExceeded => "budget_exceeded",
+                crate::maze::runtime::MazeFallbackReason::CheckpointMissing => "checkpoint_missing",
+                crate::maze::runtime::MazeFallbackReason::MicroPowFailed => "micro_pow_failed",
+            };
+            observability::metrics::record_maze_token_outcome(store, token_outcome);
+            match reason {
+                crate::maze::runtime::MazeFallbackReason::BudgetExceeded => {
+                    observability::metrics::record_maze_budget_outcome(store, "saturated");
+                }
+                crate::maze::runtime::MazeFallbackReason::MicroPowFailed => {
+                    observability::metrics::record_maze_proof_outcome(store, "required");
+                    observability::metrics::record_maze_proof_outcome(store, "failed");
+                }
+                crate::maze::runtime::MazeFallbackReason::CheckpointMissing => {
+                    observability::metrics::record_maze_checkpoint_outcome(store, "invalid");
+                }
+                _ => {}
+            }
+            let policy_match = runtime::policy_taxonomy::resolve_policy_match(transition);
+            observability::metrics::record_policy_match(store, &policy_match);
+            crate::admin::log_event(
+                store,
+                &crate::admin::EventLogEntry {
+                    ts: crate::admin::now_ts(),
+                    event: crate::admin::EventType::Block,
+                    ip: Some(ip.to_string()),
+                    reason: Some("maze_runtime_fallback".to_string()),
+                    outcome: Some(policy_match.annotate_outcome(reason.detection_label())),
+                    admin: None,
+                },
+            );
+            observability::metrics::increment(
+                store,
+                observability::metrics::MetricName::BlocksTotal,
+                None,
+            );
+            return Response::new(
+                403,
+                block_page::render_block_page(block_page::BlockReason::Honeypot),
+            );
+        }
+    };
 
+    observability::metrics::increment(store, observability::metrics::MetricName::MazeHits, None);
+    observability::metrics::record_maze_token_outcome(
+        store,
+        if served.token_validated {
+            "validated"
+        } else {
+            "entry"
+        },
+    );
+    observability::metrics::record_maze_budget_outcome(store, "acquired");
+    if served.response_cap_exceeded {
+        observability::metrics::record_maze_budget_outcome(store, "response_cap_exceeded");
+    }
+    if cfg.maze_micro_pow_enabled && served.depth >= cfg.maze_micro_pow_depth_start && served.token_validated
+    {
+        observability::metrics::record_maze_proof_outcome(store, "required");
+        observability::metrics::record_maze_proof_outcome(store, "passed");
+    }
+    let variant_family = served
+        .variant_id
+        .split('-')
+        .take(2)
+        .collect::<Vec<_>>()
+        .join("-");
+    observability::metrics::record_maze_entropy_variant(
+        store,
+        variant_family.as_str(),
+        served.seed_provider.as_str(),
+        served.seed_metadata_only,
+    );
+    observability::metrics::record_policy_signal(
+        store,
+        runtime::policy_taxonomy::SignalId::MazeTraversal,
+    );
+    if crate::request_validation::query_param(req.query(), "dc").is_some() {
+        observability::metrics::record_policy_signal(
+            store,
+            runtime::policy_taxonomy::SignalId::DecoyInteraction,
+        );
+    }
     crate::admin::log_event(
         store,
         &crate::admin::EventLogEntry {
@@ -571,7 +703,17 @@ pub(crate) fn serve_maze_with_tracking(
             event: crate::admin::EventType::Challenge,
             ip: Some(ip.to_string()),
             reason: Some(event_reason.to_string()),
-            outcome: Some(event_outcome.to_string()),
+            outcome: Some(
+                format!(
+                    "{} variant={} depth={} flow={} bytes={} render_ms={}",
+                    event_outcome,
+                    served.variant_id,
+                    served.depth,
+                    served.flow_id,
+                    served.bytes,
+                    served.render_ms
+                ),
+            ),
             admin: None,
         },
     );
@@ -635,7 +777,35 @@ pub(crate) fn serve_maze_with_tracking(
         );
     }
 
-    boundaries::handle_maze_request(path)
+    Response::builder()
+        .status(200)
+        .header("Content-Type", "text/html; charset=utf-8")
+        .header("Cache-Control", "no-store, no-cache, must-revalidate")
+        .header("X-Robots-Tag", "noindex, nofollow")
+        .header("X-Shuma-Maze-Variant", served.variant_id.as_str())
+        .header(
+            "X-Shuma-Maze-Token",
+            if served.token_validated {
+                "validated"
+            } else {
+                "entry"
+            },
+        )
+        .header("X-Shuma-Maze-Seed-Provider", served.seed_provider.as_str())
+        .header(
+            "X-Shuma-Maze-Seed-Version",
+            served.seed_version.to_string().as_str(),
+        )
+        .header(
+            "X-Shuma-Maze-Seed-Metadata-Only",
+            if served.seed_metadata_only { "true" } else { "false" },
+        )
+        .header(
+            "X-Shuma-Maze-Seed-Sources",
+            served.seed_source_count.to_string().as_str(),
+        )
+        .body(served.html)
+        .build()
 }
 
 /// Main handler logic, testable as a plain Rust function.
@@ -704,6 +874,18 @@ pub fn handle_bot_defence_impl(req: &Request) -> Response {
             .handle_report(store, req);
     }
 
+    if path == "/maze/checkpoint" {
+        let response = crate::maze::runtime::handle_checkpoint(store, &cfg, req, &ip, ua);
+        let checkpoint_outcome = match *response.status() {
+            204 => "accepted",
+            405 => "method_not_allowed",
+            403 => "binding_mismatch",
+            _ => "invalid",
+        };
+        observability::metrics::record_maze_checkpoint_outcome(store, checkpoint_outcome);
+        return response;
+    }
+
     // Maze - trap crawlers in infinite loops (only if enabled)
     if provider_registry.maze_tarpit_provider().is_maze_path(path) {
         if !cfg.maze_enabled {
@@ -716,7 +898,16 @@ pub fn handle_bot_defence_impl(req: &Request) -> Response {
         let event_outcome = policy_match.annotate_outcome("maze_page_served");
         return provider_registry
             .maze_tarpit_provider()
-            .serve_maze_with_tracking(store, &cfg, &ip, path, "maze_trap", event_outcome.as_str());
+            .serve_maze_with_tracking(
+                req,
+                store,
+                &cfg,
+                &ip,
+                ua,
+                path,
+                "maze_trap",
+                event_outcome.as_str(),
+            );
     }
 
     // Increment request counter

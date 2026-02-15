@@ -17,6 +17,8 @@ pub const POW_DIFFICULTY_MIN: u8 = 12;
 pub const POW_DIFFICULTY_MAX: u8 = 20;
 pub const POW_TTL_MIN: u64 = 30;
 pub const POW_TTL_MAX: u64 = 300;
+const MAZE_MICRO_POW_DIFFICULTY_MIN: u8 = 10;
+const MAZE_MICRO_POW_DIFFICULTY_MAX: u8 = 24;
 const CHALLENGE_THRESHOLD_MIN: u8 = 1;
 const CHALLENGE_THRESHOLD_MAX: u8 = 10;
 const MAZE_THRESHOLD_MIN: u8 = 1;
@@ -58,6 +60,8 @@ pub struct BotnessWeights {
     pub rate_medium: u8,
     #[serde(default = "default_botness_weight_rate_high")]
     pub rate_high: u8,
+    #[serde(default = "default_botness_weight_maze_behavior")]
+    pub maze_behavior: u8,
 }
 
 impl Default for BotnessWeights {
@@ -67,6 +71,7 @@ impl Default for BotnessWeights {
             geo_risk: default_botness_weight_geo_risk(),
             rate_medium: default_botness_weight_rate_medium(),
             rate_high: default_botness_weight_rate_high(),
+            maze_behavior: default_botness_weight_maze_behavior(),
         }
     }
 }
@@ -154,6 +159,40 @@ impl EdgeIntegrationMode {
             EdgeIntegrationMode::Off => "off",
             EdgeIntegrationMode::Advisory => "advisory",
             EdgeIntegrationMode::Authoritative => "authoritative",
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MazeRolloutPhase {
+    Instrument,
+    Advisory,
+    Enforce,
+}
+
+impl MazeRolloutPhase {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            MazeRolloutPhase::Instrument => "instrument",
+            MazeRolloutPhase::Advisory => "advisory",
+            MazeRolloutPhase::Enforce => "enforce",
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MazeSeedProvider {
+    Internal,
+    Operator,
+}
+
+impl MazeSeedProvider {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            MazeSeedProvider::Internal => "internal",
+            MazeSeedProvider::Operator => "operator",
         }
     }
 }
@@ -297,6 +336,62 @@ pub struct Config {
     pub maze_auto_ban: bool,
     #[serde(default = "default_maze_auto_ban_threshold")]
     pub maze_auto_ban_threshold: u32,
+    #[serde(default = "default_maze_rollout_phase")]
+    pub maze_rollout_phase: MazeRolloutPhase,
+    #[serde(default = "default_maze_token_ttl_seconds")]
+    pub maze_token_ttl_seconds: u64,
+    #[serde(default = "default_maze_token_max_depth")]
+    pub maze_token_max_depth: u16,
+    #[serde(default = "default_maze_token_branch_budget")]
+    pub maze_token_branch_budget: u8,
+    #[serde(default = "default_maze_replay_ttl_seconds")]
+    pub maze_replay_ttl_seconds: u64,
+    #[serde(default = "default_maze_entropy_window_seconds")]
+    pub maze_entropy_window_seconds: u64,
+    #[serde(default = "default_maze_client_expansion_enabled")]
+    pub maze_client_expansion_enabled: bool,
+    #[serde(default = "default_maze_checkpoint_every_nodes")]
+    pub maze_checkpoint_every_nodes: u64,
+    #[serde(default = "default_maze_checkpoint_every_ms")]
+    pub maze_checkpoint_every_ms: u64,
+    #[serde(default = "default_maze_step_ahead_max")]
+    pub maze_step_ahead_max: u64,
+    #[serde(default = "default_maze_no_js_fallback_max_depth")]
+    pub maze_no_js_fallback_max_depth: u16,
+    #[serde(default = "default_maze_micro_pow_enabled")]
+    pub maze_micro_pow_enabled: bool,
+    #[serde(default = "default_maze_micro_pow_depth_start")]
+    pub maze_micro_pow_depth_start: u16,
+    #[serde(default = "default_maze_micro_pow_base_difficulty")]
+    pub maze_micro_pow_base_difficulty: u8,
+    #[serde(default = "default_maze_max_concurrent_global")]
+    pub maze_max_concurrent_global: u32,
+    #[serde(default = "default_maze_max_concurrent_per_ip_bucket")]
+    pub maze_max_concurrent_per_ip_bucket: u32,
+    #[serde(default = "default_maze_max_response_bytes")]
+    pub maze_max_response_bytes: u32,
+    #[serde(default = "default_maze_max_response_duration_ms")]
+    pub maze_max_response_duration_ms: u64,
+    #[serde(default = "default_maze_server_visible_links")]
+    pub maze_server_visible_links: u32,
+    #[serde(default = "default_maze_max_links")]
+    pub maze_max_links: u32,
+    #[serde(default = "default_maze_max_paragraphs")]
+    pub maze_max_paragraphs: u32,
+    #[serde(default = "default_maze_path_entropy_segment_len")]
+    pub maze_path_entropy_segment_len: u8,
+    #[serde(default = "default_maze_covert_decoys_enabled")]
+    pub maze_covert_decoys_enabled: bool,
+    #[serde(default = "default_maze_seed_provider")]
+    pub maze_seed_provider: MazeSeedProvider,
+    #[serde(default = "default_maze_seed_refresh_interval_seconds")]
+    pub maze_seed_refresh_interval_seconds: u64,
+    #[serde(default = "default_maze_seed_refresh_rate_limit_per_hour")]
+    pub maze_seed_refresh_rate_limit_per_hour: u32,
+    #[serde(default = "default_maze_seed_refresh_max_sources")]
+    pub maze_seed_refresh_max_sources: u32,
+    #[serde(default = "default_maze_seed_metadata_only")]
+    pub maze_seed_metadata_only: bool,
     #[serde(default = "default_robots_enabled")]
     pub robots_enabled: bool,
     #[serde(default = "default_robots_block_ai_training")]
@@ -595,6 +690,36 @@ static DEFAULT_CONFIG: Lazy<Config> = Lazy::new(|| {
         maze_enabled: defaults_bool("SHUMA_MAZE_ENABLED"),
         maze_auto_ban: defaults_bool("SHUMA_MAZE_AUTO_BAN"),
         maze_auto_ban_threshold: defaults_u32("SHUMA_MAZE_AUTO_BAN_THRESHOLD"),
+        maze_rollout_phase: default_maze_rollout_phase(),
+        maze_token_ttl_seconds: defaults_u64("SHUMA_MAZE_TOKEN_TTL_SECONDS"),
+        maze_token_max_depth: defaults_u16("SHUMA_MAZE_TOKEN_MAX_DEPTH"),
+        maze_token_branch_budget: defaults_u8("SHUMA_MAZE_TOKEN_BRANCH_BUDGET"),
+        maze_replay_ttl_seconds: defaults_u64("SHUMA_MAZE_REPLAY_TTL_SECONDS"),
+        maze_entropy_window_seconds: defaults_u64("SHUMA_MAZE_ENTROPY_WINDOW_SECONDS"),
+        maze_client_expansion_enabled: defaults_bool("SHUMA_MAZE_CLIENT_EXPANSION_ENABLED"),
+        maze_checkpoint_every_nodes: defaults_u64("SHUMA_MAZE_CHECKPOINT_EVERY_NODES"),
+        maze_checkpoint_every_ms: defaults_u64("SHUMA_MAZE_CHECKPOINT_EVERY_MS"),
+        maze_step_ahead_max: defaults_u64("SHUMA_MAZE_STEP_AHEAD_MAX"),
+        maze_no_js_fallback_max_depth: defaults_u16("SHUMA_MAZE_NO_JS_FALLBACK_MAX_DEPTH"),
+        maze_micro_pow_enabled: defaults_bool("SHUMA_MAZE_MICRO_POW_ENABLED"),
+        maze_micro_pow_depth_start: defaults_u16("SHUMA_MAZE_MICRO_POW_DEPTH_START"),
+        maze_micro_pow_base_difficulty: defaults_u8("SHUMA_MAZE_MICRO_POW_BASE_DIFFICULTY"),
+        maze_max_concurrent_global: defaults_u32("SHUMA_MAZE_MAX_CONCURRENT_GLOBAL"),
+        maze_max_concurrent_per_ip_bucket: defaults_u32("SHUMA_MAZE_MAX_CONCURRENT_PER_IP_BUCKET"),
+        maze_max_response_bytes: defaults_u32("SHUMA_MAZE_MAX_RESPONSE_BYTES"),
+        maze_max_response_duration_ms: defaults_u64("SHUMA_MAZE_MAX_RESPONSE_DURATION_MS"),
+        maze_server_visible_links: defaults_u32("SHUMA_MAZE_SERVER_VISIBLE_LINKS"),
+        maze_max_links: defaults_u32("SHUMA_MAZE_MAX_LINKS"),
+        maze_max_paragraphs: defaults_u32("SHUMA_MAZE_MAX_PARAGRAPHS"),
+        maze_path_entropy_segment_len: defaults_u8("SHUMA_MAZE_PATH_ENTROPY_SEGMENT_LEN"),
+        maze_covert_decoys_enabled: defaults_bool("SHUMA_MAZE_COVERT_DECOYS_ENABLED"),
+        maze_seed_provider: default_maze_seed_provider(),
+        maze_seed_refresh_interval_seconds: defaults_u64("SHUMA_MAZE_SEED_REFRESH_INTERVAL_SECONDS"),
+        maze_seed_refresh_rate_limit_per_hour: defaults_u32(
+            "SHUMA_MAZE_SEED_REFRESH_RATE_LIMIT_PER_HOUR",
+        ),
+        maze_seed_refresh_max_sources: defaults_u32("SHUMA_MAZE_SEED_REFRESH_MAX_SOURCES"),
+        maze_seed_metadata_only: defaults_bool("SHUMA_MAZE_SEED_METADATA_ONLY"),
         robots_enabled: defaults_bool("SHUMA_ROBOTS_ENABLED"),
         robots_block_ai_training: defaults_bool("SHUMA_ROBOTS_BLOCK_AI_TRAINING"),
         robots_block_ai_search: defaults_bool("SHUMA_ROBOTS_BLOCK_AI_SEARCH"),
@@ -615,6 +740,7 @@ static DEFAULT_CONFIG: Lazy<Config> = Lazy::new(|| {
             geo_risk: defaults_u8("SHUMA_BOTNESS_WEIGHT_GEO_RISK"),
             rate_medium: defaults_u8("SHUMA_BOTNESS_WEIGHT_RATE_MEDIUM"),
             rate_high: defaults_u8("SHUMA_BOTNESS_WEIGHT_RATE_HIGH"),
+            maze_behavior: defaults_u8("SHUMA_BOTNESS_WEIGHT_MAZE_BEHAVIOR"),
         },
         defence_modes: DefenceModes::default(),
         provider_backends: ProviderBackends::default(),
@@ -869,6 +995,23 @@ pub(crate) fn parse_edge_integration_mode(value: &str) -> Option<EdgeIntegration
     }
 }
 
+pub(crate) fn parse_maze_rollout_phase(value: &str) -> Option<MazeRolloutPhase> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "instrument" => Some(MazeRolloutPhase::Instrument),
+        "advisory" => Some(MazeRolloutPhase::Advisory),
+        "enforce" => Some(MazeRolloutPhase::Enforce),
+        _ => None,
+    }
+}
+
+pub(crate) fn parse_maze_seed_provider(value: &str) -> Option<MazeSeedProvider> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "internal" => Some(MazeSeedProvider::Internal),
+        "operator" => Some(MazeSeedProvider::Operator),
+        _ => None,
+    }
+}
+
 pub(crate) fn parse_rate_limiter_outage_mode(value: &str) -> Option<RateLimiterOutageMode> {
     match value.trim().to_ascii_lowercase().as_str() {
         "fallback_internal" => Some(RateLimiterOutageMode::FallbackInternal),
@@ -940,6 +1083,10 @@ fn clamp_pow_difficulty(value: u8) -> u8 {
     value.clamp(POW_DIFFICULTY_MIN, POW_DIFFICULTY_MAX)
 }
 
+fn clamp_maze_micro_pow_difficulty(value: u8) -> u8 {
+    value.clamp(MAZE_MICRO_POW_DIFFICULTY_MIN, MAZE_MICRO_POW_DIFFICULTY_MAX)
+}
+
 fn clamp_pow_ttl(value: u64) -> u64 {
     value.clamp(POW_TTL_MIN, POW_TTL_MAX)
 }
@@ -970,6 +1117,32 @@ fn clamp_config_values(cfg: &mut Config) {
     cfg.botness_weights.geo_risk = clamp_botness_weight(cfg.botness_weights.geo_risk);
     cfg.botness_weights.rate_medium = clamp_botness_weight(cfg.botness_weights.rate_medium);
     cfg.botness_weights.rate_high = clamp_botness_weight(cfg.botness_weights.rate_high);
+    cfg.botness_weights.maze_behavior = clamp_botness_weight(cfg.botness_weights.maze_behavior);
+    cfg.maze_token_ttl_seconds = cfg.maze_token_ttl_seconds.clamp(30, 600);
+    cfg.maze_token_max_depth = cfg.maze_token_max_depth.clamp(1, 32);
+    cfg.maze_token_branch_budget = cfg.maze_token_branch_budget.clamp(1, 12);
+    cfg.maze_replay_ttl_seconds = cfg.maze_replay_ttl_seconds.clamp(30, 3600);
+    cfg.maze_entropy_window_seconds = cfg.maze_entropy_window_seconds.clamp(10, 600);
+    cfg.maze_checkpoint_every_nodes = cfg.maze_checkpoint_every_nodes.clamp(1, 16);
+    cfg.maze_checkpoint_every_ms = cfg.maze_checkpoint_every_ms.clamp(200, 10_000);
+    cfg.maze_step_ahead_max = cfg.maze_step_ahead_max.clamp(1, 16);
+    cfg.maze_no_js_fallback_max_depth = cfg.maze_no_js_fallback_max_depth.clamp(1, 12);
+    cfg.maze_micro_pow_depth_start = cfg.maze_micro_pow_depth_start.clamp(1, 24);
+    cfg.maze_micro_pow_base_difficulty =
+        clamp_maze_micro_pow_difficulty(cfg.maze_micro_pow_base_difficulty);
+    cfg.maze_max_concurrent_global = cfg.maze_max_concurrent_global.clamp(1, 10_000);
+    cfg.maze_max_concurrent_per_ip_bucket = cfg.maze_max_concurrent_per_ip_bucket.clamp(1, 256);
+    cfg.maze_max_response_bytes = cfg.maze_max_response_bytes.clamp(1_024, 512 * 1024);
+    cfg.maze_max_response_duration_ms = cfg.maze_max_response_duration_ms.clamp(100, 120_000);
+    cfg.maze_server_visible_links = cfg.maze_server_visible_links.clamp(1, 32);
+    cfg.maze_max_links = cfg.maze_max_links.clamp(1, 64);
+    cfg.maze_max_paragraphs = cfg.maze_max_paragraphs.clamp(1, 24);
+    cfg.maze_path_entropy_segment_len = cfg.maze_path_entropy_segment_len.clamp(8, 64);
+    cfg.maze_seed_refresh_interval_seconds =
+        cfg.maze_seed_refresh_interval_seconds.clamp(60, 7 * 24 * 3600);
+    cfg.maze_seed_refresh_rate_limit_per_hour =
+        cfg.maze_seed_refresh_rate_limit_per_hour.clamp(1, 1000);
+    cfg.maze_seed_refresh_max_sources = cfg.maze_seed_refresh_max_sources.clamp(1, 500);
     cfg.cdp_detection_threshold = cfg.cdp_detection_threshold.clamp(0.0, 1.0);
 }
 
@@ -1070,6 +1243,13 @@ fn defaults_u32(key: &str) -> u32 {
     defaults_raw(key)
         .trim()
         .parse::<u32>()
+        .unwrap_or_else(|_| panic!("Invalid integer default for {}", key))
+}
+
+fn defaults_u16(key: &str) -> u16 {
+    defaults_raw(key)
+        .trim()
+        .parse::<u16>()
         .unwrap_or_else(|_| panic!("Invalid integer default for {}", key))
 }
 
@@ -1236,6 +1416,130 @@ fn default_maze_auto_ban_threshold() -> u32 {
     defaults_u32("SHUMA_MAZE_AUTO_BAN_THRESHOLD")
 }
 
+fn default_maze_rollout_phase() -> MazeRolloutPhase {
+    let raw = defaults_raw("SHUMA_MAZE_ROLLOUT_PHASE");
+    parse_maze_rollout_phase(raw.as_str()).unwrap_or_else(|| {
+        panic!(
+            "Invalid maze rollout phase default for SHUMA_MAZE_ROLLOUT_PHASE={}",
+            raw
+        )
+    })
+}
+
+fn default_maze_token_ttl_seconds() -> u64 {
+    defaults_u64("SHUMA_MAZE_TOKEN_TTL_SECONDS")
+}
+
+fn default_maze_token_max_depth() -> u16 {
+    defaults_u16("SHUMA_MAZE_TOKEN_MAX_DEPTH")
+}
+
+fn default_maze_token_branch_budget() -> u8 {
+    defaults_u8("SHUMA_MAZE_TOKEN_BRANCH_BUDGET")
+}
+
+fn default_maze_replay_ttl_seconds() -> u64 {
+    defaults_u64("SHUMA_MAZE_REPLAY_TTL_SECONDS")
+}
+
+fn default_maze_entropy_window_seconds() -> u64 {
+    defaults_u64("SHUMA_MAZE_ENTROPY_WINDOW_SECONDS")
+}
+
+fn default_maze_client_expansion_enabled() -> bool {
+    defaults_bool("SHUMA_MAZE_CLIENT_EXPANSION_ENABLED")
+}
+
+fn default_maze_checkpoint_every_nodes() -> u64 {
+    defaults_u64("SHUMA_MAZE_CHECKPOINT_EVERY_NODES")
+}
+
+fn default_maze_checkpoint_every_ms() -> u64 {
+    defaults_u64("SHUMA_MAZE_CHECKPOINT_EVERY_MS")
+}
+
+fn default_maze_step_ahead_max() -> u64 {
+    defaults_u64("SHUMA_MAZE_STEP_AHEAD_MAX")
+}
+
+fn default_maze_no_js_fallback_max_depth() -> u16 {
+    defaults_u16("SHUMA_MAZE_NO_JS_FALLBACK_MAX_DEPTH")
+}
+
+fn default_maze_micro_pow_enabled() -> bool {
+    defaults_bool("SHUMA_MAZE_MICRO_POW_ENABLED")
+}
+
+fn default_maze_micro_pow_depth_start() -> u16 {
+    defaults_u16("SHUMA_MAZE_MICRO_POW_DEPTH_START")
+}
+
+fn default_maze_micro_pow_base_difficulty() -> u8 {
+    clamp_maze_micro_pow_difficulty(defaults_u8("SHUMA_MAZE_MICRO_POW_BASE_DIFFICULTY"))
+}
+
+fn default_maze_max_concurrent_global() -> u32 {
+    defaults_u32("SHUMA_MAZE_MAX_CONCURRENT_GLOBAL")
+}
+
+fn default_maze_max_concurrent_per_ip_bucket() -> u32 {
+    defaults_u32("SHUMA_MAZE_MAX_CONCURRENT_PER_IP_BUCKET")
+}
+
+fn default_maze_max_response_bytes() -> u32 {
+    defaults_u32("SHUMA_MAZE_MAX_RESPONSE_BYTES")
+}
+
+fn default_maze_max_response_duration_ms() -> u64 {
+    defaults_u64("SHUMA_MAZE_MAX_RESPONSE_DURATION_MS")
+}
+
+fn default_maze_server_visible_links() -> u32 {
+    defaults_u32("SHUMA_MAZE_SERVER_VISIBLE_LINKS")
+}
+
+fn default_maze_max_links() -> u32 {
+    defaults_u32("SHUMA_MAZE_MAX_LINKS")
+}
+
+fn default_maze_max_paragraphs() -> u32 {
+    defaults_u32("SHUMA_MAZE_MAX_PARAGRAPHS")
+}
+
+fn default_maze_path_entropy_segment_len() -> u8 {
+    defaults_u8("SHUMA_MAZE_PATH_ENTROPY_SEGMENT_LEN")
+}
+
+fn default_maze_covert_decoys_enabled() -> bool {
+    defaults_bool("SHUMA_MAZE_COVERT_DECOYS_ENABLED")
+}
+
+fn default_maze_seed_provider() -> MazeSeedProvider {
+    let raw = defaults_raw("SHUMA_MAZE_SEED_PROVIDER");
+    parse_maze_seed_provider(raw.as_str()).unwrap_or_else(|| {
+        panic!(
+            "Invalid maze seed provider default for SHUMA_MAZE_SEED_PROVIDER={}",
+            raw
+        )
+    })
+}
+
+fn default_maze_seed_refresh_interval_seconds() -> u64 {
+    defaults_u64("SHUMA_MAZE_SEED_REFRESH_INTERVAL_SECONDS")
+}
+
+fn default_maze_seed_refresh_rate_limit_per_hour() -> u32 {
+    defaults_u32("SHUMA_MAZE_SEED_REFRESH_RATE_LIMIT_PER_HOUR")
+}
+
+fn default_maze_seed_refresh_max_sources() -> u32 {
+    defaults_u32("SHUMA_MAZE_SEED_REFRESH_MAX_SOURCES")
+}
+
+fn default_maze_seed_metadata_only() -> bool {
+    defaults_bool("SHUMA_MAZE_SEED_METADATA_ONLY")
+}
+
 fn default_robots_enabled() -> bool {
     defaults_bool("SHUMA_ROBOTS_ENABLED")
 }
@@ -1310,6 +1614,10 @@ fn default_botness_weight_rate_medium() -> u8 {
 
 fn default_botness_weight_rate_high() -> u8 {
     clamp_botness_weight(defaults_u8("SHUMA_BOTNESS_WEIGHT_RATE_HIGH"))
+}
+
+fn default_botness_weight_maze_behavior() -> u8 {
+    clamp_botness_weight(defaults_u8("SHUMA_BOTNESS_WEIGHT_MAZE_BEHAVIOR"))
 }
 
 fn defaults_composability_mode(key: &str) -> ComposabilityMode {

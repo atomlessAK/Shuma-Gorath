@@ -1,8 +1,15 @@
 mod content;
+pub(crate) mod covert_decoy;
 mod http;
 mod renders;
 mod rng;
+pub(crate) mod runtime;
+pub(crate) mod seeds;
+pub(crate) mod state;
+mod token;
 mod types;
+#[cfg(test)]
+mod simulation;
 
 pub use http::{handle_maze_request, is_maze_path};
 #[allow(dead_code)]

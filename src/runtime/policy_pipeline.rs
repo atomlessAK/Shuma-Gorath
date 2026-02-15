@@ -238,9 +238,13 @@ pub(crate) fn maybe_handle_geo_policy(
                     provider_registry
                         .maze_tarpit_provider()
                         .serve_maze_with_tracking(
+                            req,
                             store,
                             cfg,
                             ip,
+                            req.header("user-agent")
+                                .map(|v| v.as_str().unwrap_or(""))
+                                .unwrap_or(""),
                             "/maze/geo-policy",
                             "geo_policy_maze",
                             event_outcome.as_str(),
@@ -357,6 +361,7 @@ pub(crate) fn maybe_handle_botness(
     let rate_usage = provider_registry
         .rate_limiter_provider()
         .current_rate_usage(store, site_id, ip);
+    let maze_behavior_score = crate::maze::runtime::current_behavior_score(store, ip);
     let botness = crate::compute_botness_assessment(
         crate::BotnessSignalContext {
             js_needed: needs_js,
@@ -364,6 +369,7 @@ pub(crate) fn maybe_handle_botness(
             geo_risk,
             rate_count: rate_usage,
             rate_limit: cfg.rate_limit,
+            maze_behavior_score,
         },
         cfg,
     );
@@ -396,9 +402,13 @@ pub(crate) fn maybe_handle_botness(
             provider_registry
                 .maze_tarpit_provider()
                 .serve_maze_with_tracking(
+                    req,
                     store,
                     cfg,
                     ip,
+                    req.header("user-agent")
+                        .map(|v| v.as_str().unwrap_or(""))
+                        .unwrap_or(""),
                     "/maze/botness-gate",
                     "botness_gate_maze",
                     event_outcome.as_str(),
@@ -444,11 +454,22 @@ pub(crate) fn maybe_handle_botness(
                 admin: None,
             },
         );
-        return Some(
-            provider_registry
-                .challenge_engine_provider()
-                .render_challenge(req, cfg.challenge_transform_count as usize),
+        let ua = req
+            .header("user-agent")
+            .map(|v| v.as_str().unwrap_or(""))
+            .unwrap_or("");
+        let challenge_response = provider_registry
+            .challenge_engine_provider()
+            .render_challenge(req, cfg.challenge_transform_count as usize);
+        let response = crate::maze::covert_decoy::maybe_inject_non_maze_decoy(
+            req,
+            cfg,
+            ip,
+            ua,
+            challenge_response,
+            botness.score,
         );
+        return Some(response);
     }
 
     None

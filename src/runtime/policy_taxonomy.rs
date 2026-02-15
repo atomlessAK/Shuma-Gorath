@@ -119,6 +119,14 @@ pub enum SignalId {
     EdgeFingerprintStrong,
     EdgeFingerprintAuthoritativeBan,
     MazeTraversal,
+    MazeTokenInvalid,
+    MazeTokenExpired,
+    MazeTokenReplay,
+    MazeTokenBindingMismatch,
+    MazeDepthExceeded,
+    MazeBudgetExceeded,
+    MazeCheckpointMissing,
+    MazeMicroPowFailed,
     MazeThreshold,
     DecoyInteraction,
     TarpitPersistence,
@@ -157,6 +165,14 @@ impl SignalId {
             SignalId::EdgeFingerprintStrong => "S_FP_EDGE_STRONG",
             SignalId::EdgeFingerprintAuthoritativeBan => "S_FP_EDGE_AUTHORITATIVE_BAN",
             SignalId::MazeTraversal => "S_MAZE_TRAVERSAL",
+            SignalId::MazeTokenInvalid => "S_MAZE_TOKEN_INVALID",
+            SignalId::MazeTokenExpired => "S_MAZE_TOKEN_EXPIRED",
+            SignalId::MazeTokenReplay => "S_MAZE_TOKEN_REPLAY",
+            SignalId::MazeTokenBindingMismatch => "S_MAZE_TOKEN_BINDING_MISMATCH",
+            SignalId::MazeDepthExceeded => "S_MAZE_DEPTH_EXCEEDED",
+            SignalId::MazeBudgetExceeded => "S_MAZE_BUDGET_EXCEEDED",
+            SignalId::MazeCheckpointMissing => "S_MAZE_CHECKPOINT_MISSING",
+            SignalId::MazeMicroPowFailed => "S_MAZE_MICRO_POW_FAILED",
             SignalId::MazeThreshold => "S_MAZE_THRESHOLD",
             SignalId::DecoyInteraction => "S_DECOY_INTERACTION",
             SignalId::TarpitPersistence => "S_TARPIT_PERSISTENCE",
@@ -197,6 +213,14 @@ pub enum DetectionId {
     EdgeFingerprintStrong,
     EdgeFingerprintAuthoritativeBan,
     MazeTraversal,
+    MazeTokenInvalid,
+    MazeTokenExpired,
+    MazeTokenReplay,
+    MazeTokenBindingMismatch,
+    MazeDepthExceeded,
+    MazeBudgetExceeded,
+    MazeCheckpointMissing,
+    MazeMicroPowFailed,
     MazeThresholdBan,
 }
 
@@ -233,6 +257,14 @@ impl DetectionId {
             DetectionId::EdgeFingerprintStrong => "D_EDGE_FP_STRONG",
             DetectionId::EdgeFingerprintAuthoritativeBan => "D_EDGE_FP_AUTHORITATIVE_BAN",
             DetectionId::MazeTraversal => "D_MAZE_TRAVERSAL",
+            DetectionId::MazeTokenInvalid => "D_MAZE_TOKEN_INVALID",
+            DetectionId::MazeTokenExpired => "D_MAZE_TOKEN_EXPIRED",
+            DetectionId::MazeTokenReplay => "D_MAZE_TOKEN_REPLAY",
+            DetectionId::MazeTokenBindingMismatch => "D_MAZE_TOKEN_BINDING_MISMATCH",
+            DetectionId::MazeDepthExceeded => "D_MAZE_DEPTH_EXCEEDED",
+            DetectionId::MazeBudgetExceeded => "D_MAZE_BUDGET_EXCEEDED",
+            DetectionId::MazeCheckpointMissing => "D_MAZE_CHECKPOINT_MISSING",
+            DetectionId::MazeMicroPowFailed => "D_MAZE_MICRO_POW_FAILED",
             DetectionId::MazeThresholdBan => "D_MAZE_THRESHOLD_BAN",
         }
     }
@@ -324,6 +356,14 @@ pub enum PolicyTransition {
     SeqOrderViolation,
     SeqWindowExceeded,
     MazeTraversal,
+    MazeTokenInvalid,
+    MazeTokenExpired,
+    MazeTokenReplay,
+    MazeTokenBindingMismatch,
+    MazeDepthExceeded,
+    MazeBudgetExceeded,
+    MazeCheckpointMissing,
+    MazeMicroPowFailed,
     MazeThresholdBan,
 }
 
@@ -479,6 +519,46 @@ pub fn resolve_policy_match(transition: PolicyTransition) -> PolicyMatch {
             DetectionId::MazeTraversal,
             vec![SignalId::MazeTraversal],
         ),
+        PolicyTransition::MazeTokenInvalid => PolicyMatch::new(
+            EscalationLevelId::L6ChallengeStrong,
+            DetectionId::MazeTokenInvalid,
+            vec![SignalId::MazeTokenInvalid],
+        ),
+        PolicyTransition::MazeTokenExpired => PolicyMatch::new(
+            EscalationLevelId::L6ChallengeStrong,
+            DetectionId::MazeTokenExpired,
+            vec![SignalId::MazeTokenExpired],
+        ),
+        PolicyTransition::MazeTokenReplay => PolicyMatch::new(
+            EscalationLevelId::L6ChallengeStrong,
+            DetectionId::MazeTokenReplay,
+            vec![SignalId::MazeTokenReplay],
+        ),
+        PolicyTransition::MazeTokenBindingMismatch => PolicyMatch::new(
+            EscalationLevelId::L6ChallengeStrong,
+            DetectionId::MazeTokenBindingMismatch,
+            vec![SignalId::MazeTokenBindingMismatch],
+        ),
+        PolicyTransition::MazeDepthExceeded => PolicyMatch::new(
+            EscalationLevelId::L6ChallengeStrong,
+            DetectionId::MazeDepthExceeded,
+            vec![SignalId::MazeDepthExceeded],
+        ),
+        PolicyTransition::MazeBudgetExceeded => PolicyMatch::new(
+            EscalationLevelId::L9CostImposition,
+            DetectionId::MazeBudgetExceeded,
+            vec![SignalId::MazeBudgetExceeded],
+        ),
+        PolicyTransition::MazeCheckpointMissing => PolicyMatch::new(
+            EscalationLevelId::L6ChallengeStrong,
+            DetectionId::MazeCheckpointMissing,
+            vec![SignalId::MazeCheckpointMissing],
+        ),
+        PolicyTransition::MazeMicroPowFailed => PolicyMatch::new(
+            EscalationLevelId::L9CostImposition,
+            DetectionId::MazeMicroPowFailed,
+            vec![SignalId::MazeMicroPowFailed],
+        ),
         PolicyTransition::MazeThresholdBan => PolicyMatch::new(
             EscalationLevelId::L10DenyTemp,
             DetectionId::MazeThresholdBan,
@@ -502,6 +582,7 @@ pub fn signal_id_for_botness_key(key: &str) -> Option<SignalId> {
         "geo_risk" => Some(SignalId::GeoRisk),
         "rate_pressure_medium" => Some(SignalId::RateUsageMedium),
         "rate_pressure_high" => Some(SignalId::RateUsageHigh),
+        "maze_behavior" => Some(SignalId::MazeTraversal),
         _ => None,
     }
 }
@@ -548,6 +629,12 @@ mod tests {
                 .expect("known signal")
                 .as_str(),
             "S_RATE_USAGE_HIGH"
+        );
+        assert_eq!(
+            signal_id_for_botness_key("maze_behavior")
+                .expect("known signal")
+                .as_str(),
+            "S_MAZE_TRAVERSAL"
         );
         assert!(signal_id_for_botness_key("unknown").is_none());
     }

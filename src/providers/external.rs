@@ -932,17 +932,21 @@ impl MazeTarpitProvider for UnsupportedExternalMazeTarpitProvider {
 
     fn serve_maze_with_tracking(
         &self,
+        req: &Request,
         store: &Store,
         cfg: &crate::config::Config,
         ip: &str,
+        user_agent: &str,
         path: &str,
         event_reason: &str,
         event_outcome: &str,
     ) -> Response {
         internal::MAZE_TARPIT.serve_maze_with_tracking(
+            req,
             store,
             cfg,
             ip,
+            user_agent,
             path,
             event_reason,
             event_outcome,

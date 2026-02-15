@@ -101,9 +101,11 @@ pub(crate) trait MazeTarpitProvider {
     fn handle_maze_request(&self, path: &str) -> Response;
     fn serve_maze_with_tracking(
         &self,
+        req: &Request,
         store: &Store,
         cfg: &crate::config::Config,
         ip: &str,
+        user_agent: &str,
         path: &str,
         event_reason: &str,
         event_outcome: &str,

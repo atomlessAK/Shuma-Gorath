@@ -292,6 +292,20 @@ mod admin_config_tests {
         }
     }
 
+    impl crate::maze::state::MazeStateStore for TestStore {
+        fn get(&self, key: &str) -> Result<Option<Vec<u8>>, ()> {
+            crate::challenge::KeyValueStore::get(self, key)
+        }
+
+        fn set(&self, key: &str, value: &[u8]) -> Result<(), ()> {
+            crate::challenge::KeyValueStore::set(self, key, value)
+        }
+
+        fn delete(&self, key: &str) -> Result<(), ()> {
+            crate::challenge::KeyValueStore::delete(self, key)
+        }
+    }
+
     fn clear_env(keys: &[&str]) {
         for key in keys {
             std::env::remove_var(key);
@@ -525,6 +539,77 @@ mod admin_config_tests {
         } else {
             std::env::remove_var("SHUMA_BOTNESS_CONFIG_MUTABLE");
         }
+    }
+
+    #[test]
+    fn admin_maze_seed_sources_round_trip_and_manual_refresh() {
+        let _lock = crate::test_support::lock_env();
+        let store = TestStore::default();
+        let mut cfg = crate::config::defaults().clone();
+        cfg.maze_seed_provider = crate::config::MazeSeedProvider::Operator;
+        cfg.maze_seed_refresh_rate_limit_per_hour = 3;
+        cfg.maze_seed_refresh_max_sources = 4;
+        store
+            .set("config:default", &serde_json::to_vec(&cfg).unwrap())
+            .unwrap();
+
+        let post_req = make_request(
+            Method::Post,
+            "/admin/maze/seeds",
+            br#"{
+                "sources":[
+                    {
+                        "id":"headlines",
+                        "url":"https://example.com/feed",
+                        "title":"Signal routing update",
+                        "description":"Metadata-only refresh for maze corpus",
+                        "keywords":["maze","checkpoint","budget"],
+                        "allow_seed_use":true,
+                        "robots_allowed":true
+                    }
+                ]
+            }"#
+            .to_vec(),
+        );
+        let post_resp = handle_admin_maze_seed_sources(&post_req, &store, "default");
+        assert_eq!(*post_resp.status(), 200u16);
+
+        let get_req = make_request(Method::Get, "/admin/maze/seeds", Vec::new());
+        let get_resp = handle_admin_maze_seed_sources(&get_req, &store, "default");
+        assert_eq!(*get_resp.status(), 200u16);
+        let get_json: serde_json::Value = serde_json::from_slice(get_resp.body()).unwrap();
+        assert_eq!(
+            get_json
+                .get("sources")
+                .and_then(|v| v.as_array())
+                .map(|v| v.len()),
+            Some(1)
+        );
+
+        let refresh_req = make_request(Method::Post, "/admin/maze/seeds/refresh", Vec::new());
+        let refresh_resp = handle_admin_maze_seed_refresh(&refresh_req, &store, "default");
+        assert_eq!(*refresh_resp.status(), 200u16);
+        let refresh_json: serde_json::Value = serde_json::from_slice(refresh_resp.body()).unwrap();
+        assert_eq!(
+            refresh_json.get("refreshed"),
+            Some(&serde_json::Value::Bool(true))
+        );
+        assert!(
+            refresh_json
+                .get("term_count")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+                > 0
+        );
+    }
+
+    #[test]
+    fn admin_maze_seed_refresh_requires_operator_provider() {
+        let _lock = crate::test_support::lock_env();
+        let store = TestStore::default();
+        let refresh_req = make_request(Method::Post, "/admin/maze/seeds/refresh", Vec::new());
+        let refresh_resp = handle_admin_maze_seed_refresh(&refresh_req, &store, "default");
+        assert_eq!(*refresh_resp.status(), 409u16);
     }
 
     #[test]
@@ -1066,6 +1151,8 @@ fn sanitize_path(path: &str) -> bool {
             | "/admin/config"
             | "/admin/config/export"
             | "/admin/maze"
+            | "/admin/maze/seeds"
+            | "/admin/maze/seeds/refresh"
             | "/admin/robots"
             | "/admin/cdp"
             | "/admin/cdp/events"
@@ -1117,7 +1204,14 @@ fn request_requires_admin_write(path: &str, method: &Method) -> bool {
     ) {
         return false;
     }
-    matches!(path, "/admin/ban" | "/admin/unban" | "/admin/config")
+    matches!(
+        path,
+        "/admin/ban"
+            | "/admin/unban"
+            | "/admin/config"
+            | "/admin/maze/seeds"
+            | "/admin/maze/seeds/refresh"
+    )
 }
 
 fn log_admin_write_denied<S: crate::challenge::KeyValueStore>(
@@ -1560,6 +1654,10 @@ fn config_export_env_entries(cfg: &crate::config::Config) -> Vec<(String, String
             cfg.botness_weights.rate_high.to_string(),
         ),
         (
+            "SHUMA_BOTNESS_WEIGHT_MAZE_BEHAVIOR".to_string(),
+            cfg.botness_weights.maze_behavior.to_string(),
+        ),
+        (
             "SHUMA_BAN_DURATION".to_string(),
             cfg.ban_duration.to_string(),
         ),
@@ -1629,6 +1727,118 @@ fn config_export_env_entries(cfg: &crate::config::Config) -> Vec<(String, String
         (
             "SHUMA_MAZE_AUTO_BAN_THRESHOLD".to_string(),
             cfg.maze_auto_ban_threshold.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_ROLLOUT_PHASE".to_string(),
+            cfg.maze_rollout_phase.as_str().to_string(),
+        ),
+        (
+            "SHUMA_MAZE_TOKEN_TTL_SECONDS".to_string(),
+            cfg.maze_token_ttl_seconds.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_TOKEN_MAX_DEPTH".to_string(),
+            cfg.maze_token_max_depth.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_TOKEN_BRANCH_BUDGET".to_string(),
+            cfg.maze_token_branch_budget.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_REPLAY_TTL_SECONDS".to_string(),
+            cfg.maze_replay_ttl_seconds.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_ENTROPY_WINDOW_SECONDS".to_string(),
+            cfg.maze_entropy_window_seconds.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_CLIENT_EXPANSION_ENABLED".to_string(),
+            bool_env(cfg.maze_client_expansion_enabled).to_string(),
+        ),
+        (
+            "SHUMA_MAZE_CHECKPOINT_EVERY_NODES".to_string(),
+            cfg.maze_checkpoint_every_nodes.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_CHECKPOINT_EVERY_MS".to_string(),
+            cfg.maze_checkpoint_every_ms.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_STEP_AHEAD_MAX".to_string(),
+            cfg.maze_step_ahead_max.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_NO_JS_FALLBACK_MAX_DEPTH".to_string(),
+            cfg.maze_no_js_fallback_max_depth.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_MICRO_POW_ENABLED".to_string(),
+            bool_env(cfg.maze_micro_pow_enabled).to_string(),
+        ),
+        (
+            "SHUMA_MAZE_MICRO_POW_DEPTH_START".to_string(),
+            cfg.maze_micro_pow_depth_start.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_MICRO_POW_BASE_DIFFICULTY".to_string(),
+            cfg.maze_micro_pow_base_difficulty.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_MAX_CONCURRENT_GLOBAL".to_string(),
+            cfg.maze_max_concurrent_global.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_MAX_CONCURRENT_PER_IP_BUCKET".to_string(),
+            cfg.maze_max_concurrent_per_ip_bucket.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_MAX_RESPONSE_BYTES".to_string(),
+            cfg.maze_max_response_bytes.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_MAX_RESPONSE_DURATION_MS".to_string(),
+            cfg.maze_max_response_duration_ms.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_SERVER_VISIBLE_LINKS".to_string(),
+            cfg.maze_server_visible_links.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_MAX_LINKS".to_string(),
+            cfg.maze_max_links.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_MAX_PARAGRAPHS".to_string(),
+            cfg.maze_max_paragraphs.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_PATH_ENTROPY_SEGMENT_LEN".to_string(),
+            cfg.maze_path_entropy_segment_len.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_COVERT_DECOYS_ENABLED".to_string(),
+            bool_env(cfg.maze_covert_decoys_enabled).to_string(),
+        ),
+        (
+            "SHUMA_MAZE_SEED_PROVIDER".to_string(),
+            cfg.maze_seed_provider.as_str().to_string(),
+        ),
+        (
+            "SHUMA_MAZE_SEED_REFRESH_INTERVAL_SECONDS".to_string(),
+            cfg.maze_seed_refresh_interval_seconds.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_SEED_REFRESH_RATE_LIMIT_PER_HOUR".to_string(),
+            cfg.maze_seed_refresh_rate_limit_per_hour.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_SEED_REFRESH_MAX_SOURCES".to_string(),
+            cfg.maze_seed_refresh_max_sources.to_string(),
+        ),
+        (
+            "SHUMA_MAZE_SEED_METADATA_ONLY".to_string(),
+            bool_env(cfg.maze_seed_metadata_only).to_string(),
         ),
         (
             "SHUMA_ROBOTS_ENABLED".to_string(),
@@ -1768,6 +1978,28 @@ fn parse_edge_integration_mode_json(
         .ok_or_else(|| format!("{} must be one of: off, advisory, authoritative", field))?;
     crate::config::parse_edge_integration_mode(raw)
         .ok_or_else(|| format!("{} must be one of: off, advisory, authoritative", field))
+}
+
+fn parse_maze_rollout_phase_json(
+    field: &str,
+    value: &serde_json::Value,
+) -> Result<crate::config::MazeRolloutPhase, String> {
+    let raw = value
+        .as_str()
+        .ok_or_else(|| format!("{} must be one of: instrument, advisory, enforce", field))?;
+    crate::config::parse_maze_rollout_phase(raw)
+        .ok_or_else(|| format!("{} must be one of: instrument, advisory, enforce", field))
+}
+
+fn parse_maze_seed_provider_json(
+    field: &str,
+    value: &serde_json::Value,
+) -> Result<crate::config::MazeSeedProvider, String> {
+    let raw = value
+        .as_str()
+        .ok_or_else(|| format!("{} must be one of: internal, operator", field))?;
+    crate::config::parse_maze_seed_provider(raw)
+        .ok_or_else(|| format!("{} must be one of: internal, operator", field))
 }
 
 fn handle_admin_config(
@@ -1918,6 +2150,168 @@ fn handle_admin_config(
             json.get("maze_auto_ban_threshold").and_then(|v| v.as_u64())
         {
             cfg.maze_auto_ban_threshold = maze_auto_ban_threshold as u32;
+            changed = true;
+        }
+        if let Some(value) = json.get("maze_rollout_phase") {
+            cfg.maze_rollout_phase = match parse_maze_rollout_phase_json("maze_rollout_phase", value)
+            {
+                Ok(phase) => phase,
+                Err(msg) => return Response::new(400, msg),
+            };
+            changed = true;
+        }
+        if let Some(v) = json.get("maze_token_ttl_seconds").and_then(|v| v.as_u64()) {
+            cfg.maze_token_ttl_seconds = v;
+            changed = true;
+        }
+        if let Some(v) = json.get("maze_token_max_depth").and_then(|v| v.as_u64()) {
+            cfg.maze_token_max_depth = v as u16;
+            changed = true;
+        }
+        if let Some(v) = json.get("maze_token_branch_budget").and_then(|v| v.as_u64()) {
+            cfg.maze_token_branch_budget = v as u8;
+            changed = true;
+        }
+        if let Some(v) = json.get("maze_replay_ttl_seconds").and_then(|v| v.as_u64()) {
+            cfg.maze_replay_ttl_seconds = v;
+            changed = true;
+        }
+        if let Some(v) = json.get("maze_entropy_window_seconds").and_then(|v| v.as_u64()) {
+            cfg.maze_entropy_window_seconds = v;
+            changed = true;
+        }
+        if let Some(v) = json
+            .get("maze_client_expansion_enabled")
+            .and_then(|v| v.as_bool())
+        {
+            cfg.maze_client_expansion_enabled = v;
+            changed = true;
+        }
+        if let Some(v) = json
+            .get("maze_checkpoint_every_nodes")
+            .and_then(|v| v.as_u64())
+        {
+            cfg.maze_checkpoint_every_nodes = v;
+            changed = true;
+        }
+        if let Some(v) = json.get("maze_checkpoint_every_ms").and_then(|v| v.as_u64()) {
+            cfg.maze_checkpoint_every_ms = v;
+            changed = true;
+        }
+        if let Some(v) = json.get("maze_step_ahead_max").and_then(|v| v.as_u64()) {
+            cfg.maze_step_ahead_max = v;
+            changed = true;
+        }
+        if let Some(v) = json
+            .get("maze_no_js_fallback_max_depth")
+            .and_then(|v| v.as_u64())
+        {
+            cfg.maze_no_js_fallback_max_depth = v as u16;
+            changed = true;
+        }
+        if let Some(v) = json.get("maze_micro_pow_enabled").and_then(|v| v.as_bool()) {
+            cfg.maze_micro_pow_enabled = v;
+            changed = true;
+        }
+        if let Some(v) = json
+            .get("maze_micro_pow_depth_start")
+            .and_then(|v| v.as_u64())
+        {
+            cfg.maze_micro_pow_depth_start = v as u16;
+            changed = true;
+        }
+        if let Some(v) = json
+            .get("maze_micro_pow_base_difficulty")
+            .and_then(|v| v.as_u64())
+        {
+            cfg.maze_micro_pow_base_difficulty = v as u8;
+            changed = true;
+        }
+        if let Some(v) = json
+            .get("maze_max_concurrent_global")
+            .and_then(|v| v.as_u64())
+        {
+            cfg.maze_max_concurrent_global = v as u32;
+            changed = true;
+        }
+        if let Some(v) = json
+            .get("maze_max_concurrent_per_ip_bucket")
+            .and_then(|v| v.as_u64())
+        {
+            cfg.maze_max_concurrent_per_ip_bucket = v as u32;
+            changed = true;
+        }
+        if let Some(v) = json.get("maze_max_response_bytes").and_then(|v| v.as_u64()) {
+            cfg.maze_max_response_bytes = v as u32;
+            changed = true;
+        }
+        if let Some(v) = json
+            .get("maze_max_response_duration_ms")
+            .and_then(|v| v.as_u64())
+        {
+            cfg.maze_max_response_duration_ms = v;
+            changed = true;
+        }
+        if let Some(v) = json
+            .get("maze_server_visible_links")
+            .and_then(|v| v.as_u64())
+        {
+            cfg.maze_server_visible_links = v as u32;
+            changed = true;
+        }
+        if let Some(v) = json.get("maze_max_links").and_then(|v| v.as_u64()) {
+            cfg.maze_max_links = v as u32;
+            changed = true;
+        }
+        if let Some(v) = json.get("maze_max_paragraphs").and_then(|v| v.as_u64()) {
+            cfg.maze_max_paragraphs = v as u32;
+            changed = true;
+        }
+        if let Some(v) = json
+            .get("maze_path_entropy_segment_len")
+            .and_then(|v| v.as_u64())
+        {
+            cfg.maze_path_entropy_segment_len = v as u8;
+            changed = true;
+        }
+        if let Some(v) = json
+            .get("maze_covert_decoys_enabled")
+            .and_then(|v| v.as_bool())
+        {
+            cfg.maze_covert_decoys_enabled = v;
+            changed = true;
+        }
+        if let Some(value) = json.get("maze_seed_provider") {
+            cfg.maze_seed_provider = match parse_maze_seed_provider_json("maze_seed_provider", value)
+            {
+                Ok(provider) => provider,
+                Err(msg) => return Response::new(400, msg),
+            };
+            changed = true;
+        }
+        if let Some(v) = json
+            .get("maze_seed_refresh_interval_seconds")
+            .and_then(|v| v.as_u64())
+        {
+            cfg.maze_seed_refresh_interval_seconds = v;
+            changed = true;
+        }
+        if let Some(v) = json
+            .get("maze_seed_refresh_rate_limit_per_hour")
+            .and_then(|v| v.as_u64())
+        {
+            cfg.maze_seed_refresh_rate_limit_per_hour = v as u32;
+            changed = true;
+        }
+        if let Some(v) = json
+            .get("maze_seed_refresh_max_sources")
+            .and_then(|v| v.as_u64())
+        {
+            cfg.maze_seed_refresh_max_sources = v as u32;
+            changed = true;
+        }
+        if let Some(v) = json.get("maze_seed_metadata_only").and_then(|v| v.as_bool()) {
+            cfg.maze_seed_metadata_only = v;
             changed = true;
         }
 
@@ -2212,6 +2606,14 @@ fn handle_admin_config(
                 changed = true;
                 botness_changed = true;
             }
+            if let Some(maze_behavior) = weights.get("maze_behavior").and_then(|v| v.as_u64()) {
+                if maze_behavior > 10 {
+                    return Response::new(400, "botness_weights.maze_behavior out of range (0-10)");
+                }
+                cfg.botness_weights.maze_behavior = maze_behavior as u8;
+                changed = true;
+                botness_changed = true;
+            }
         }
         if let Some(defence_modes) = json.get("defence_modes") {
             let Some(modes_obj) = defence_modes.as_object() else {
@@ -2262,7 +2664,7 @@ fn handle_admin_config(
                     ip: None,
                     reason: Some("botness_config_update".to_string()),
                     outcome: Some(format!(
-                        "challenge:{}->{} maze:{}->{} weights(js:{}->{} geo:{}->{} rate_med:{}->{} rate_high:{}->{}) modes(rate:{:?}->{:?} geo:{:?}->{:?} js:{:?}->{:?})",
+                        "challenge:{}->{} maze:{}->{} weights(js:{}->{} geo:{}->{} rate_med:{}->{} rate_high:{}->{} maze_behavior:{}->{}) modes(rate:{:?}->{:?} geo:{:?}->{:?} js:{:?}->{:?})",
                         old_challenge_threshold,
                         cfg.challenge_risk_threshold,
                         old_maze_threshold,
@@ -2275,6 +2677,8 @@ fn handle_admin_config(
                         cfg.botness_weights.rate_medium,
                         old_weights.rate_high,
                         cfg.botness_weights.rate_high,
+                        old_weights.maze_behavior,
+                        cfg.botness_weights.maze_behavior,
                         old_modes.rate,
                         cfg.defence_modes.rate,
                         old_modes.geo,
@@ -2320,6 +2724,34 @@ fn handle_admin_config(
                 "maze_enabled": cfg.maze_enabled,
                 "maze_auto_ban": cfg.maze_auto_ban,
                 "maze_auto_ban_threshold": cfg.maze_auto_ban_threshold,
+                "maze_rollout_phase": cfg.maze_rollout_phase,
+                "maze_token_ttl_seconds": cfg.maze_token_ttl_seconds,
+                "maze_token_max_depth": cfg.maze_token_max_depth,
+                "maze_token_branch_budget": cfg.maze_token_branch_budget,
+                "maze_replay_ttl_seconds": cfg.maze_replay_ttl_seconds,
+                "maze_entropy_window_seconds": cfg.maze_entropy_window_seconds,
+                "maze_client_expansion_enabled": cfg.maze_client_expansion_enabled,
+                "maze_checkpoint_every_nodes": cfg.maze_checkpoint_every_nodes,
+                "maze_checkpoint_every_ms": cfg.maze_checkpoint_every_ms,
+                "maze_step_ahead_max": cfg.maze_step_ahead_max,
+                "maze_no_js_fallback_max_depth": cfg.maze_no_js_fallback_max_depth,
+                "maze_micro_pow_enabled": cfg.maze_micro_pow_enabled,
+                "maze_micro_pow_depth_start": cfg.maze_micro_pow_depth_start,
+                "maze_micro_pow_base_difficulty": cfg.maze_micro_pow_base_difficulty,
+                "maze_max_concurrent_global": cfg.maze_max_concurrent_global,
+                "maze_max_concurrent_per_ip_bucket": cfg.maze_max_concurrent_per_ip_bucket,
+                "maze_max_response_bytes": cfg.maze_max_response_bytes,
+                "maze_max_response_duration_ms": cfg.maze_max_response_duration_ms,
+                "maze_server_visible_links": cfg.maze_server_visible_links,
+                "maze_max_links": cfg.maze_max_links,
+                "maze_max_paragraphs": cfg.maze_max_paragraphs,
+                "maze_path_entropy_segment_len": cfg.maze_path_entropy_segment_len,
+                "maze_covert_decoys_enabled": cfg.maze_covert_decoys_enabled,
+                "maze_seed_provider": cfg.maze_seed_provider,
+                "maze_seed_refresh_interval_seconds": cfg.maze_seed_refresh_interval_seconds,
+                "maze_seed_refresh_rate_limit_per_hour": cfg.maze_seed_refresh_rate_limit_per_hour,
+                "maze_seed_refresh_max_sources": cfg.maze_seed_refresh_max_sources,
+                "maze_seed_metadata_only": cfg.maze_seed_metadata_only,
                 "robots_enabled": cfg.robots_enabled,
                 "ai_policy_block_training": cfg.robots_block_ai_training,
                 "ai_policy_block_search": cfg.robots_block_ai_search,
@@ -2348,7 +2780,8 @@ fn handle_admin_config(
                     "js_required": cfg.botness_weights.js_required,
                     "geo_risk": cfg.botness_weights.geo_risk,
                     "rate_medium": cfg.botness_weights.rate_medium,
-                    "rate_high": cfg.botness_weights.rate_high
+                    "rate_high": cfg.botness_weights.rate_high,
+                    "maze_behavior": cfg.botness_weights.maze_behavior
                 },
                 "defence_modes": {
                     "rate": cfg.defence_modes.rate,
@@ -2417,6 +2850,34 @@ fn handle_admin_config(
         "maze_enabled": cfg.maze_enabled,
         "maze_auto_ban": cfg.maze_auto_ban,
         "maze_auto_ban_threshold": cfg.maze_auto_ban_threshold,
+        "maze_rollout_phase": cfg.maze_rollout_phase,
+        "maze_token_ttl_seconds": cfg.maze_token_ttl_seconds,
+        "maze_token_max_depth": cfg.maze_token_max_depth,
+        "maze_token_branch_budget": cfg.maze_token_branch_budget,
+        "maze_replay_ttl_seconds": cfg.maze_replay_ttl_seconds,
+        "maze_entropy_window_seconds": cfg.maze_entropy_window_seconds,
+        "maze_client_expansion_enabled": cfg.maze_client_expansion_enabled,
+        "maze_checkpoint_every_nodes": cfg.maze_checkpoint_every_nodes,
+        "maze_checkpoint_every_ms": cfg.maze_checkpoint_every_ms,
+        "maze_step_ahead_max": cfg.maze_step_ahead_max,
+        "maze_no_js_fallback_max_depth": cfg.maze_no_js_fallback_max_depth,
+        "maze_micro_pow_enabled": cfg.maze_micro_pow_enabled,
+        "maze_micro_pow_depth_start": cfg.maze_micro_pow_depth_start,
+        "maze_micro_pow_base_difficulty": cfg.maze_micro_pow_base_difficulty,
+        "maze_max_concurrent_global": cfg.maze_max_concurrent_global,
+        "maze_max_concurrent_per_ip_bucket": cfg.maze_max_concurrent_per_ip_bucket,
+        "maze_max_response_bytes": cfg.maze_max_response_bytes,
+        "maze_max_response_duration_ms": cfg.maze_max_response_duration_ms,
+        "maze_server_visible_links": cfg.maze_server_visible_links,
+        "maze_max_links": cfg.maze_max_links,
+        "maze_max_paragraphs": cfg.maze_max_paragraphs,
+        "maze_path_entropy_segment_len": cfg.maze_path_entropy_segment_len,
+        "maze_covert_decoys_enabled": cfg.maze_covert_decoys_enabled,
+        "maze_seed_provider": cfg.maze_seed_provider,
+        "maze_seed_refresh_interval_seconds": cfg.maze_seed_refresh_interval_seconds,
+        "maze_seed_refresh_rate_limit_per_hour": cfg.maze_seed_refresh_rate_limit_per_hour,
+        "maze_seed_refresh_max_sources": cfg.maze_seed_refresh_max_sources,
+        "maze_seed_metadata_only": cfg.maze_seed_metadata_only,
         "robots_enabled": cfg.robots_enabled,
         "ai_policy_block_training": cfg.robots_block_ai_training,
         "ai_policy_block_search": cfg.robots_block_ai_search,
@@ -2445,7 +2906,8 @@ fn handle_admin_config(
             "js_required": cfg.botness_weights.js_required,
             "geo_risk": cfg.botness_weights.geo_risk,
             "rate_medium": cfg.botness_weights.rate_medium,
-            "rate_high": cfg.botness_weights.rate_high
+            "rate_high": cfg.botness_weights.rate_high,
+            "maze_behavior": cfg.botness_weights.maze_behavior
         },
         "defence_modes": {
             "rate": cfg.defence_modes.rate,
@@ -2468,6 +2930,192 @@ fn handle_admin_config(
         "enterprise_state_guardrail_error": cfg.enterprise_state_guardrail_error(),
         "botness_config_mutable": crate::config::botness_config_mutable(),
         "botness_signal_definitions": botness_signal_definitions(&cfg)
+    }))
+    .unwrap();
+    Response::new(200, body)
+}
+
+fn parse_operator_seed_sources_json(
+    value: &serde_json::Value,
+) -> Result<Vec<crate::maze::seeds::OperatorSeedSource>, String> {
+    let entries = value
+        .as_array()
+        .ok_or_else(|| "sources must be an array".to_string())?;
+    let mut sources = Vec::with_capacity(entries.len());
+    for entry in entries {
+        let obj = entry
+            .as_object()
+            .ok_or_else(|| "each source must be an object".to_string())?;
+        let id = obj
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let url = obj
+            .get("url")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string());
+        let title = obj
+            .get("title")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string());
+        let description = obj
+            .get("description")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string());
+        let keywords = obj
+            .get("keywords")
+            .and_then(|v| v.as_array())
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let allow_seed_use = obj
+            .get("allow_seed_use")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let robots_allowed = obj
+            .get("robots_allowed")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let body_excerpt = obj
+            .get("body_excerpt")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string());
+        sources.push(crate::maze::seeds::OperatorSeedSource {
+            id,
+            url,
+            title,
+            description,
+            keywords,
+            allow_seed_use,
+            robots_allowed,
+            body_excerpt,
+        });
+    }
+    Ok(sources)
+}
+
+fn handle_admin_maze_seed_sources<S>(req: &Request, store: &S, site_id: &str) -> Response
+where
+    S: crate::challenge::KeyValueStore + crate::maze::state::MazeStateStore,
+{
+    let cfg = match crate::config::Config::load(store, site_id) {
+        Ok(cfg) => cfg,
+        Err(err) => return Response::new(500, err.user_message()),
+    };
+
+    match *req.method() {
+        Method::Get => {
+            let sources = crate::maze::seeds::list_operator_sources(store);
+            let cache = crate::maze::seeds::cached_seed_snapshot(store);
+            let body = serde_json::to_string(&json!({
+                "seed_provider": cfg.maze_seed_provider,
+                "seed_refresh_interval_seconds": cfg.maze_seed_refresh_interval_seconds,
+                "seed_refresh_rate_limit_per_hour": cfg.maze_seed_refresh_rate_limit_per_hour,
+                "seed_refresh_max_sources": cfg.maze_seed_refresh_max_sources,
+                "seed_metadata_only": cfg.maze_seed_metadata_only,
+                "sources": sources,
+                "cache": cache
+            }))
+            .unwrap();
+            Response::new(200, body)
+        }
+        Method::Post => {
+            let payload = match crate::request_validation::parse_json_body(
+                req.body(),
+                crate::request_validation::MAX_ADMIN_JSON_BYTES,
+            ) {
+                Ok(payload) => payload,
+                Err(err) => return Response::new(400, err),
+            };
+            let Some(value) = payload.get("sources") else {
+                return Response::new(400, "sources field is required");
+            };
+            let sources = match parse_operator_seed_sources_json(value) {
+                Ok(sources) => sources,
+                Err(err) => return Response::new(400, err),
+            };
+            if let Err(err) = crate::maze::seeds::save_operator_sources(store, &cfg, sources.clone()) {
+                return Response::new(400, err);
+            }
+            log_event(
+                store,
+                &EventLogEntry {
+                    ts: now_ts(),
+                    event: EventType::AdminAction,
+                    ip: None,
+                    reason: Some("maze_seed_sources_update".to_string()),
+                    outcome: Some(format!("sources={}", sources.len())),
+                    admin: Some(crate::admin::auth::get_admin_id(req)),
+                },
+            );
+            let body = serde_json::to_string(&json!({
+                "updated": true,
+                "source_count": sources.len()
+            }))
+            .unwrap();
+            Response::new(200, body)
+        }
+        _ => Response::new(405, "Method Not Allowed"),
+    }
+}
+
+fn handle_admin_maze_seed_refresh<S>(req: &Request, store: &S, site_id: &str) -> Response
+where
+    S: crate::challenge::KeyValueStore + crate::maze::state::MazeStateStore,
+{
+    if *req.method() != Method::Post {
+        return Response::new(405, "Method Not Allowed");
+    }
+    let cfg = match crate::config::Config::load(store, site_id) {
+        Ok(cfg) => cfg,
+        Err(err) => return Response::new(500, err.user_message()),
+    };
+    if cfg.maze_seed_provider != crate::config::MazeSeedProvider::Operator {
+        return Response::new(
+            409,
+            "maze_seed_provider must be 'operator' for manual seed refresh",
+        );
+    }
+
+    let now = now_ts();
+    let refreshed = match crate::maze::seeds::manual_refresh_operator_corpus(store, &cfg, now) {
+        Ok(refreshed) => refreshed,
+        Err(err) => {
+            if err.contains("rate limit exceeded") {
+                return Response::new(429, err);
+            }
+            return Response::new(400, err);
+        }
+    };
+    log_event(
+        store,
+        &EventLogEntry {
+            ts: now,
+            event: EventType::AdminAction,
+            ip: None,
+            reason: Some("maze_seed_refresh".to_string()),
+            outcome: Some(format!(
+                "provider={} version={} terms={} sources={}",
+                refreshed.provider,
+                refreshed.version,
+                refreshed.terms.len(),
+                refreshed.source_count
+            )),
+            admin: Some(crate::admin::auth::get_admin_id(req)),
+        },
+    );
+    let body = serde_json::to_string(&json!({
+        "refreshed": true,
+        "provider": refreshed.provider,
+        "version": refreshed.version,
+        "metadata_only": refreshed.metadata_only,
+        "source_count": refreshed.source_count,
+        "term_count": refreshed.terms.len()
     }))
     .unwrap();
     Response::new(200, body)
@@ -2856,6 +3504,12 @@ pub fn handle_admin(req: &Request) -> Response {
         "/admin/config/export" => {
             return handle_admin_config_export(req, &store, site_id);
         }
+        "/admin/maze/seeds" => {
+            return handle_admin_maze_seed_sources(req, &store, site_id);
+        }
+        "/admin/maze/seeds/refresh" => {
+            return handle_admin_maze_seed_refresh(req, &store, site_id);
+        }
         "/admin" => {
             // API help endpoint
             log_event(
@@ -2869,7 +3523,7 @@ pub fn handle_admin(req: &Request) -> Response {
                     admin: Some(crate::admin::auth::get_admin_id(req)),
                 },
             );
-            Response::new(200, "WASM Bot Defence Admin API. Endpoints: /admin/ban, /admin/unban?ip=IP, /admin/analytics, /admin/events, /admin/config, /admin/config/export, /admin/maze (GET for maze stats), /admin/robots (GET for robots.txt config & preview), /admin/cdp (GET for CDP detection config & stats), /admin/cdp/events (GET for CDP detection and auto-ban events).")
+            Response::new(200, "WASM Bot Defence Admin API. Endpoints: /admin/ban, /admin/unban?ip=IP, /admin/analytics, /admin/events, /admin/config, /admin/config/export, /admin/maze (GET for maze stats), /admin/maze/seeds (GET/POST seed source adapters), /admin/maze/seeds/refresh (POST manual seed refresh), /admin/robots (GET for robots.txt config & preview), /admin/cdp (GET for CDP detection config & stats), /admin/cdp/events (GET for CDP detection and auto-ban events).")
         }
         "/admin/maze" => {
             // Return maze statistics

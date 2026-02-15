@@ -8,11 +8,12 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 const METRICS_PREFIX: &str = "metrics:";
-const BOTNESS_SIGNAL_KEYS: [&str; 4] = [
+const BOTNESS_SIGNAL_KEYS: [&str; 5] = [
     "js_verification_required",
     "geo_risk",
     "rate_pressure_medium",
     "rate_pressure_high",
+    "maze_behavior",
 ];
 const SIGNAL_AVAILABILITY_STATES: [&str; 3] = ["active", "disabled", "unavailable"];
 const DEFENCE_MODE_MODULES: [&str; 3] = ["rate", "geo", "js"];
@@ -24,6 +25,21 @@ const RATE_LIMITER_OUTAGE_ACTIONS: [&str; 3] = ["fallback_internal", "allow", "d
 const RATE_LIMITER_USAGE_FALLBACK_REASONS: [&str; 2] = ["backend_error", "backend_missing"];
 const RATE_LIMITER_DRIFT_BANDS: [&str; 4] = ["delta_0", "delta_1_5", "delta_6_20", "delta_21_plus"];
 const RATE_LIMITER_DECISIONS: [&str; 2] = ["allowed", "limited"];
+const MAZE_TOKEN_OUTCOMES: [&str; 10] = [
+    "entry",
+    "validated",
+    "invalid",
+    "expired",
+    "replay",
+    "binding_mismatch",
+    "depth_exceeded",
+    "checkpoint_missing",
+    "budget_exceeded",
+    "micro_pow_failed",
+];
+const MAZE_CHECKPOINT_OUTCOMES: [&str; 4] = ["accepted", "invalid", "binding_mismatch", "method_not_allowed"];
+const MAZE_BUDGET_OUTCOMES: [&str; 3] = ["acquired", "saturated", "response_cap_exceeded"];
+const MAZE_PROOF_OUTCOMES: [&str; 3] = ["required", "passed", "failed"];
 const PROVIDER_OBSERVED_COMBINATIONS: [(
     crate::providers::registry::ProviderCapability,
     crate::config::ProviderBackend,
@@ -95,6 +111,11 @@ pub enum MetricName {
     WhitelistedTotal,
     TestModeActions,
     MazeHits,
+    MazeTokenOutcomes,
+    MazeCheckpointOutcomes,
+    MazeBudgetOutcomes,
+    MazeProofOutcomes,
+    MazeEntropyVariants,
     CdpDetections,
     BotnessSignalState,
     DefenceModeEffective,
@@ -122,6 +143,11 @@ impl MetricName {
             MetricName::WhitelistedTotal => "whitelisted_total",
             MetricName::TestModeActions => "test_mode_actions_total",
             MetricName::MazeHits => "maze_hits_total",
+            MetricName::MazeTokenOutcomes => "maze_token_outcomes_total",
+            MetricName::MazeCheckpointOutcomes => "maze_checkpoint_outcomes_total",
+            MetricName::MazeBudgetOutcomes => "maze_budget_outcomes_total",
+            MetricName::MazeProofOutcomes => "maze_proof_outcomes_total",
+            MetricName::MazeEntropyVariants => "maze_entropy_variants_total",
             MetricName::CdpDetections => "cdp_detections_total",
             MetricName::BotnessSignalState => "botness_signal_state_total",
             MetricName::DefenceModeEffective => "defence_mode_effective_total",
@@ -289,6 +315,32 @@ pub fn record_policy_match(
     }
 }
 
+pub fn record_maze_token_outcome(store: &Store, outcome: &str) {
+    increment(store, MetricName::MazeTokenOutcomes, Some(outcome));
+}
+
+pub fn record_maze_checkpoint_outcome(store: &Store, outcome: &str) {
+    increment(store, MetricName::MazeCheckpointOutcomes, Some(outcome));
+}
+
+pub fn record_maze_budget_outcome(store: &Store, outcome: &str) {
+    increment(store, MetricName::MazeBudgetOutcomes, Some(outcome));
+}
+
+pub fn record_maze_proof_outcome(store: &Store, outcome: &str) {
+    increment(store, MetricName::MazeProofOutcomes, Some(outcome));
+}
+
+pub fn record_maze_entropy_variant(
+    store: &Store,
+    variant_family: &str,
+    provider: &str,
+    metadata_only: bool,
+) {
+    let label = format!("{}:{}:{}", variant_family, provider, metadata_only as u8);
+    increment(store, MetricName::MazeEntropyVariants, Some(label.as_str()));
+}
+
 /// Get current value of a counter
 fn get_counter(store: &Store, key: &str) -> u64 {
     store
@@ -416,6 +468,71 @@ pub fn render_metrics(store: &Store) -> String {
     output.push_str("# HELP bot_defence_maze_hits_total Total hits on maze pages\n");
     let maze_hits = get_counter(store, &format!("{}maze_hits_total", METRICS_PREFIX));
     output.push_str(&format!("bot_defence_maze_hits_total {}\n", maze_hits));
+
+    output.push_str("\n# TYPE bot_defence_maze_token_outcomes_total counter\n");
+    output.push_str(
+        "# HELP bot_defence_maze_token_outcomes_total Maze traversal token outcomes by outcome label\n",
+    );
+    for outcome in MAZE_TOKEN_OUTCOMES {
+        let key = format!("{}maze_token_outcomes_total:{}", METRICS_PREFIX, outcome);
+        let count = get_counter(store, &key);
+        output.push_str(&format!(
+            "bot_defence_maze_token_outcomes_total{{outcome=\"{}\"}} {}\n",
+            outcome, count
+        ));
+    }
+
+    output.push_str("\n# TYPE bot_defence_maze_checkpoint_outcomes_total counter\n");
+    output.push_str(
+        "# HELP bot_defence_maze_checkpoint_outcomes_total Maze checkpoint submission outcomes\n",
+    );
+    for outcome in MAZE_CHECKPOINT_OUTCOMES {
+        let key = format!("{}maze_checkpoint_outcomes_total:{}", METRICS_PREFIX, outcome);
+        let count = get_counter(store, &key);
+        output.push_str(&format!(
+            "bot_defence_maze_checkpoint_outcomes_total{{outcome=\"{}\"}} {}\n",
+            outcome, count
+        ));
+    }
+
+    output.push_str("\n# TYPE bot_defence_maze_budget_outcomes_total counter\n");
+    output.push_str("# HELP bot_defence_maze_budget_outcomes_total Maze budget outcomes\n");
+    for outcome in MAZE_BUDGET_OUTCOMES {
+        let key = format!("{}maze_budget_outcomes_total:{}", METRICS_PREFIX, outcome);
+        let count = get_counter(store, &key);
+        output.push_str(&format!(
+            "bot_defence_maze_budget_outcomes_total{{outcome=\"{}\"}} {}\n",
+            outcome, count
+        ));
+    }
+
+    output.push_str("\n# TYPE bot_defence_maze_proof_outcomes_total counter\n");
+    output.push_str(
+        "# HELP bot_defence_maze_proof_outcomes_total Maze proof-of-work outcomes for deep traversal\n",
+    );
+    for outcome in MAZE_PROOF_OUTCOMES {
+        let key = format!("{}maze_proof_outcomes_total:{}", METRICS_PREFIX, outcome);
+        let count = get_counter(store, &key);
+        output.push_str(&format!(
+            "bot_defence_maze_proof_outcomes_total{{outcome=\"{}\"}} {}\n",
+            outcome, count
+        ));
+    }
+
+    output.push_str("\n# TYPE bot_defence_maze_entropy_variants_total counter\n");
+    output.push_str(
+        "# HELP bot_defence_maze_entropy_variants_total Maze entropy variant families by provider and metadata posture\n",
+    );
+    for (label, count) in collect_labeled_counters(store, MetricName::MazeEntropyVariants) {
+        let mut parts = label.splitn(3, ':');
+        let variant = parts.next().unwrap_or("unknown");
+        let provider = parts.next().unwrap_or("unknown");
+        let metadata_only = parts.next().unwrap_or("unknown");
+        output.push_str(&format!(
+            "bot_defence_maze_entropy_variants_total{{variant=\"{}\",provider=\"{}\",metadata_only=\"{}\"}} {}\n",
+            variant, provider, metadata_only, count
+        ));
+    }
 
     // Botness signal states
     output.push_str("\n# TYPE bot_defence_botness_signal_state_total counter\n");

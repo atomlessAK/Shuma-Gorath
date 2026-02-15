@@ -245,44 +245,44 @@ mod tests {
     use crate::config::BanDurations;
 
     fn test_config() -> Config {
-        Config {
-            ban_duration: 21600,
-            ban_durations: BanDurations::default(),
-            rate_limit: 80,
-            honeypots: vec!["/instaban".to_string()],
-            browser_block: vec![],
-            browser_whitelist: vec![],
-            geo_risk: vec![],
-            geo_allow: vec![],
-            geo_challenge: vec![],
-            geo_maze: vec![],
-            geo_block: vec![],
-            whitelist: vec![],
-            path_whitelist: vec![],
-            test_mode: false,
-            maze_enabled: true,
-            maze_auto_ban: true,
-            maze_auto_ban_threshold: 50,
-            robots_enabled: true,
-            robots_block_ai_training: true,
-            robots_block_ai_search: false,
-            robots_allow_search_engines: true,
-            robots_crawl_delay: 2,
-            cdp_detection_enabled: false,
-            cdp_detection_threshold: 3.0,
-            cdp_auto_ban: false,
-            js_required_enforced: true,
-            pow_enabled: true,
-            pow_difficulty: crate::config::POW_DIFFICULTY_MIN,
-            pow_ttl_seconds: crate::config::POW_TTL_MIN,
-            challenge_transform_count: 6,
-            challenge_risk_threshold: 3,
-            botness_maze_threshold: 6,
-            botness_weights: crate::config::BotnessWeights::default(),
-            defence_modes: crate::config::DefenceModes::default(),
-            provider_backends: crate::config::ProviderBackends::default(),
-            edge_integration_mode: crate::config::EdgeIntegrationMode::Off,
-        }
+        let mut cfg = crate::config::defaults().clone();
+        cfg.ban_duration = 21600;
+        cfg.ban_durations = BanDurations::default();
+        cfg.rate_limit = 80;
+        cfg.honeypots = vec!["/instaban".to_string()];
+        cfg.browser_block = vec![];
+        cfg.browser_whitelist = vec![];
+        cfg.geo_risk = vec![];
+        cfg.geo_allow = vec![];
+        cfg.geo_challenge = vec![];
+        cfg.geo_maze = vec![];
+        cfg.geo_block = vec![];
+        cfg.whitelist = vec![];
+        cfg.path_whitelist = vec![];
+        cfg.test_mode = false;
+        cfg.maze_enabled = true;
+        cfg.maze_auto_ban = true;
+        cfg.maze_auto_ban_threshold = 50;
+        cfg.robots_enabled = true;
+        cfg.robots_block_ai_training = true;
+        cfg.robots_block_ai_search = false;
+        cfg.robots_allow_search_engines = true;
+        cfg.robots_crawl_delay = 2;
+        cfg.cdp_detection_enabled = false;
+        cfg.cdp_detection_threshold = 3.0;
+        cfg.cdp_auto_ban = false;
+        cfg.js_required_enforced = true;
+        cfg.pow_enabled = true;
+        cfg.pow_difficulty = crate::config::POW_DIFFICULTY_MIN;
+        cfg.pow_ttl_seconds = crate::config::POW_TTL_MIN;
+        cfg.challenge_transform_count = 6;
+        cfg.challenge_risk_threshold = 3;
+        cfg.botness_maze_threshold = 6;
+        cfg.botness_weights = crate::config::BotnessWeights::default();
+        cfg.defence_modes = crate::config::DefenceModes::default();
+        cfg.provider_backends = crate::config::ProviderBackends::default();
+        cfg.edge_integration_mode = crate::config::EdgeIntegrationMode::Off;
+        cfg
     }
 
     #[test]
