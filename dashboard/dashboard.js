@@ -14,6 +14,10 @@ const adminSessionModule = window.ShumaDashboardAdminSession;
 if (!adminSessionModule) {
   throw new Error('Missing dashboard admin-session module (window.ShumaDashboardAdminSession)');
 }
+const tabLifecycleModule = window.ShumaDashboardTabLifecycle;
+if (!tabLifecycleModule) {
+  throw new Error('Missing dashboard tab lifecycle module (window.ShumaDashboardTabLifecycle)');
+}
 
 const INTEGER_FIELD_RULES = {
   'ban-duration-days': { min: 0, max: 365, fallback: 0, label: 'Manual ban duration days' },
@@ -91,120 +95,7 @@ const IPV4_SEGMENT_PATTERN = /^\d{1,3}$/;
 const IPV6_INPUT_PATTERN = /^[0-9a-fA-F:.]+$/;
 let adminEndpointContext = null;
 let adminSessionController = null;
-const DASHBOARD_TABS = Object.freeze(['monitoring', 'ip-bans', 'status', 'config', 'tuning']);
-const DEFAULT_DASHBOARD_TAB = 'monitoring';
-let activeDashboardTab = DEFAULT_DASHBOARD_TAB;
-
-function normalizeDashboardTab(raw) {
-  const normalized = String(raw || '').trim().toLowerCase();
-  return DASHBOARD_TABS.includes(normalized) ? normalized : DEFAULT_DASHBOARD_TAB;
-}
-
-function applyDashboardTab(tabName) {
-  const tab = normalizeDashboardTab(tabName);
-  activeDashboardTab = tab;
-
-  const links = Array.from(document.querySelectorAll('[data-dashboard-tab-link]'));
-  links.forEach(link => {
-    const linkTab = normalizeDashboardTab(link.dataset.dashboardTabLink);
-    const selected = linkTab === tab;
-    link.setAttribute('aria-selected', selected ? 'true' : 'false');
-    link.tabIndex = selected ? 0 : -1;
-    link.classList.toggle('active', selected);
-  });
-
-  const monitoringPanel = document.getElementById('dashboard-panel-monitoring');
-  const adminSection = document.getElementById('dashboard-admin-section');
-  const adminPanels = Array.from(
-    document.querySelectorAll('#dashboard-admin-section [data-dashboard-tab-panel]')
-  );
-
-  const showingMonitoring = tab === 'monitoring';
-  if (monitoringPanel) {
-    monitoringPanel.hidden = !showingMonitoring;
-  }
-
-  if (adminSection) {
-    adminSection.hidden = showingMonitoring;
-  }
-
-  if (!showingMonitoring) {
-    let matched = false;
-    adminPanels.forEach(panel => {
-      const panelTab = normalizeDashboardTab(panel.dataset.dashboardTabPanel);
-      const show = panelTab === tab;
-      panel.hidden = !show;
-      if (show) matched = true;
-    });
-
-    // Defensive fallback: if an unknown hash resolves to admin mode, default to config pane.
-    if (!matched) {
-      adminPanels.forEach(panel => {
-        const panelTab = normalizeDashboardTab(panel.dataset.dashboardTabPanel);
-        panel.hidden = panelTab !== 'config';
-      });
-    }
-  }
-}
-
-function syncDashboardTabFromHash() {
-  const requested = normalizeDashboardTab((window.location.hash || '').replace(/^#/, ''));
-  if (window.location.hash !== `#${requested}`) {
-    history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${requested}`);
-  }
-  applyDashboardTab(requested);
-}
-
-function focusDashboardTabByOffset(offset) {
-  const links = Array.from(document.querySelectorAll('[data-dashboard-tab-link]'));
-  if (links.length === 0) return;
-  const currentIndex = links.findIndex(link => link.getAttribute('aria-selected') === 'true');
-  const startIndex = currentIndex >= 0 ? currentIndex : 0;
-  const nextIndex = (startIndex + offset + links.length) % links.length;
-  links[nextIndex].focus();
-  const targetTab = normalizeDashboardTab(links[nextIndex].dataset.dashboardTabLink);
-  if (window.location.hash !== `#${targetTab}`) {
-    window.location.hash = targetTab;
-  } else {
-    applyDashboardTab(targetTab);
-  }
-}
-
-function initDashboardTabRouter() {
-  document.querySelectorAll('[data-dashboard-tab-link]').forEach(link => {
-    link.addEventListener('click', event => {
-      event.preventDefault();
-      const target = normalizeDashboardTab(link.dataset.dashboardTabLink);
-      if (window.location.hash !== `#${target}`) {
-        window.location.hash = target;
-      } else {
-        applyDashboardTab(target);
-      }
-    });
-
-    link.addEventListener('keydown', event => {
-      if (event.key === 'ArrowRight') {
-        event.preventDefault();
-        focusDashboardTabByOffset(1);
-      } else if (event.key === 'ArrowLeft') {
-        event.preventDefault();
-        focusDashboardTabByOffset(-1);
-      } else if (event.key === 'Home') {
-        event.preventDefault();
-        const first = document.querySelector('[data-dashboard-tab-link]');
-        if (first) first.click();
-      } else if (event.key === 'End') {
-        event.preventDefault();
-        const links = Array.from(document.querySelectorAll('[data-dashboard-tab-link]'));
-        const last = links[links.length - 1];
-        if (last) last.click();
-      }
-    });
-  });
-
-  window.addEventListener('hashchange', syncDashboardTabFromHash);
-  syncDashboardTabFromHash();
-}
+let dashboardTabCoordinator = null;
 
 function sanitizeIntegerText(value) {
   return (value || '').replace(/[^\d]/g, '');
@@ -645,6 +536,30 @@ function refreshCoreActionButtonsState() {
   if (typeof checkJsRequiredConfigChanged === 'function') {
     checkJsRequiredConfigChanged();
   }
+}
+
+function createDashboardTabControllers() {
+  function makeController(tab) {
+    return {
+      init: function initTabController() {},
+      mount: function mountTabController() {
+        document.body.dataset.activeDashboardTab = tab;
+        refreshCoreActionButtonsState();
+      },
+      unmount: function unmountTabController() {},
+      refresh: function refreshTabController() {
+        return refreshDashboard();
+      }
+    };
+  }
+
+  return {
+    monitoring: makeController('monitoring'),
+    'ip-bans': makeController('ip-bans'),
+    status: makeController('status'),
+    config: makeController('config'),
+    tuning: makeController('tuning')
+  };
 }
 
 function getAdminContext(messageTarget) {
@@ -1924,6 +1839,13 @@ async function refreshDashboard() {
   }
 }
 
+function refreshActiveTab(reason = 'manual') {
+  if (dashboardTabCoordinator) {
+    return dashboardTabCoordinator.refreshActive({ reason });
+  }
+  return refreshDashboard();
+}
+
 // Admin controls - Ban IP
 document.getElementById('ban-btn').onclick = async function() {
   const msg = document.getElementById('admin-msg');
@@ -1943,7 +1865,7 @@ document.getElementById('ban-btn').onclick = async function() {
     msg.textContent = `Banned ${ip} for ${duration}s`;
     msg.className = 'message success';
     document.getElementById('ban-ip').value = '';
-    setTimeout(() => refreshDashboard(), 500);
+    setTimeout(() => refreshActiveTab('ban-save'), 500);
   } catch (e) {
     msg.textContent = 'Error: ' + e.message;
     msg.className = 'message error';
@@ -1967,7 +1889,7 @@ document.getElementById('unban-btn').onclick = async function() {
     msg.textContent = `Unbanned ${ip}`;
     msg.className = 'message success';
     document.getElementById('unban-ip').value = '';
-    setTimeout(() => refreshDashboard(), 500);
+    setTimeout(() => refreshActiveTab('unban-save'), 500);
   } catch (e) {
     msg.textContent = 'Error: ' + e.message;
     msg.className = 'message error';
@@ -1982,7 +1904,10 @@ adminSessionController = adminSessionModule.create({
 });
 adminSessionController.bindLogoutButton('logout-btn', 'admin-msg');
 
-initDashboardTabRouter();
+dashboardTabCoordinator = tabLifecycleModule.createTabLifecycleCoordinator({
+  controllers: createDashboardTabControllers()
+});
+dashboardTabCoordinator.init();
 initInputValidation();
 dashboardCharts.init({ getAdminContext });
 statusPanel.render();
@@ -1996,7 +1921,7 @@ configControls.bind({
   updateGeoConfig,
   updateEdgeIntegrationModeConfig,
   refreshRobotsPreview,
-  refreshDashboard,
+  refreshDashboard: () => refreshActiveTab('config-controls'),
   checkMazeConfigChanged,
   checkRobotsConfigChanged,
   checkAiPolicyConfigChanged,
@@ -2045,12 +1970,12 @@ adminSessionController.restoreAdminSession().then((authenticated) => {
     redirectToLogin();
     return;
   }
-  refreshDashboard();
+  refreshActiveTab('session-restored');
 });
 
 // Auto-refresh every 30 seconds
 setInterval(() => {
   if (hasValidApiContext()) {
-    refreshDashboard();
+    refreshActiveTab('auto-refresh');
   }
 }, 30000);

@@ -173,7 +173,7 @@ Implementation rule: when internal feature work touches provider-managed capabil
 #### Tabbed SPA shell and structure (frameworkless path)
 - [x] DSH-1 Implement tabbed SPA shell in `dashboard/index.html` + `dashboard/dashboard.js` with canonical tabs: `Monitoring`, `IP Bans`, `Status`, `Config`, `Tuning`.
 - [x] DSH-2 Add URL-backed tab routing (`#monitoring`, `#ip-bans`, `#status`, `#config`, `#tuning`) with refresh-safe deep links and history navigation.
-- [ ] DSH-3 Refactor monolithic dashboard orchestration into tab-scoped controllers/modules with clear lifecycle (`init`, `mount`, `unmount`, `refresh`) and no cross-tab hidden coupling.
+- [x] DSH-3 Refactor monolithic dashboard orchestration into tab-scoped controllers/modules with clear lifecycle (`init`, `mount`, `unmount`, `refresh`) and no cross-tab hidden coupling.
 - [ ] DSH-4 Introduce a shared dashboard API client layer (typed request/response adapters, centralized error handling, auth/session helpers) to eliminate ad-hoc per-tab fetch patterns.
 - [ ] DSH-5 Introduce shared state primitives (single source of truth for session/config/status snapshots, explicit invalidation rules, and tab-local derived state) without adding runtime framework dependencies.
 

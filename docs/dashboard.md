@@ -103,13 +103,14 @@ dashboard/
   index.html
   dashboard.js
   admin.js
+  modules/tab-lifecycle.js
   style.css
 ```
 
 ## 🐙 Data Flow (High Level)
 
 1. Page loads and initializes charts
-2. Tab router resolves current hash and mounts the corresponding panel
+2. `modules/tab-lifecycle.js` resolves hash routing and tab lifecycle (`init`, `mount`, `unmount`, `refresh`)
 3. Config and analytics are fetched
 4. Auto-refresh updates stats, charts, and tables
 

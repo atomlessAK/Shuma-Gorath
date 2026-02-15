@@ -45,7 +45,7 @@ NC="\033[0m" # No Color
 FAILURES=0
 TEST_HONEYPOT_IP="10.0.0.88"
 HONEYPOT_PATH="/instaban"
-INTEGRATION_USER_AGENT="ShumaIntegration/1.0"
+INTEGRATION_USER_AGENT="ShumaIntegration/1.0-${RANDOM}-$$-$(date +%s)"
 
 pass() { echo -e "${GREEN}PASS${NC} $1"; }
 fail() {
