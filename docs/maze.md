@@ -2,6 +2,25 @@
 
 The maze is Shuma-Gorath's deception subsystem: a synthetic crawl space designed to absorb suspicious automation while keeping normal human traffic friction low.
 
+## 🐙 Maze At A Glance (Runtime Flow)
+
+This is the practical flow an operator should expect:
+
+1. **Policy routes suspicious traffic to maze**
+   Requests above maze thresholds (or GEO/policy route-to-maze rules) are served a maze page.
+2. **Entry page ships compact shell + signed context**
+   Response includes visible links and bootstrap context for bounded client expansion, not full hidden-link graphs.
+3. **Traversal links carry signed `mt` tokens**
+   Each hop token is validated for signature, TTL, path binding, chain integrity (`prev_digest`), replay, and branch budget.
+4. **Checkpoint + progressive issuance for deeper traversal**
+   Client flow can submit `POST /maze/checkpoint` and request additional links via `POST /maze/issue-links`; issuance is signed, bounded, and replay-protected.
+5. **No-JS is bounded, not unlimited**
+   No-JS traversal is allowed only to configured depth, then deterministic fallback applies.
+6. **Fallback and escalation are deterministic**
+   Budget exhaustion or high-confidence violation accumulation degrades to challenge/block behavior rather than continuing expensive maze serving.
+7. **Optional ban path is threshold-driven**
+   If `maze_auto_ban` is enabled, threshold crossings trigger ban behavior (`maze_crawler` reason).
+
 ## 🐙 Maze Excellence Mission
 
 Maze excellence is about asymmetry:
@@ -58,6 +77,28 @@ Current Stage 2 behavior combines polymorphic rendering, signed traversal state,
     Medium-suspicion challenge responses can include hidden decoy links (`dc=1`) to detect covert decoy-follow behavior while preserving visible UX.
 13. **High-confidence fallback matrix**
     Repeated high-confidence violations deterministically escalate from challenge fallback to block fallback so expensive maze serving is cut earlier.
+
+## 🐙 Where Cost Lands (Attacker vs Host)
+
+The maze is intentionally designed so attacker effort rises faster than host effort:
+
+- **Attacker pays repeated navigation + proof cost**
+  Deep traversal requires additional valid hops, checkpoint posture, and optional micro-PoW.
+- **Host reuses shared static assets**
+  CSS/JS/worker are versioned shared assets under `/maze/assets/...` with immutable cache behavior.
+- **Host avoids full hidden-link payloads per hop**
+  Hidden links are issued progressively through signed endpoint calls, not pre-shipped in every page.
+- **Host bounds expensive work up front**
+  Concurrency, byte, and render-time budgets are enforced with deterministic fallback before repeated high-cost serving.
+- **Replay and token misuse are rejected early**
+  Single-use and replay-protected flows prevent cheap repetition from forcing equivalent host work.
+
+## 🐙 Operator Mental Model
+
+- Most legitimate humans should not traverse deep maze paths.
+- Maze is not a standalone control; it composes with challenge, block, and ban decisions.
+- `/admin/maze/preview` is safe and non-operational by design; preview artifacts do not issue live traversal state.
+- Rollout phase (`instrument` -> `advisory` -> `enforce`) controls how aggressively violations turn into fallback actions.
 
 ### Content Sources and Safety Rules
 

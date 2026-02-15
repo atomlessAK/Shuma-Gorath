@@ -6,7 +6,7 @@
 
 # 🐙 Shuma-Gorath
 
-A Chaos Dimension Bot Defence for Spin. [Shuma-Gorath](https://en.wikipedia.org/wiki/Shuma-Gorath) is a WebAssembly bot defence that detects, blocks, and monitors automated abuse with honeypots, rate limiting, JS challenges, CDP signals, a maze, and a real-time admin dashboard.
+A WebAssembly Bot Defence for Spin. [Shuma-Gorath](https://en.wikipedia.org/wiki/Shuma-Gorath) detects, blocks, and monitors automated abuse with honeypots, rate limiting, JS challenges, CDP signals, a maze, and a real-time ip banning admin, defence config and fine tuning, and event monitoring.
 
 Shuma-Gorath is designed to **complement enterprise bot defenses** (such as [Akamai Bot Manager](https://www.akamai.com/products/bot-manager_) as a second-layer of application-specific protection, but it can also run standalone.
 
@@ -74,7 +74,7 @@ Deployment policy note: `SHUMA_KV_STORE_FAIL_OPEN` is a critical choice (fail-op
 - [`docs/bot-defence.md`](docs/bot-defence.md) - Shuma-Gorath layered defence strategy with managed edge bot protection
 - [`docs/features.md`](docs/features.md) - Feature list and roadmap
 - [`docs/challenge-verification.md`](docs/challenge-verification.md) - Human verification strategy
-- [`docs/maze.md`](docs/maze.md) - maze crawler trap
+- [`docs/maze.md`](docs/maze.md) - Maze runtime flow, rollout phases, and cost-asymmetry model
 - [`todos/security-review.md`](todos/security-review.md) - Security audit notes / backlog
 
 ## 🐙 Repository Structure (High Level)
