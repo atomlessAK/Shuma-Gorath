@@ -176,6 +176,13 @@ Moved from active TODO files on 2026-02-14.
 - [x] Stage 1 umbrella completion: request-sequence primitives are now end-to-end across taxonomy IDs, signed operation envelopes, binding, ordering windows, timing/replay primitives, telemetry wiring, and regression coverage.
 - [x] AI-policy controls slice completed: added first-class admin config keys (`ai_policy_block_training`, `ai_policy_block_search`, `ai_policy_allow_search_engines`) and dashboard controls separate from robots-serving controls while preserving legacy robots-field compatibility.
 
+### todos/todo.md (Stage 2 completion)
+
+- [x] MZ-S1: Keep Stage 2 completion criteria internal-first (no external-provider dependency).
+- [x] MZ-S2: Execute Stage 2 delivery order as `MZ-R0 -> MZ-R1 -> MZ-R2 -> MZ-R3 -> MZ-1 -> MZ-2 -> MZ-7 -> MZ-5 -> MZ-3 -> MZ-4 -> MZ-8 -> MZ-9 -> MZ-10 -> MZ-6`.
+- [x] MZ-R0: Research-first hold gate accepted from `docs/research/2026-02-14-maze-tarpit-research-synthesis.md`.
+- [x] MZ-1 through MZ-10 completed (entropy rotation, signed traversal + replay, budgets, client checkpoint flow, polymorphic rendering, pluggable seed providers/refresh/metadata-only extraction, covert non-maze decoys, crawler simulation harness, botness + observability wiring, rollout/rollback runbook guidance, optional adaptive micro-PoW).
+
 
 ## todos/security-review.md
 

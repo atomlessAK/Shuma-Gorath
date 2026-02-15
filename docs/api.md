@@ -38,6 +38,7 @@ If `SHUMA_HEALTH_SECRET` is configured, `/health` also requires:
 - `GET /pow` - PoW challenge seed (when enabled)
 - `POST /pow/verify` - PoW verification (sets js_verified cookie)
 - `POST /cdp-report` - Client automation reports (JSON)
+- `POST /maze/checkpoint` - Maze traversal checkpoint submission
 - `GET /robots.txt` - robots.txt (configurable)
 - `GET /dashboard/...` - Dashboard static assets
 - `GET /challenge/puzzle` - Dev-only puzzle challenge page (`test_mode=true` in runtime config)
@@ -115,6 +116,9 @@ When `SHUMA_DEBUG_HEADERS=true`, the health response includes:
 - `POST /admin/config` - Update configuration (partial JSON, disabled when `SHUMA_ADMIN_CONFIG_WRITE_ENABLED=false`)
 - `GET /admin/config/export` - Export non-secret runtime config as deploy-ready env key/value output
 - `GET /admin/maze` - maze stats
+- `GET /admin/maze/seeds` - Maze operator-seed source list and cached corpus snapshot
+- `POST /admin/maze/seeds` - Upsert maze operator-seed sources
+- `POST /admin/maze/seeds/refresh` - Trigger manual maze operator-corpus refresh
 - `GET /admin/robots` - robots.txt config and preview
 - `GET /admin/cdp` - CDP detection config and stats
 
@@ -226,6 +230,7 @@ Scored weights:
 - `botness_weights.geo_risk`
 - `botness_weights.rate_medium`
 - `botness_weights.rate_high`
+- `botness_weights.maze_behavior`
 
 Mutability:
 - `botness_config_mutable` indicates whether score/weight settings can be changed at runtime.
@@ -277,3 +282,21 @@ GEO headers are only used when forwarded headers are trusted for the request:
 
 - `SHUMA_FORWARDED_IP_SECRET` must be configured
 - caller must provide matching `X-Shuma-Forwarded-Secret`
+
+## 🐙 Maze Excellence Fields (`/admin/config`)
+
+- `maze_rollout_phase` - staged enforcement (`instrument`, `advisory`, `enforce`)
+- `maze_token_ttl_seconds`, `maze_token_max_depth`, `maze_token_branch_budget`, `maze_replay_ttl_seconds`
+- `maze_entropy_window_seconds`, `maze_path_entropy_segment_len`
+- `maze_client_expansion_enabled`, `maze_checkpoint_every_nodes`, `maze_checkpoint_every_ms`, `maze_step_ahead_max`, `maze_no_js_fallback_max_depth`
+- `maze_micro_pow_enabled`, `maze_micro_pow_depth_start`, `maze_micro_pow_base_difficulty`
+- `maze_max_concurrent_global`, `maze_max_concurrent_per_ip_bucket`, `maze_max_response_bytes`, `maze_max_response_duration_ms`
+- `maze_server_visible_links`, `maze_max_links`, `maze_max_paragraphs`
+- `maze_covert_decoys_enabled`
+- `maze_seed_provider`, `maze_seed_refresh_interval_seconds`, `maze_seed_refresh_rate_limit_per_hour`, `maze_seed_refresh_max_sources`, `maze_seed_metadata_only`
+
+`POST /admin/maze/seeds` payload shape:
+
+- `sources`: array of source entries (`id`, `url`, optional `title`, optional `description`, optional `keywords`, optional `allow_seed_use`, optional `robots_allowed`, optional `body_excerpt`)
+
+`POST /admin/maze/seeds/refresh` returns refresh status and source/corpus metadata.

@@ -121,7 +121,7 @@ Shuma uses a canonical escalation taxonomy so policy, metrics, and event logs sh
 | `L5_CHALLENGE_LITE` | Challenge (lite) | Low-friction human verification. | Planned |
 | `L6_CHALLENGE_STRONG` | Challenge (strong) | Strong challenge path (puzzle/PoW-backed flows). | Active |
 | `L7_DECEPTION_EXPLICIT` | Deception | Explicit maze/trap routing. | Active |
-| `L8_DECEPTION_COVERT` | Deception | Covert decoy behavior in normal responses. | Planned |
+| `L8_DECEPTION_COVERT` | Deception | Covert decoy behavior in eligible non-maze responses for medium-suspicion traffic. | Active |
 | `L9_COST_IMPOSITION` | Cost | Bounded drip/tarpit style cost imposition. | Planned |
 | `L10_DENY_TEMP` | Deny (temporary) | Temporary block/ban with TTL. | Active |
 | `L11_DENY_HARD` | Deny (hard) | Long/indefinite deny posture for high confidence abuse. | Reserved |

@@ -83,25 +83,25 @@ Completion rule for every paper TODO below: capture key findings, map to `self_h
 - [x] Add AI-bot policy controls as first-class admin config (separate from robots-only controls).
 
 ### Stage 2: Maze excellence execution (Cloudflare-inspired, Shuma-native)
-- [ ] MZ-S1: Keep Stage 2 completion criteria internal-first (no external-provider dependency).
-- [ ] MZ-S2: Execute Stage 2 delivery order as `MZ-R0 -> MZ-R1 -> MZ-R2 -> MZ-R3 -> MZ-1 -> MZ-2 -> MZ-7 -> MZ-5 -> MZ-3 -> MZ-4 -> MZ-8 -> MZ-9 -> MZ-10 -> MZ-6`.
-- [ ] MZ-R0: Research-first hold gate. Do not start Stage 2 implementation slices until the Maze/Tarpit research tranche is synthesized and accepted. (synthesis drafted in `docs/research/2026-02-14-maze-tarpit-research-synthesis.md`; pending explicit acceptance/sign-off)
+- [x] MZ-S1: Keep Stage 2 completion criteria internal-first (no external-provider dependency).
+- [x] MZ-S2: Execute Stage 2 delivery order as `MZ-R0 -> MZ-R1 -> MZ-R2 -> MZ-R3 -> MZ-1 -> MZ-2 -> MZ-7 -> MZ-5 -> MZ-3 -> MZ-4 -> MZ-8 -> MZ-9 -> MZ-10 -> MZ-6`.
+- [x] MZ-R0: Research-first hold gate. Do not start Stage 2 implementation slices until the Maze/Tarpit research tranche is synthesized and accepted. (accepted research baseline in `docs/research/2026-02-14-maze-tarpit-research-synthesis.md`)
 - [x] MZ-R1: Complete and summarize the highest-impact Maze/Tarpit research items (`R-FP-10`, `R-RL-02`, `R-RL-04`, `R-RL-08`, `R-SSH-01`) with concrete anti-fingerprinting and bounded-cost implications. (`docs/research/2026-02-14-maze-tarpit-research-synthesis.md`)
 - [x] MZ-R2: Map research outcomes to `self_hosted_minimal` vs `enterprise_akamai` ownership and explicitly define what remains internal-first for Stage 2. (`docs/research/2026-02-14-maze-tarpit-research-synthesis.md`)
 - [x] MZ-R3: Convert research findings into enforceable implementation guardrails (budget caps, replay windows, fallback policy, rollout abort thresholds) and update Stage 2 acceptance criteria before coding. (`docs/research/2026-02-14-maze-tarpit-research-synthesis.md`)
-- [ ] MZ-1: Replace path-only deterministic seeding with rotating signed entropy for suspicious traffic; keep short TTL deterministic windows for cacheability/debugging.
-- [ ] MZ-2: Add signed traversal-link tokens with TTL, depth scope, branch budget, and replay protection.
-- [ ] MZ-7: Enforce maze cost budgets (global concurrency, per-bucket spend, response byte/time caps) with deterministic fallback behavior.
-- [ ] MZ-5: Make client-side expansion foundational for suspicious maze tiers (Web Worker branch generation + signed server verification) with explicit checkpoint cadence (every 3 nodes or 1500 ms), bounded step-ahead allowance, and no-JS fallback rules.
-- [ ] MZ-3: Add polymorphic maze rendering (layout/content/link-graph variant families with versioned selection).
-- [ ] MZ-3.1: Implement pluggable maze content-seed providers (internal default corpus + operator-provided source adapters).
-- [ ] MZ-3.2: Add manual/scheduled seed refresh for provider-fed corpora with robots/compliance guardrails, caching, and rate limits.
-- [ ] MZ-3.3: Enforce metadata/keyword-first extraction (avoid article-body copying) to reduce legal risk, bandwidth, and fingerprintability.
-- [ ] MZ-4: Inject covert decoys into eligible non-maze HTML responses for medium-confidence suspicious traffic while preserving UX/SEO safety.
-- [ ] MZ-8: Add a crawler simulation harness covering replay, deterministic fingerprinting attempts, JS/no-JS cohorts, and bypass attempts.
-- [ ] MZ-9: Feed maze traversal behavior into botness scoring/detection IDs and add observability for entropy/token/proof/cost/budget signals.
-- [ ] MZ-10: Roll out by phase (`instrument -> advisory -> enforce`) with explicit rollback triggers and operator runbook checks.
-- [ ] MZ-6: Add optional adaptive micro-PoW for deeper traversal tiers.
+- [x] MZ-1: Replace path-only deterministic seeding with rotating signed entropy for suspicious traffic; keep short TTL deterministic windows for cacheability/debugging.
+- [x] MZ-2: Add signed traversal-link tokens with TTL, depth scope, branch budget, and replay protection.
+- [x] MZ-7: Enforce maze cost budgets (global concurrency, per-bucket spend, response byte/time caps) with deterministic fallback behavior.
+- [x] MZ-5: Make client-side expansion foundational for suspicious maze tiers (Web Worker branch generation + signed server verification) with explicit checkpoint cadence (every 3 nodes or 1500 ms), bounded step-ahead allowance, and no-JS fallback rules.
+- [x] MZ-3: Add polymorphic maze rendering (layout/content/link-graph variant families with versioned selection).
+- [x] MZ-3.1: Implement pluggable maze content-seed providers (internal default corpus + operator-provided source adapters).
+- [x] MZ-3.2: Add manual/scheduled seed refresh for provider-fed corpora with robots/compliance guardrails, caching, and rate limits.
+- [x] MZ-3.3: Enforce metadata/keyword-first extraction (avoid article-body copying) to reduce legal risk, bandwidth, and fingerprintability.
+- [x] MZ-4: Inject covert decoys into eligible non-maze HTML responses for medium-confidence suspicious traffic while preserving UX/SEO safety.
+- [x] MZ-8: Add a crawler simulation harness covering replay, deterministic fingerprinting attempts, JS/no-JS cohorts, and bypass attempts.
+- [x] MZ-9: Feed maze traversal behavior into botness scoring/detection IDs and add observability for entropy/token/proof/cost/budget signals.
+- [x] MZ-10: Roll out by phase (`instrument -> advisory -> enforce`) with explicit rollback triggers and operator runbook checks.
+- [x] MZ-6: Add optional adaptive micro-PoW for deeper traversal tiers.
 - [ ] ~~Inject covert decoy links into eligible HTML responses for medium-confidence suspicious traffic.~~ Superseded by MZ-4.
 - [ ] ~~Keep decoys invisible to normal users and compliant crawlers; avoid UX/SEO regressions.~~ Superseded by MZ-4 acceptance criteria.
 - [ ] ~~Increase maze entropy (template diversity, fake static assets, path diversity) to reduce fingerprintability.~~ Superseded by MZ-1 and MZ-3.

@@ -93,6 +93,7 @@ These keys are seeded into KV and loaded from KV at runtime.
 | `SHUMA_BOTNESS_WEIGHT_GEO_RISK` | `2` | Score weight for GEO risk-country signal. |
 | `SHUMA_BOTNESS_WEIGHT_RATE_MEDIUM` | `1` | Score weight for medium request-rate pressure. |
 | `SHUMA_BOTNESS_WEIGHT_RATE_HIGH` | `2` | Score weight for high request-rate pressure. |
+| `SHUMA_BOTNESS_WEIGHT_MAZE_BEHAVIOR` | `2` | Score weight for suspicious maze traversal behavior signal. |
 | `SHUMA_BAN_DURATION` | `21600` | Legacy/default ban duration fallback (seconds). |
 | `SHUMA_BAN_DURATION_HONEYPOT` | `86400` | Ban duration for honeypot/instaban trigger (seconds). |
 | `SHUMA_BAN_DURATION_RATE_LIMIT` | `3600` | Ban duration for rate-limit ban (seconds). |
@@ -113,6 +114,34 @@ These keys are seeded into KV and loaded from KV at runtime.
 | `SHUMA_MAZE_ENABLED` | `true` | Enables maze feature. |
 | `SHUMA_MAZE_AUTO_BAN` | `true` | Enables maze auto-ban when threshold is exceeded. |
 | `SHUMA_MAZE_AUTO_BAN_THRESHOLD` | `50` | Maze hit threshold for auto-ban. |
+| `SHUMA_MAZE_ROLLOUT_PHASE` | `enforce` | Maze rollout phase (`instrument`, `advisory`, `enforce`). |
+| `SHUMA_MAZE_TOKEN_TTL_SECONDS` | `90` | Maze traversal token TTL. |
+| `SHUMA_MAZE_TOKEN_MAX_DEPTH` | `8` | Maximum signed traversal depth. |
+| `SHUMA_MAZE_TOKEN_BRANCH_BUDGET` | `3` | Signed branch budget field for issued traversal tokens. |
+| `SHUMA_MAZE_REPLAY_TTL_SECONDS` | `600` | Replay-marker retention window for traversal tokens. |
+| `SHUMA_MAZE_ENTROPY_WINDOW_SECONDS` | `60` | Entropy rotation window for maze variant selection. |
+| `SHUMA_MAZE_CLIENT_EXPANSION_ENABLED` | `true` | Enables checkpointed client-side expansion behavior for suspicious tiers. |
+| `SHUMA_MAZE_CHECKPOINT_EVERY_NODES` | `3` | Checkpoint cadence in nodes. |
+| `SHUMA_MAZE_CHECKPOINT_EVERY_MS` | `1500` | Checkpoint cadence in elapsed milliseconds. |
+| `SHUMA_MAZE_STEP_AHEAD_MAX` | `4` | Maximum unverified step-ahead depth before checkpoint fallback. |
+| `SHUMA_MAZE_NO_JS_FALLBACK_MAX_DEPTH` | `4` | Maximum depth tolerated without checkpoint evidence. |
+| `SHUMA_MAZE_MICRO_POW_ENABLED` | `true` | Enables optional deep-tier micro-PoW for traversal links. |
+| `SHUMA_MAZE_MICRO_POW_DEPTH_START` | `5` | Depth where micro-PoW starts. |
+| `SHUMA_MAZE_MICRO_POW_BASE_DIFFICULTY` | `12` | Base micro-PoW difficulty in leading-zero bits. |
+| `SHUMA_MAZE_MAX_CONCURRENT_GLOBAL` | `128` | Global concurrent maze-response budget. |
+| `SHUMA_MAZE_MAX_CONCURRENT_PER_IP_BUCKET` | `4` | Per-IP-bucket concurrent maze-response budget. |
+| `SHUMA_MAZE_MAX_RESPONSE_BYTES` | `65536` | Max response size per maze page before budget fallback. |
+| `SHUMA_MAZE_MAX_RESPONSE_DURATION_MS` | `15000` | Max render duration per maze page before budget fallback. |
+| `SHUMA_MAZE_SERVER_VISIBLE_LINKS` | `4` | Number of server-visible maze links before hidden client expansion links. |
+| `SHUMA_MAZE_MAX_LINKS` | `16` | Hard cap on generated links per maze page. |
+| `SHUMA_MAZE_MAX_PARAGRAPHS` | `8` | Hard cap on generated paragraphs per maze page. |
+| `SHUMA_MAZE_PATH_ENTROPY_SEGMENT_LEN` | `16` | Entropy segment length for generated maze paths. |
+| `SHUMA_MAZE_COVERT_DECOYS_ENABLED` | `true` | Enables covert decoy injection in eligible non-maze HTML for medium-suspicion traffic. |
+| `SHUMA_MAZE_SEED_PROVIDER` | `internal` | Maze seed corpus provider (`internal` or `operator`). |
+| `SHUMA_MAZE_SEED_REFRESH_INTERVAL_SECONDS` | `3600` | Scheduled refresh interval for provider-fed seed corpora. |
+| `SHUMA_MAZE_SEED_REFRESH_RATE_LIMIT_PER_HOUR` | `12` | Hourly refresh cap for provider-fed corpus refreshes. |
+| `SHUMA_MAZE_SEED_REFRESH_MAX_SOURCES` | `100` | Maximum operator sources accepted for seed provider refresh. |
+| `SHUMA_MAZE_SEED_METADATA_ONLY` | `true` | Enforce metadata/keyword-first extraction for operator seeds. |
 | `SHUMA_ROBOTS_ENABLED` | `true` | Enables robots.txt endpoint and policy generation. |
 | `SHUMA_ROBOTS_BLOCK_AI_TRAINING` | `true` | Adds AI training bot disallow directives. |
 | `SHUMA_ROBOTS_BLOCK_AI_SEARCH` | `false` | Adds AI search bot disallow directives. |
@@ -141,6 +170,16 @@ These keys are seeded into KV and loaded from KV at runtime.
 - `js_required_enforced=true` routes visitors without a valid `js_verified` cookie to JS verification.
 - `pow_enabled=true` adds server-verified PoW to that verification flow.
 - `js_required_enforced=false` bypasses JS verification for normal requests (and therefore bypasses PoW on that path).
+
+## 🐙 Maze Rollout Phases
+
+`SHUMA_MAZE_ROLLOUT_PHASE` controls how strictly maze violations are enforced:
+
+- `instrument`: record maze token/proof/checkpoint/budget outcomes without hard fallback enforcement.
+- `advisory`: enforce budget saturation fallbacks; keep token/proof/checkpoint violations advisory.
+- `enforce`: enforce token, replay, binding, checkpoint, proof, and budget fallbacks.
+
+Recommended promotion order is `instrument -> advisory -> enforce` with explicit rollback criteria.
 
 ## 🐙 Static Resource Bypass Defaults
 

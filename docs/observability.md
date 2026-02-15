@@ -23,6 +23,11 @@ This endpoint is unauthenticated for Prometheus compatibility. Restrict access a
 - `bot_defence_whitelisted_total`
 - `bot_defence_test_mode_actions_total`
 - `bot_defence_maze_hits_total`
+- `bot_defence_maze_token_outcomes_total{outcome="entry|validated|invalid|expired|replay|binding_mismatch|depth_exceeded|budget_exceeded|checkpoint_missing|micro_pow_failed"}`
+- `bot_defence_maze_checkpoint_outcomes_total{outcome="accepted|method_not_allowed|binding_mismatch|invalid"}`
+- `bot_defence_maze_budget_outcomes_total{outcome="acquired|saturated|response_cap_exceeded"}`
+- `bot_defence_maze_proof_outcomes_total{outcome="required|passed|failed"}`
+- `bot_defence_maze_entropy_variants_total{variant="...",provider="internal|operator",metadata_only="true|false"}`
 - `bot_defence_active_bans`
 - `bot_defence_test_mode_enabled`
 - `bot_defence_botness_signal_state_total{signal="...",state="active|disabled|unavailable"}`

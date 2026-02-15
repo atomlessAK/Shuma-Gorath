@@ -10,7 +10,7 @@
 - Puzzle challenge step-up with single-use seeds
 - Proof-of-work (PoW) step before JS verification (edge-served)
 - Optional browser whitelist to bypass JS challenge
-- maze crawler trap with auto-ban threshold
+- Maze deception stack with signed traversal tokens, rotating entropy variants, checkpointed progression, optional deep-tier micro-PoW, and auto-ban threshold controls
 - CDP automation detection and reporting (`/cdp-report`)
 - robots.txt generation and policy controls
 - Admin API (ban/unban, analytics, events, config, maze, robots, CDP)
