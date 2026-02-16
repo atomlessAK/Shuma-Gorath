@@ -94,7 +94,7 @@ dev: ## Build and run with file watching (auto-rebuild on save)
 	@echo "$(YELLOW)📈 Metrics:   http://127.0.0.1:3000/metrics$(NC)"
 	@echo "$(YELLOW)❤️  Health:    http://127.0.0.1:3000/health$(NC)"
 	@echo "$(YELLOW)🌀 Maze Preview: http://127.0.0.1:3000/admin/maze/preview?path=%2Fmaze%2Fpreview (admin auth)$(NC)"
-	@echo "$(YELLOW)⚙️  Effective dev flags: WRITE=$(DEV_ADMIN_CONFIG_WRITE_ENABLED) POW=$(DEV_POW_CONFIG_MUTABLE) CHALLENGE=$(DEV_CHALLENGE_PUZZLE_CONFIG_MUTABLE) BOTNESS=$(DEV_BOTNESS_CONFIG_MUTABLE) DEBUG_HEADERS=$(DEV_DEBUG_HEADERS)$(NC)"
+	@echo "$(YELLOW)⚙️  Effective dev flags: WRITE=$(DEV_ADMIN_CONFIG_WRITE_ENABLED) POW=$(DEV_POW_CONFIG_MUTABLE) CHALLENGE_PUZZLE=$(DEV_CHALLENGE_PUZZLE_CONFIG_MUTABLE) BOTNESS=$(DEV_BOTNESS_CONFIG_MUTABLE) DEBUG_HEADERS=$(DEV_DEBUG_HEADERS)$(NC)"
 	@if [ "$(DEV_POW_CONFIG_MUTABLE)" != "true" ] || [ "$(DEV_BOTNESS_CONFIG_MUTABLE)" != "true" ]; then \
 		echo "$(YELLOW)⚠️  Some tuning controls will be read-only. Override with: make dev DEV_POW_CONFIG_MUTABLE=true DEV_BOTNESS_CONFIG_MUTABLE=true$(NC)"; \
 	fi
@@ -116,7 +116,7 @@ dev-closed: ## Build and run with file watching and SHUMA_KV_STORE_FAIL_OPEN=fal
 	@echo "$(YELLOW)📈 Metrics:   http://127.0.0.1:3000/metrics$(NC)"
 	@echo "$(YELLOW)❤️  Health:    http://127.0.0.1:3000/health$(NC)"
 	@echo "$(YELLOW)🌀 Maze Preview: http://127.0.0.1:3000/admin/maze/preview?path=%2Fmaze%2Fpreview (admin auth)$(NC)"
-	@echo "$(YELLOW)⚙️  Effective dev flags: WRITE=$(DEV_ADMIN_CONFIG_WRITE_ENABLED) POW=$(DEV_POW_CONFIG_MUTABLE) CHALLENGE=$(DEV_CHALLENGE_PUZZLE_CONFIG_MUTABLE) BOTNESS=$(DEV_BOTNESS_CONFIG_MUTABLE) DEBUG_HEADERS=$(DEV_DEBUG_HEADERS)$(NC)"
+	@echo "$(YELLOW)⚙️  Effective dev flags: WRITE=$(DEV_ADMIN_CONFIG_WRITE_ENABLED) POW=$(DEV_POW_CONFIG_MUTABLE) CHALLENGE_PUZZLE=$(DEV_CHALLENGE_PUZZLE_CONFIG_MUTABLE) BOTNESS=$(DEV_BOTNESS_CONFIG_MUTABLE) DEBUG_HEADERS=$(DEV_DEBUG_HEADERS)$(NC)"
 	@if [ "$(DEV_POW_CONFIG_MUTABLE)" != "true" ] || [ "$(DEV_BOTNESS_CONFIG_MUTABLE)" != "true" ]; then \
 		echo "$(YELLOW)⚠️  Some tuning controls will be read-only. Override with: make dev-closed DEV_POW_CONFIG_MUTABLE=true DEV_BOTNESS_CONFIG_MUTABLE=true$(NC)"; \
 	fi
@@ -136,7 +136,7 @@ local: dev ## Alias for dev
 
 run: ## Build once and run (no file watching)
 	@echo "$(CYAN)🚀 Starting development server...$(NC)"
-	@echo "$(YELLOW)⚙️  Effective dev flags: WRITE=$(DEV_ADMIN_CONFIG_WRITE_ENABLED) POW=$(DEV_POW_CONFIG_MUTABLE) CHALLENGE=$(DEV_CHALLENGE_PUZZLE_CONFIG_MUTABLE) BOTNESS=$(DEV_BOTNESS_CONFIG_MUTABLE) DEBUG_HEADERS=$(DEV_DEBUG_HEADERS)$(NC)"
+	@echo "$(YELLOW)⚙️  Effective dev flags: WRITE=$(DEV_ADMIN_CONFIG_WRITE_ENABLED) POW=$(DEV_POW_CONFIG_MUTABLE) CHALLENGE_PUZZLE=$(DEV_CHALLENGE_PUZZLE_CONFIG_MUTABLE) BOTNESS=$(DEV_BOTNESS_CONFIG_MUTABLE) DEBUG_HEADERS=$(DEV_DEBUG_HEADERS)$(NC)"
 	@$(MAKE) --no-print-directory config-seed >/dev/null
 	@pkill -x spin 2>/dev/null || true
 	@sleep 1
