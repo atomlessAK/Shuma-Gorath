@@ -871,6 +871,23 @@ fn load_config_reads_kv_only_without_tunable_env_overrides() {
 }
 
 #[test]
+fn load_config_defaults_honeypot_enabled_when_key_missing() {
+    let _lock = crate::test_support::lock_env();
+    let store = crate::test_support::InMemoryStore::default();
+    let mut kv_cfg_value = serde_json::to_value(defaults().clone()).unwrap();
+    kv_cfg_value
+        .as_object_mut()
+        .expect("config json object")
+        .remove("honeypot_enabled");
+    store
+        .set("config:default", &serde_json::to_vec(&kv_cfg_value).unwrap())
+        .unwrap();
+
+    let cfg = Config::load(&store, "default").unwrap();
+    assert!(cfg.honeypot_enabled);
+}
+
+#[test]
 fn runtime_config_cache_hits_within_ttl() {
     let _lock = crate::test_support::lock_env();
     clear_runtime_cache_for_tests();
