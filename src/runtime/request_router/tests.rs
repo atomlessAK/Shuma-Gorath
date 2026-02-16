@@ -45,3 +45,18 @@ fn early_router_short_circuits_maze_asset_paths() {
     assert!(resp.is_some());
     assert_eq!(*resp.unwrap().status(), 200u16);
 }
+
+#[test]
+fn early_router_redirects_dashboard_root_to_index_html() {
+    let req = request(Method::Get, "/dashboard");
+    let resp = maybe_handle_early_route(&req, "/dashboard");
+    assert!(resp.is_some());
+    let resp = resp.unwrap();
+    assert_eq!(*resp.status(), 308u16);
+    let location = resp
+        .headers()
+        .find(|(name, _)| name.eq_ignore_ascii_case("location"))
+        .and_then(|(_, value)| value.as_str())
+        .unwrap_or("");
+    assert_eq!(location, "/dashboard/index.html");
+}

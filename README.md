@@ -28,8 +28,10 @@ make dev
 
 Dashboard:
 - `http://127.0.0.1:3000/dashboard/index.html`
+- `http://127.0.0.1:3000/dashboard` (redirects to `/dashboard/index.html`)
 - Tabbed SPA routes: `#monitoring`, `#ip-bans`, `#status`, `#config`, `#tuning`
 - Charts use local vendored runtime (`dashboard/assets/vendor/chart-lite-1.0.0.min.js`) rather than CDN scripts.
+- Runtime mutability flags come from `.env.local`; if `SHUMA_POW_CONFIG_MUTABLE` or `SHUMA_BOTNESS_CONFIG_MUTABLE` are false, those tuning controls remain read-only.
 
 Notes:
 - Run setup in an interactive terminal (it may prompt for sudo to install Spin).

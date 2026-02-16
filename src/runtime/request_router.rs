@@ -27,6 +27,17 @@ pub(crate) fn maybe_handle_early_route(req: &Request, path: &str) -> Option<Resp
         return Some(response);
     }
 
+    if path == "/dashboard" && (*req.method() == Method::Get || *req.method() == Method::Head) {
+        return Some(
+            Response::builder()
+                .status(308)
+                .header("Location", "/dashboard/index.html")
+                .header("Cache-Control", "no-store, max-age=0, must-revalidate")
+                .body(Vec::new())
+                .build(),
+        );
+    }
+
     // Health check endpoint
     if path == "/health" {
         if !crate::health_secret_authorized(req) {

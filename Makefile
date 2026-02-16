@@ -83,6 +83,10 @@ dev: ## Build and run with file watching (auto-rebuild on save)
 	@echo "$(YELLOW)📈 Metrics:   http://127.0.0.1:3000/metrics$(NC)"
 	@echo "$(YELLOW)❤️  Health:    http://127.0.0.1:3000/health$(NC)"
 	@echo "$(YELLOW)🌀 Maze Preview: http://127.0.0.1:3000/admin/maze/preview?path=%2Fmaze%2Fpreview (admin auth)$(NC)"
+	@echo "$(YELLOW)⚙️  Runtime mutability flags: POW=$(SHUMA_POW_CONFIG_MUTABLE) CHALLENGE=$(SHUMA_CHALLENGE_CONFIG_MUTABLE) BOTNESS=$(SHUMA_BOTNESS_CONFIG_MUTABLE)$(NC)"
+	@if [ "$(SHUMA_POW_CONFIG_MUTABLE)" != "true" ] || [ "$(SHUMA_BOTNESS_CONFIG_MUTABLE)" != "true" ]; then \
+		echo "$(YELLOW)⚠️  Some tuning controls will be read-only. Override for local tuning with: make dev SHUMA_POW_CONFIG_MUTABLE=true SHUMA_BOTNESS_CONFIG_MUTABLE=true$(NC)"; \
+	fi
 	@echo "$(CYAN)👀 Watching src/*.rs, dashboard/*, and spin.toml for changes... (Ctrl+C to stop)$(NC)"
 	@pkill -x spin 2>/dev/null || true
 	@./scripts/set_crate_type.sh cdylib
@@ -100,6 +104,10 @@ dev-closed: ## Build and run with file watching and SHUMA_KV_STORE_FAIL_OPEN=fal
 	@echo "$(YELLOW)📈 Metrics:   http://127.0.0.1:3000/metrics$(NC)"
 	@echo "$(YELLOW)❤️  Health:    http://127.0.0.1:3000/health$(NC)"
 	@echo "$(YELLOW)🌀 Maze Preview: http://127.0.0.1:3000/admin/maze/preview?path=%2Fmaze%2Fpreview (admin auth)$(NC)"
+	@echo "$(YELLOW)⚙️  Runtime mutability flags: POW=$(SHUMA_POW_CONFIG_MUTABLE) CHALLENGE=$(SHUMA_CHALLENGE_CONFIG_MUTABLE) BOTNESS=$(SHUMA_BOTNESS_CONFIG_MUTABLE)$(NC)"
+	@if [ "$(SHUMA_POW_CONFIG_MUTABLE)" != "true" ] || [ "$(SHUMA_BOTNESS_CONFIG_MUTABLE)" != "true" ]; then \
+		echo "$(YELLOW)⚠️  Some tuning controls will be read-only. Override for local tuning with: make dev-closed SHUMA_POW_CONFIG_MUTABLE=true SHUMA_BOTNESS_CONFIG_MUTABLE=true$(NC)"; \
+	fi
 	@echo "$(CYAN)👀 Watching src/*.rs, dashboard/*, and spin.toml for changes... (Ctrl+C to stop)$(NC)"
 	@pkill -x spin 2>/dev/null || true
 	@./scripts/set_crate_type.sh cdylib
@@ -115,6 +123,7 @@ local: dev ## Alias for dev
 
 run: ## Build once and run (no file watching)
 	@echo "$(CYAN)🚀 Starting development server...$(NC)"
+	@echo "$(YELLOW)⚙️  Runtime mutability flags: POW=$(SHUMA_POW_CONFIG_MUTABLE) CHALLENGE=$(SHUMA_CHALLENGE_CONFIG_MUTABLE) BOTNESS=$(SHUMA_BOTNESS_CONFIG_MUTABLE)$(NC)"
 	@pkill -x spin 2>/dev/null || true
 	@sleep 1
 	@./scripts/set_crate_type.sh cdylib

@@ -366,6 +366,11 @@ h1 {
   display: none !important;
 }
 
+[data-dashboard-tab-panel][hidden],
+#dashboard-admin-section[hidden] {
+  display: none !important;
+}
+
 .tab-state {
   margin-bottom: 14px;
   padding: 10px 12px;

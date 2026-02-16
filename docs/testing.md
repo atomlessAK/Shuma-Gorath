@@ -113,9 +113,13 @@ Behavior:
 3. Seeds deterministic dashboard data before tests (admin ban + CDP report + admin view events).
 4. Runs browser smoke checks for core dashboard behavior:
    - page loads and refresh succeeds
+   - runtime page errors or failed JS/CSS loads fail the run
+   - only one dashboard tab panel is visible at a time (panel exclusivity)
    - seeded events/tables are visible
+   - clean-state API payloads render explicit empty placeholders (no crash/blank UI)
    - form validation/submit-state behavior works
    - tab hash/keyboard routing works
+   - `/dashboard` canonical path redirects to `/dashboard/index.html`
    - tab-level error states surface backend failures
    - sticky table headers remain applied
 

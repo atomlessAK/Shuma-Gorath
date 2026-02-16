@@ -3,8 +3,98 @@ const { seedDashboardData } = require("./seed-dashboard-data");
 
 const BASE_URL = process.env.SHUMA_BASE_URL || "http://127.0.0.1:3000";
 const API_KEY = process.env.SHUMA_API_KEY || "changeme-dev-only-api-key";
+const DASHBOARD_TABS = Object.freeze(["monitoring", "ip-bans", "status", "config", "tuning"]);
+const ADMIN_TABS = Object.freeze(["ip-bans", "status", "config", "tuning"]);
+const runtimeGuards = new WeakMap();
+
+function isStaticRuntimeRequest(request) {
+  const resourceType = request.resourceType();
+  return resourceType === "script" || resourceType === "stylesheet";
+}
+
+function ensureRuntimeGuard(page) {
+  if (runtimeGuards.has(page)) {
+    return runtimeGuards.get(page);
+  }
+
+  const guard = {
+    failures: []
+  };
+
+  page.on("pageerror", (error) => {
+    guard.failures.push(`pageerror: ${error.message}`);
+  });
+
+  page.on("requestfailed", (request) => {
+    if (!isStaticRuntimeRequest(request)) {
+      return;
+    }
+    const failure = request.failure();
+    guard.failures.push(
+      `requestfailed: ${request.method()} ${request.url()} (${failure ? failure.errorText : "unknown"})`
+    );
+  });
+
+  page.on("response", (response) => {
+    const request = response.request();
+    if (!isStaticRuntimeRequest(request)) {
+      return;
+    }
+    if (response.status() >= 400) {
+      guard.failures.push(
+        `asset-response: ${request.method()} ${response.url()} -> ${response.status()}`
+      );
+    }
+  });
+
+  runtimeGuards.set(page, guard);
+  return guard;
+}
+
+function assertNoRuntimeFailures(page) {
+  const guard = runtimeGuards.get(page);
+  if (!guard || guard.failures.length === 0) {
+    return;
+  }
+  throw new Error(`Unexpected dashboard runtime failures:\n${guard.failures.join("\n")}`);
+}
+
+async function assertActiveTabPanelVisibility(page, activeTab) {
+  for (const tab of DASHBOARD_TABS) {
+    await expect(page.locator(`#dashboard-tab-${tab}`)).toHaveAttribute(
+      "aria-selected",
+      tab === activeTab ? "true" : "false"
+    );
+  }
+
+  if (activeTab === "monitoring") {
+    await expect(page.locator("#dashboard-panel-monitoring")).toBeVisible();
+    await expect(page.locator("#dashboard-admin-section")).toBeHidden();
+    for (const tab of ADMIN_TABS) {
+      await expect(page.locator(`#dashboard-panel-${tab}`)).toBeHidden();
+    }
+    return;
+  }
+
+  await expect(page.locator("#dashboard-panel-monitoring")).toBeHidden();
+  await expect(page.locator("#dashboard-admin-section")).toBeVisible();
+  for (const tab of ADMIN_TABS) {
+    const panel = page.locator(`#dashboard-panel-${tab}`);
+    if (tab === activeTab) {
+      const forcedHidden = await panel.evaluate((element) => element.classList.contains("hidden"));
+      if (forcedHidden) {
+        await expect(panel).toBeHidden();
+      } else {
+        await expect(panel).toBeVisible();
+      }
+    } else {
+      await expect(panel).toBeHidden();
+    }
+  }
+}
 
 async function openDashboard(page) {
+  ensureRuntimeGuard(page);
   await page.goto(`${BASE_URL}/dashboard/index.html`);
   await page.waitForTimeout(250);
   if (page.url().includes("/dashboard/login.html")) {
@@ -18,15 +108,146 @@ async function openDashboard(page) {
     const total = document.getElementById("total-events")?.textContent?.trim();
     return Boolean(total && total !== "-" && total !== "...");
   }, { timeout: 15000 });
+  await page.waitForFunction(() => {
+    const subtitle = document.getElementById("config-mode-subtitle")?.textContent || "";
+    return !subtitle.includes("LOADING");
+  }, { timeout: 15000 });
+  await assertActiveTabPanelVisibility(page, "monitoring");
+  assertNoRuntimeFailures(page);
 }
 
 async function openTab(page, tab) {
   await page.click(`#dashboard-tab-${tab}`);
   await expect(page).toHaveURL(new RegExp(`#${tab}$`));
+  await assertActiveTabPanelVisibility(page, tab);
+  assertNoRuntimeFailures(page);
 }
 
 test.beforeAll(async () => {
   await seedDashboardData();
+});
+
+test.afterEach(async ({ page }) => {
+  assertNoRuntimeFailures(page);
+});
+
+test("dashboard bare path redirects to canonical index route", async ({ request }) => {
+  const response = await request.get(`${BASE_URL}/dashboard`, { maxRedirects: 0 });
+  expect(response.status()).toBe(308);
+  expect(response.headers().location).toBe("/dashboard/index.html");
+});
+
+test("dashboard clean-state renders explicit empty placeholders", async ({ page }) => {
+  const emptyConfig = {
+    admin_config_write_enabled: true,
+    challenge_config_mutable: true,
+    botness_config_mutable: true,
+    pow_config_mutable: true,
+    challenge_risk_threshold: 3,
+    challenge_risk_threshold_default: 3,
+    botness_maze_threshold: 6,
+    botness_maze_threshold_default: 6,
+    botness_weights: {
+      js_required: 1,
+      geo_risk: 2,
+      rate_medium: 1,
+      rate_high: 2
+    },
+    ban_durations: {
+      honeypot: 86400,
+      rate_limit: 3600,
+      browser: 21600,
+      admin: 21600
+    },
+    maze_enabled: true,
+    maze_threshold: 50,
+    maze_auto_ban: false,
+    robots_enabled: true,
+    ai_robots_block: true,
+    ai_robots_aggressive: false,
+    ai_robots_content_signal: true,
+    robots_crawl_delay: 2,
+    cdp_enabled: true,
+    cdp_mode: "report-only",
+    cdp_score_threshold: 0.8,
+    cdp_auto_ban: false,
+    cdp_auto_ban_threshold: 0.9,
+    rate_limit: 80,
+    js_required_enforced: true,
+    test_mode: false,
+    edge_integration_mode: "off",
+    geo_risk: [],
+    geo_allow: [],
+    geo_challenge: [],
+    geo_maze: [],
+    geo_block: []
+  };
+
+  await page.route("**/admin/analytics", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ban_count: 0, test_mode: false, fail_mode: "open" })
+    });
+  });
+  await page.route("**/admin/events?hours=*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ recent_events: [], event_counts: {}, top_ips: [], unique_ips: 0 })
+    });
+  });
+  await page.route("**/admin/ban", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ bans: [] })
+    });
+  });
+  await page.route("**/admin/maze", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ total_hits: 0, unique_crawlers: 0, maze_auto_bans: 0, top_crawlers: [] })
+    });
+  });
+  await page.route("**/admin/cdp", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ stats: { total_detections: 0, auto_bans: 0 }, config: {} })
+    });
+  });
+  await page.route("**/admin/cdp/events?*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ events: [] })
+    });
+  });
+  await page.route("**/admin/config", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(emptyConfig)
+    });
+  });
+
+  await openDashboard(page);
+  await expect(page.locator("#total-events")).toHaveText("0");
+  await expect(page.locator("#events tbody")).toContainText("No recent events");
+  await expect(page.locator("#cdp-events tbody")).toContainText(
+    "No CDP detections or auto-bans in the selected window"
+  );
+  await expect(page.locator("#maze-crawler-list")).toContainText("No crawlers in maze yet");
+
+  await openTab(page, "ip-bans");
+  await expect(page.locator("#bans-table tbody")).toContainText("No active bans");
+  await expect(page.locator('[data-tab-state="ip-bans"]')).toContainText("No active bans.");
 });
 
 test("dashboard loads and shows seeded operational data", async ({ page }) => {
@@ -186,6 +407,7 @@ test("tab hash route persists selected panel across reload", async ({ page }) =>
   await page.reload();
   await expect(page).toHaveURL(/\/dashboard\/index\.html#config/);
   await expect(page.locator("#dashboard-panel-config")).toBeVisible();
+  await assertActiveTabPanelVisibility(page, "config");
 });
 
 test("tab keyboard navigation updates hash and selected state", async ({ page }) => {
@@ -198,16 +420,19 @@ test("tab keyboard navigation updates hash and selected state", async ({ page })
   await expect(page).toHaveURL(/#ip-bans$/);
   await expect(page.locator("#dashboard-tab-ip-bans")).toHaveAttribute("aria-selected", "true");
   await expect(page.locator("#dashboard-panel-ip-bans")).toBeVisible();
+  await assertActiveTabPanelVisibility(page, "ip-bans");
 
   await page.locator("#dashboard-tab-ip-bans").focus();
   await page.keyboard.press("End");
   await expect(page).toHaveURL(/#tuning$/);
   await expect(page.locator("#dashboard-tab-tuning")).toHaveAttribute("aria-selected", "true");
+  await assertActiveTabPanelVisibility(page, "tuning");
 
   await page.locator("#dashboard-tab-tuning").focus();
   await page.keyboard.press("Home");
   await expect(page).toHaveURL(/#monitoring$/);
   await expect(page.locator("#dashboard-tab-monitoring")).toHaveAttribute("aria-selected", "true");
+  await assertActiveTabPanelVisibility(page, "monitoring");
 });
 
 test("tab error state is surfaced when tab-scoped fetch fails", async ({ page }) => {

@@ -330,4 +330,4 @@ make dev
 make api-key-show
 ```
 
-`make dev` enables dev-mode defaults for local operation and dashboard testing.
+`make dev` enables local dashboard operation, but mutability flags still follow `.env.local` (for example `SHUMA_POW_CONFIG_MUTABLE` / `SHUMA_BOTNESS_CONFIG_MUTABLE`).

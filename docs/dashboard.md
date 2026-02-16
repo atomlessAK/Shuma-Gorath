@@ -73,9 +73,11 @@ Controls:
 
 Development:
 - `http://127.0.0.1:3000/dashboard/index.html`
+- `http://127.0.0.1:3000/dashboard` (canonical redirect to `/dashboard/index.html`)
 - API key source: `SHUMA_API_KEY` from environment (local dev commonly loads this from `.env.local`)
 - Login flow: unauthenticated visits to `/dashboard/index.html` are redirected to `/dashboard/login.html`; enter API key once to create a short-lived same-origin admin session cookie
 - Admin API endpoint is inferred from the page origin (same-origin only)
+- Runtime mutability flags are read from `.env.local` (for example `SHUMA_POW_CONFIG_MUTABLE`, `SHUMA_BOTNESS_CONFIG_MUTABLE`); if false, corresponding controls render read-only even in local dev.
 
 Production (recommended):
 - Protect the dashboard with auth

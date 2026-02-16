@@ -102,3 +102,19 @@ fn static_asset_path_bypasses_expensive_bot_checks() {
         );
     });
 }
+
+#[test]
+fn dashboard_root_path_redirects_to_index_shell() {
+    with_runtime_env(|| {
+        let req = request(Method::Get, "/dashboard", &[]);
+        let resp = shuma_gorath::handle_bot_defence_impl(&req);
+
+        assert_eq!(*resp.status(), 308u16);
+        let location = resp
+            .headers()
+            .find(|(name, _)| name.eq_ignore_ascii_case("location"))
+            .and_then(|(_, value)| value.as_str())
+            .unwrap_or("");
+        assert_eq!(location, "/dashboard/index.html");
+    });
+}
