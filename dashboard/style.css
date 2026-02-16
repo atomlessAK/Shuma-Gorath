@@ -399,13 +399,11 @@ h1 {
   position: absolute;
   top: 2px;
   right: 2px;
-  z-index: 1000;
   color: var(--color-500);
-  font-size: var(--text-sm);
-  font-style: italic;
+  font-size: 8px;
+  font-family: monospace;
   text-align: right;
-  pointer-events: none;
-  opacity: 0.2;
+  opacity: 0.1;
 }
 
 /* ===========================================
@@ -489,6 +487,7 @@ h1 {
   font-size: var(--text-2xl);
   color: var(--heading-fg);
   margin-bottom: 15px;
+  line-height: 1;
 }
 
 .chart-container canvas {
@@ -595,6 +594,7 @@ code.env-var {
   max-height: 500px;
   overflow-y: auto;
   border: var(--border-hairline);
+  margin-bottom: 20px;
 }
 
 /* ===========================================
