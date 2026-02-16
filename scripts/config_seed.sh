@@ -44,6 +44,17 @@ bool_norm() {
   esac
 }
 
+make_tmp_file() {
+  local prefix="$1"
+  local tmp=""
+  tmp="$(mktemp "/tmp/${prefix}.XXXXXX" 2>/dev/null)" || \
+    tmp="$(mktemp -t "${prefix}" 2>/dev/null)" || {
+      echo "❌ Failed to allocate temp file for ${prefix}" >&2
+      exit 1
+    }
+  printf '%s' "${tmp}"
+}
+
 sqlite3 "${DB_PATH}" <<'SQL'
 CREATE TABLE IF NOT EXISTS spin_key_value (
   store TEXT NOT NULL,
@@ -53,9 +64,9 @@ CREATE TABLE IF NOT EXISTS spin_key_value (
 );
 SQL
 
-tmp_json="$(mktemp "/tmp/shuma-config-seed.XXXXXX.json")"
-tmp_merged="$(mktemp "/tmp/shuma-config-merged.XXXXXX.json")"
-tmp_existing="$(mktemp "/tmp/shuma-config-existing.XXXXXX.json")"
+tmp_json="$(make_tmp_file "shuma-config-seed")"
+tmp_merged="$(make_tmp_file "shuma-config-merged")"
+tmp_existing="$(make_tmp_file "shuma-config-existing")"
 trap 'rm -f "${tmp_json}" "${tmp_merged}" "${tmp_existing}"' EXIT
 
 cat > "${tmp_json}" <<EOF
