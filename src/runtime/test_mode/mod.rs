@@ -134,37 +134,105 @@ where
             return Some(Response::new(200, "TEST MODE: Would block (geo policy)"));
         }
         crate::signals::geo::GeoPolicyRoute::Maze => {
+            if cfg.maze_enabled {
+                crate::log_line(&format!(
+                    "[TEST MODE] Would route IP {ip} to maze for GEO policy"
+                ));
+                log_test_mode_event(
+                    store,
+                    crate::admin::EventType::Challenge,
+                    ip,
+                    "geo_policy_maze [TEST MODE]",
+                    "would_route_maze",
+                    &record_test_mode_action,
+                );
+                return Some(Response::new(
+                    200,
+                    "TEST MODE: Would route to maze (geo policy)",
+                ));
+            }
+            if cfg.challenge_enabled {
+                crate::log_line(&format!(
+                    "[TEST MODE] Would challenge IP {ip} for GEO maze fallback"
+                ));
+                log_test_mode_event(
+                    store,
+                    crate::admin::EventType::Challenge,
+                    ip,
+                    "geo_policy_challenge_fallback [TEST MODE]",
+                    "would_challenge",
+                    &record_test_mode_action,
+                );
+                return Some(Response::new(
+                    200,
+                    "TEST MODE: Would serve challenge (geo maze fallback)",
+                ));
+            }
             crate::log_line(&format!(
-                "[TEST MODE] Would route IP {ip} to maze for GEO policy"
+                "[TEST MODE] Would block IP {ip} for GEO maze fallback with challenge disabled"
             ));
             log_test_mode_event(
                 store,
-                crate::admin::EventType::Challenge,
+                crate::admin::EventType::Block,
                 ip,
-                "geo_policy_maze [TEST MODE]",
-                "would_route_maze",
+                "geo_policy_challenge_disabled_fallback_block [TEST MODE]",
+                "would_block",
                 &record_test_mode_action,
             );
             return Some(Response::new(
                 200,
-                "TEST MODE: Would route to maze (geo policy)",
+                "TEST MODE: Would block (geo maze fallback, challenge disabled)",
             ));
         }
         crate::signals::geo::GeoPolicyRoute::Challenge => {
+            if cfg.challenge_enabled {
+                crate::log_line(&format!(
+                    "[TEST MODE] Would challenge IP {ip} for GEO policy"
+                ));
+                log_test_mode_event(
+                    store,
+                    crate::admin::EventType::Challenge,
+                    ip,
+                    "geo_policy_challenge [TEST MODE]",
+                    "would_challenge",
+                    &record_test_mode_action,
+                );
+                return Some(Response::new(
+                    200,
+                    "TEST MODE: Would serve challenge (geo policy)",
+                ));
+            }
+            if cfg.maze_enabled {
+                crate::log_line(&format!(
+                    "[TEST MODE] Would route IP {ip} to maze for GEO challenge fallback"
+                ));
+                log_test_mode_event(
+                    store,
+                    crate::admin::EventType::Challenge,
+                    ip,
+                    "geo_policy_challenge_fallback_maze [TEST MODE]",
+                    "would_route_maze",
+                    &record_test_mode_action,
+                );
+                return Some(Response::new(
+                    200,
+                    "TEST MODE: Would route to maze (geo challenge fallback)",
+                ));
+            }
             crate::log_line(&format!(
-                "[TEST MODE] Would challenge IP {ip} for GEO policy"
+                "[TEST MODE] Would block IP {ip} for GEO challenge fallback with challenge disabled"
             ));
             log_test_mode_event(
                 store,
-                crate::admin::EventType::Challenge,
+                crate::admin::EventType::Block,
                 ip,
-                "geo_policy_challenge [TEST MODE]",
-                "would_challenge",
+                "geo_policy_challenge_disabled_fallback_block [TEST MODE]",
+                "would_block",
                 &record_test_mode_action,
             );
             return Some(Response::new(
                 200,
-                "TEST MODE: Would serve challenge (geo policy)",
+                "TEST MODE: Would block (geo challenge fallback, challenge disabled)",
             ));
         }
         crate::signals::geo::GeoPolicyRoute::Allow | crate::signals::geo::GeoPolicyRoute::None => {}

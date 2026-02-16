@@ -55,6 +55,45 @@ fail() {
 info() { echo -e "${YELLOW}INFO${NC} $1"; }
 
 BASE_URL="http://127.0.0.1:3000"
+TEST_CLEANUP_IPS=(
+  "${TEST_HONEYPOT_IP}"
+  10.0.0.99
+  10.0.0.100
+  10.0.0.150
+  10.0.0.200
+  10.0.0.201
+  10.0.0.202
+  10.0.0.210
+  10.0.0.211
+  10.0.0.212
+  10.0.0.230
+  10.0.0.231
+  10.0.0.232
+)
+ORIGINAL_CONFIG_RESTORE_PAYLOAD=""
+
+cleanup_integration_state() {
+  if [[ -z "${SHUMA_API_KEY:-}" ]]; then
+    return
+  fi
+
+  if [[ -n "${ORIGINAL_CONFIG_RESTORE_PAYLOAD:-}" ]]; then
+    curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -X POST \
+      -H "Authorization: Bearer $SHUMA_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d "${ORIGINAL_CONFIG_RESTORE_PAYLOAD}" \
+      "$BASE_URL/admin/config" > /dev/null || true
+  fi
+
+  for ip in "${TEST_CLEANUP_IPS[@]}"; do
+    curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" \
+      -H "Authorization: Bearer $SHUMA_API_KEY" \
+      -X POST \
+      "$BASE_URL/admin/unban?ip=${ip}" > /dev/null || true
+  done
+}
+
+trap cleanup_integration_state EXIT
 
 read_env_local_value() {
   local key="$1"
@@ -142,7 +181,7 @@ curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -X POST 
   "$BASE_URL/admin/config" > /dev/null || true
 
 info "Clearing bans for integration test IPs..."
-for ip in "${TEST_HONEYPOT_IP}" 10.0.0.99 10.0.0.100 10.0.0.150 10.0.0.202 10.0.0.210 10.0.0.211 10.0.0.212 10.0.0.230 10.0.0.231 10.0.0.232; do
+for ip in "${TEST_CLEANUP_IPS[@]}"; do
   curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" \
     -H "Authorization: Bearer $SHUMA_API_KEY" \
     -X POST \
@@ -151,32 +190,19 @@ done
 
 info "Resolving configured honeypot path..."
 config_snapshot=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/config")
-read -r ORIGINAL_RATE_LIMIT ORIGINAL_CDP_DETECTION_ENABLED ORIGINAL_CDP_AUTO_BAN ORIGINAL_RATE_BACKEND ORIGINAL_BAN_BACKEND ORIGINAL_CHALLENGE_BACKEND ORIGINAL_MAZE_BACKEND ORIGINAL_FINGERPRINT_BACKEND ORIGINAL_EDGE_MODE <<< "$(python3 -c 'import json,sys
+snapshot_payload_and_path=$(python3 -c 'import json,sys
 try:
     data=json.loads(sys.stdin.read())
 except Exception:
     data={}
-provider=data.get("provider_backends") or {}
-vals=[
-    str(int(data.get("rate_limit", 80))),
-    "true" if bool(data.get("cdp_detection_enabled", True)) else "false",
-    "true" if bool(data.get("cdp_auto_ban", True)) else "false",
-    str(provider.get("rate_limiter", "internal")),
-    str(provider.get("ban_store", "internal")),
-    str(provider.get("challenge_engine", "internal")),
-    str(provider.get("maze_tarpit", "internal")),
-    str(provider.get("fingerprint_signal", "internal")),
-    str(data.get("edge_integration_mode", "off")),
-]
-print(" ".join(vals))' <<< "$config_snapshot")"
-resolved_honeypot=$(python3 -c 'import json,sys
-try:
-    data=json.loads(sys.stdin.read())
-except Exception:
-    print("")
-    raise SystemExit(0)
+print(json.dumps(data, separators=(",", ":")))
 paths=data.get("honeypots") or []
 print(paths[0] if paths else "")' <<< "$config_snapshot")
+ORIGINAL_CONFIG_RESTORE_PAYLOAD="$(printf '%s\n' "$snapshot_payload_and_path" | awk 'NR==1{print; exit}')"
+resolved_honeypot="$(printf '%s\n' "$snapshot_payload_and_path" | awk 'NR==2{print; exit}')"
+if [[ -z "${ORIGINAL_CONFIG_RESTORE_PAYLOAD}" ]]; then
+  fail "Could not capture original runtime config snapshot for restore."
+fi
 if [[ -n "$resolved_honeypot" ]]; then
   HONEYPOT_PATH="$resolved_honeypot"
 fi
@@ -677,22 +703,6 @@ print(provider.get("rate_limiter",""))' <<< "$rate_fallback_cfg")
     echo -e "${YELLOW}DEBUG rate second response:${NC} $rate_second"
   fi
 fi
-
-# Restore mutable settings touched by this suite.
-restore_payload=$(cat <<EOF
-{"rate_limit":${ORIGINAL_RATE_LIMIT},"cdp_detection_enabled":${ORIGINAL_CDP_DETECTION_ENABLED},"cdp_auto_ban":${ORIGINAL_CDP_AUTO_BAN},"provider_backends":{"rate_limiter":"${ORIGINAL_RATE_BACKEND}","ban_store":"${ORIGINAL_BAN_BACKEND}","challenge_engine":"${ORIGINAL_CHALLENGE_BACKEND}","maze_tarpit":"${ORIGINAL_MAZE_BACKEND}","fingerprint_signal":"${ORIGINAL_FINGERPRINT_BACKEND}"},"edge_integration_mode":"${ORIGINAL_EDGE_MODE}"}
-EOF
-)
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -X POST \
-  -H "Authorization: Bearer $SHUMA_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d "$restore_payload" \
-  "$BASE_URL/admin/config" > /dev/null || true
-
-# Cleanup: unban test CDP/IPs
-for ip in "${TEST_HONEYPOT_IP}" 10.0.0.200 10.0.0.201 10.0.0.202 10.0.0.230 10.0.0.231 10.0.0.232; do
-  curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" -X POST "$BASE_URL/admin/unban?ip=${ip}" > /dev/null || true
-done
 
 echo -e "\n${GREEN}All integration tests complete.${NC}"
 

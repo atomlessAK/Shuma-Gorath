@@ -208,6 +208,7 @@ fn defaults_enable_both_signal_and_action_paths() {
     let cfg = defaults().clone();
     assert_eq!(cfg.edge_integration_mode, EdgeIntegrationMode::Off);
     assert!(cfg.js_required_enforced);
+    assert!(cfg.challenge_enabled);
     assert_eq!(cfg.defence_modes.js, ComposabilityMode::Both);
     assert_eq!(cfg.defence_modes.geo, ComposabilityMode::Both);
     assert_eq!(cfg.defence_modes.rate, ComposabilityMode::Both);

@@ -12,7 +12,7 @@ Shuma-Gorath uses one runtime configuration model:
 
 1. Creates `.env.local` from `config/defaults.env` if missing.
 2. Generates local dev secrets in `.env.local` (`SHUMA_API_KEY`, `SHUMA_JS_SECRET`, `SHUMA_FORWARDED_IP_SECRET`).
-3. Runs `make config-seed`, which writes KV tunables only when `config:default` does not already exist.
+3. Runs `make config-seed`, which creates `config:default` when missing and backfills newly introduced tunable keys when the record already exists.
 4. Normalizes `.env.local` entries to unquoted `KEY=value` style for consistency.
 
 At runtime:
@@ -20,6 +20,7 @@ At runtime:
 - Tunables are loaded from KV.
 - Env-only keys are loaded from process env.
 - Missing/invalid KV config returns `500 Configuration unavailable` for config-dependent requests.
+- `make dev`, `make run`, `make run-prebuilt`, and `make prod` now run `make config-seed` before Spin startup (and `make dev`/`make dev-closed` also backfill on watch-triggered restarts), so newly added tunables are automatically backfilled after branch switches or `make clean`.
 
 ## 🐙 Runtime Config Cache
 
@@ -62,7 +63,7 @@ These are read from process env at runtime (not from KV).
 | `SHUMA_RATE_LIMITER_OUTAGE_MODE_MAIN` | No | `fallback_internal` | Outage posture for external rate-limiter degradation on main traffic (`fallback_internal`, `fail_open`, `fail_closed`). |
 | `SHUMA_RATE_LIMITER_OUTAGE_MODE_ADMIN_AUTH` | No | `fail_closed` | Outage posture for external rate-limiter degradation on admin-auth routes (`fallback_internal`, `fail_open`, `fail_closed`). |
 | `SHUMA_POW_CONFIG_MUTABLE` | Yes | `false` | Allows runtime edits of PoW difficulty/TTL from admin config. |
-| `SHUMA_CHALLENGE_CONFIG_MUTABLE` | Yes | `false` | Allows runtime edits of challenge transform count/threshold from admin config. |
+| `SHUMA_CHALLENGE_CONFIG_MUTABLE` | Yes | `false` | Allows runtime edits of challenge enable + transform controls from admin config. |
 | `SHUMA_BOTNESS_CONFIG_MUTABLE` | Yes | `false` | Allows runtime edits of botness thresholds/weights from admin config. |
 
 Use `make env-help` for the supported env-only override list.
@@ -87,6 +88,7 @@ These keys are seeded into KV and loaded from KV at runtime.
 | `SHUMA_POW_ENABLED` | `true` | Enables PoW in JS verification flow. |
 | `SHUMA_POW_DIFFICULTY` | `15` | PoW cost level (clamped to supported range). |
 | `SHUMA_POW_TTL_SECONDS` | `90` | PoW seed lifetime in seconds (clamped). |
+| `SHUMA_CHALLENGE_ENABLED` | `true` | Enables challenge puzzle routing at the challenge escalation step. |
 | `SHUMA_CHALLENGE_TRANSFORM_COUNT` | `6` | Number of transform options shown in the puzzle challenge (4-8). |
 | `SHUMA_CHALLENGE_RISK_THRESHOLD` | `3` | Botness score threshold for serving challenge step-up. |
 | `SHUMA_BOTNESS_MAZE_THRESHOLD` | `6` | Botness score threshold for routing to maze. |
@@ -166,11 +168,28 @@ These keys are seeded into KV and loaded from KV at runtime.
 - Successful writes invalidate runtime config cache on the instance that processed the request.
 - KV writes persist across restarts.
 
+### `POST /admin/config` writable keys
+
+The following KV-backed fields are currently writable via admin API:
+
+- Core: `test_mode`, `rate_limit`, `ban_duration`, `ban_durations.{honeypot,rate_limit,browser,admin,cdp}`, `honeypots`, `browser_block`, `browser_whitelist`, `whitelist`, `path_whitelist`, `js_required_enforced`.
+- GEO routing/policy: `geo_risk`, `geo_allow`, `geo_challenge`, `geo_maze`, `geo_block`.
+- Maze: `maze_enabled`, `maze_auto_ban`, `maze_auto_ban_threshold`, `maze_rollout_phase`, `maze_token_ttl_seconds`, `maze_token_max_depth`, `maze_token_branch_budget`, `maze_replay_ttl_seconds`, `maze_entropy_window_seconds`, `maze_client_expansion_enabled`, `maze_checkpoint_every_nodes`, `maze_checkpoint_every_ms`, `maze_step_ahead_max`, `maze_no_js_fallback_max_depth`, `maze_micro_pow_enabled`, `maze_micro_pow_depth_start`, `maze_micro_pow_base_difficulty`, `maze_max_concurrent_global`, `maze_max_concurrent_per_ip_bucket`, `maze_max_response_bytes`, `maze_max_response_duration_ms`, `maze_server_visible_links`, `maze_max_links`, `maze_max_paragraphs`, `maze_path_entropy_segment_len`, `maze_covert_decoys_enabled`, `maze_seed_provider`, `maze_seed_refresh_interval_seconds`, `maze_seed_refresh_rate_limit_per_hour`, `maze_seed_refresh_max_sources`, `maze_seed_metadata_only`.
+- Robots/AI policy: `robots_enabled`, `robots_crawl_delay`, `ai_policy_block_training`, `ai_policy_block_search`, `ai_policy_allow_search_engines` (legacy aliases `robots_block_ai_training`, `robots_block_ai_search`, `robots_allow_search_engines` are also accepted).
+- CDP: `cdp_detection_enabled`, `cdp_auto_ban`, `cdp_detection_threshold`.
+- Provider/edge: `provider_backends.{rate_limiter,ban_store,challenge_engine,maze_tarpit,fingerprint_signal}`, `edge_integration_mode`.
+- Botness/challenge tuning (requires mutable env guardrails): `pow_enabled`, `pow_difficulty`, `pow_ttl_seconds`, `challenge_enabled`, `challenge_transform_count`, `challenge_risk_threshold`, `botness_maze_threshold`, `botness_weights.{js_required,geo_risk,rate_medium,rate_high,maze_behavior}`, `defence_modes.{rate,geo,js}`.
+
+Shuma follows a 2-class model only:
+- Env-only runtime keys in the Env-Only table above.
+- KV-backed tunables writable via `POST /admin/config`.
+
 ## 🐙 JS Verification + PoW
 
 - `js_required_enforced=true` routes visitors without a valid `js_verified` cookie to JS verification.
 - `pow_enabled=true` adds server-verified PoW to that verification flow.
 - `js_required_enforced=false` bypasses JS verification for normal requests (and therefore bypasses PoW on that path).
+- `challenge_enabled=false` disables challenge-page serving; challenge-tier routes fall back to maze when `maze_enabled=true`, otherwise hard block.
 
 ## 🐙 Maze Rollout Phases
 

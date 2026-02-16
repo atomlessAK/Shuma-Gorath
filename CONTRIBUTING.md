@@ -23,6 +23,21 @@
 6. Consider resource efficiency and cost-placement impact (bandwidth/CPU/memory/energy, and whether cost is shifted toward malicious bots).
 7. If a change touches any provider capability boundary (`rate_limiter`, `ban_store`, `challenge_engine`, `maze_tarpit`, `fingerprint_signal`), implement it through the provider interface/registry flow instead of introducing direct module calls on the hot path.
 
+## Variable Lifecycle (Required for `SHUMA_*` changes)
+
+When adding or changing configuration variables, keep one source-of-truth and wire every lifecycle stage:
+
+1. Update `config/defaults.env` first (canonical default source) and classify the variable correctly as env-only or KV-tunable.
+2. Keep setup/seed paths in sync so local setup is correct after standard commands:
+   - update `scripts/config_seed.sh` for KV tunables,
+   - update `scripts/bootstrap/setup.sh` for `.env.local` bootstrap/env-only defaults,
+   - update `Makefile` env injection/help surfaces as needed (for example `SPIN_ENV_ONLY`, `env-help`, explicit dev/prod override paths).
+3. Keep profile behavior intentional:
+   - dev overrides should only assist manual config/monitoring/tuning and remain explicit,
+   - tests must restore env/config state they mutate so later tests/runs are not left in a strange state,
+   - production defaults must remain secure-by-default.
+4. Update `docs/configuration.md` whenever variable meaning/default/ownership changes.
+
 ## Commit and Push Discipline
 
 - Prefer atomic commits: one logical change per commit.

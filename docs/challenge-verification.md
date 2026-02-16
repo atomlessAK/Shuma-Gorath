@@ -63,6 +63,7 @@ Secrets:
 
 ## 🐙 Config Knobs
 
+- `SHUMA_CHALLENGE_ENABLED` (enable/disable challenge serving at challenge-tier routing; disabled falls back to maze or block)
 - `SHUMA_CHALLENGE_TRANSFORM_COUNT` (clamped to `4..8`)
 - `SHUMA_CHALLENGE_RISK_THRESHOLD` (challenge routing threshold in botness flow)
 - `SHUMA_CHALLENGE_CONFIG_MUTABLE` (admin mutability control)

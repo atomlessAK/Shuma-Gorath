@@ -2,10 +2,19 @@ const { test, expect } = require("@playwright/test");
 const { seedDashboardData } = require("./seed-dashboard-data");
 
 const BASE_URL = process.env.SHUMA_BASE_URL || "http://127.0.0.1:3000";
-const API_KEY = process.env.SHUMA_API_KEY || "changeme-dev-only-api-key";
+const API_KEY = (process.env.SHUMA_API_KEY || "").trim();
 const DASHBOARD_TABS = Object.freeze(["monitoring", "ip-bans", "status", "config", "tuning"]);
 const ADMIN_TABS = Object.freeze(["ip-bans", "status", "config", "tuning"]);
 const runtimeGuards = new WeakMap();
+
+function ensureRequiredEnv() {
+  if (!API_KEY) {
+    throw new Error("Missing SHUMA_API_KEY for dashboard smoke tests.");
+  }
+  if (/^changeme/i.test(API_KEY)) {
+    throw new Error("SHUMA_API_KEY is a placeholder value; run make setup or make api-key-generate.");
+  }
+}
 
 function isStaticRuntimeRequest(request) {
   const resourceType = request.resourceType();
@@ -161,6 +170,7 @@ async function assertChartsFillPanels(page) {
 }
 
 test.beforeAll(async () => {
+  ensureRequiredEnv();
   await seedDashboardData();
 });
 
@@ -180,6 +190,9 @@ test("dashboard clean-state renders explicit empty placeholders", async ({ page 
     challenge_config_mutable: true,
     botness_config_mutable: true,
     pow_config_mutable: true,
+    pow_enabled: true,
+    challenge_enabled: true,
+    challenge_transform_count: 6,
     challenge_risk_threshold: 3,
     challenge_risk_threshold_default: 3,
     botness_maze_threshold: 6,
@@ -194,8 +207,14 @@ test("dashboard clean-state renders explicit empty placeholders", async ({ page 
       honeypot: 86400,
       rate_limit: 3600,
       browser: 21600,
+      cdp: 43200,
       admin: 21600
     },
+    honeypots: ["/instaban"],
+    browser_block: [["Chrome", 120], ["Firefox", 115], ["Safari", 15]],
+    browser_whitelist: [],
+    whitelist: [],
+    path_whitelist: [],
     maze_enabled: true,
     maze_threshold: 50,
     maze_auto_ban: false,
@@ -315,6 +334,18 @@ test("status tab resolves fail mode without requiring monitoring bootstrap", asy
   await expect(failModeCard).toHaveCount(1);
   await expect(failModeCard.locator(".status-value")).toHaveText(/OPEN|CLOSED/);
   await expect(failModeCard.locator(".status-value")).not.toHaveText("UNKNOWN");
+
+  const statusVarTables = page.locator("#status-vars-groups .status-vars-table");
+  expect(await statusVarTables.count()).toBeGreaterThan(1);
+
+  const statusVarRows = page.locator("#status-vars-groups .status-vars-table tbody tr");
+  expect(await statusVarRows.count()).toBeGreaterThan(20);
+  const testModeRow = page
+    .locator("#status-vars-groups .status-vars-table tbody tr")
+    .filter({ has: page.locator("code", { hasText: "test_mode" }) });
+  await expect(testModeRow).toHaveCount(1);
+  await expect(testModeRow).toHaveClass(/status-var-row--admin-write/);
+  await expect(testModeRow.locator("td").nth(2)).not.toHaveText("");
 });
 
 test("ban form enforces IP validity and submit state", async ({ page }) => {
@@ -339,16 +370,27 @@ test("maze and duration save buttons use shared dirty-state behavior", async ({ 
 
   const mazeSave = page.locator("#save-maze-config");
   const durationsSave = page.locator("#save-durations-btn");
+  const powSave = page.locator("#save-pow-config");
   const rateLimitSave = page.locator("#save-rate-limit-config");
   const jsRequiredSave = page.locator("#save-js-required-config");
+  const honeypotSave = page.locator("#save-honeypot-config");
+  const browserPolicySave = page.locator("#save-browser-policy-config");
+  const whitelistSave = page.locator("#save-whitelist-config");
   const edgeModeSave = page.locator("#save-edge-integration-mode-config");
   const edgeModeSelect = page.locator("#edge-integration-mode-select");
+  const advancedSave = page.locator("#save-advanced-config");
+  const advancedField = page.locator("#advanced-config-json");
 
   await expect(mazeSave).toBeDisabled();
   await expect(durationsSave).toBeDisabled();
+  await expect(powSave).toBeDisabled();
   await expect(rateLimitSave).toBeDisabled();
   await expect(jsRequiredSave).toBeDisabled();
+  await expect(honeypotSave).toBeDisabled();
+  await expect(browserPolicySave).toBeDisabled();
+  await expect(whitelistSave).toBeDisabled();
   await expect(edgeModeSave).toBeDisabled();
+  await expect(advancedSave).toBeDisabled();
 
   const mazeThreshold = page.locator("#maze-threshold");
   if (!(await mazeThreshold.isVisible())) {
@@ -364,7 +406,7 @@ test("maze and duration save buttons use shared dirty-state behavior", async ({ 
   await mazeThreshold.dispatchEvent("input");
   await expect(mazeSave).toBeDisabled();
 
-  const durationField = page.locator("#dur-admin-minutes");
+  const durationField = page.locator("#dur-cdp-minutes");
   const initialDuration = await durationField.inputValue();
   const nextDuration = String((Number(initialDuration || "0") + 1) % 60);
   await durationField.fill(nextDuration);
@@ -395,12 +437,99 @@ test("maze and duration save buttons use shared dirty-state behavior", async ({ 
     await expect(jsRequiredSave).toBeDisabled();
   }
 
+  const powToggle = page.locator("#pow-enabled-toggle");
+  const powToggleSwitch = page.locator("label.toggle-switch[for='pow-enabled-toggle']");
+  if (await powToggleSwitch.isVisible() && await powToggle.isEnabled()) {
+    const powInitial = await powToggle.isChecked();
+    await powToggleSwitch.click();
+    await expect(powSave).toBeEnabled();
+    if (powInitial !== await powToggle.isChecked()) {
+      await powToggleSwitch.click();
+    }
+    await expect(powSave).toBeDisabled();
+  }
+
+  const honeypotField = page.locator("#honeypot-paths");
+  const initialHoneypots = await honeypotField.inputValue();
+  await honeypotField.fill(`${initialHoneypots}\n/trap-e2e`);
+  await honeypotField.dispatchEvent("input");
+  await expect(honeypotSave).toBeEnabled();
+  await honeypotField.fill(initialHoneypots);
+  await honeypotField.dispatchEvent("input");
+  await expect(honeypotSave).toBeDisabled();
+
+  const browserBlockField = page.locator("#browser-block-rules");
+  const initialBrowserBlock = await browserBlockField.inputValue();
+  await browserBlockField.fill(`${initialBrowserBlock}\nEdge,120`);
+  await browserBlockField.dispatchEvent("input");
+  await expect(browserPolicySave).toBeEnabled();
+  await browserBlockField.fill(initialBrowserBlock);
+  await browserBlockField.dispatchEvent("input");
+  await expect(browserPolicySave).toBeDisabled();
+
+  const networkWhitelistField = page.locator("#network-whitelist");
+  const initialNetworkWhitelist = await networkWhitelistField.inputValue();
+  await networkWhitelistField.fill(`${initialNetworkWhitelist}\n198.51.100.0/24`);
+  await networkWhitelistField.dispatchEvent("input");
+  await expect(whitelistSave).toBeEnabled();
+  await networkWhitelistField.fill(initialNetworkWhitelist);
+  await networkWhitelistField.dispatchEvent("input");
+  await expect(whitelistSave).toBeDisabled();
+
   const initialEdgeMode = await edgeModeSelect.inputValue();
   const nextEdgeMode = initialEdgeMode === "off" ? "advisory" : "off";
   await edgeModeSelect.selectOption(nextEdgeMode);
   await expect(edgeModeSave).toBeEnabled();
   await edgeModeSelect.selectOption(initialEdgeMode);
   await expect(edgeModeSave).toBeDisabled();
+
+  const initialAdvanced = await advancedField.inputValue();
+  let parsedAdvanced;
+  try {
+    parsedAdvanced = JSON.parse(initialAdvanced);
+  } catch (_e) {
+    parsedAdvanced = {};
+  }
+  const nextAdvanced = {
+    ...parsedAdvanced,
+    rate_limit: Number(parsedAdvanced.rate_limit || 80) + 1
+  };
+  await advancedField.fill(JSON.stringify(nextAdvanced, null, 2));
+  await advancedField.dispatchEvent("input");
+  await expect(advancedSave).toBeEnabled();
+  await advancedField.fill("{invalid");
+  await advancedField.dispatchEvent("input");
+  await expect(advancedSave).toBeDisabled();
+  await advancedField.fill(initialAdvanced);
+  await advancedField.dispatchEvent("input");
+  await expect(advancedSave).toBeDisabled();
+
+  const challengeTransformField = page.locator("#challenge-transform-count");
+  const challengeEnabledToggle = page.locator("#challenge-enabled-toggle");
+  const challengeEnabledSwitch = page.locator("label.toggle-switch[for='challenge-enabled-toggle']");
+  const challengeTransformSave = page.locator("#save-challenge-transform-config");
+  if (await challengeTransformField.isEnabled()) {
+    const initialTransformCount = await challengeTransformField.inputValue();
+    const nextTransformCount = String(Math.min(8, Number(initialTransformCount || "6") + 1));
+    await challengeTransformField.fill(nextTransformCount);
+    await challengeTransformField.dispatchEvent("input");
+    await expect(challengeTransformSave).toBeEnabled();
+    await challengeTransformField.fill(initialTransformCount);
+    await challengeTransformField.dispatchEvent("input");
+    await expect(challengeTransformSave).toBeDisabled();
+
+    if (await challengeEnabledSwitch.isVisible() && await challengeEnabledToggle.isEnabled()) {
+      const initialEnabled = await challengeEnabledToggle.isChecked();
+      await challengeEnabledSwitch.click();
+      await expect(challengeTransformSave).toBeEnabled();
+      if (initialEnabled !== await challengeEnabledToggle.isChecked()) {
+        await challengeEnabledSwitch.click();
+      }
+      await expect(challengeTransformSave).toBeDisabled();
+    }
+  } else {
+    await expect(challengeTransformSave).toBeDisabled();
+  }
 });
 
 test("session survives reload and time-range controls refresh chart data", async ({ page }) => {

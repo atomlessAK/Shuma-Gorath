@@ -98,6 +98,12 @@ Shuma-Gorath exists to provide layered, practical bot defense that teams can dep
 ### P11. Stability and Change Discipline
 
 - MUST define lifecycle expectations for new config keys and APIs.
+- MUST treat `config/defaults.env` as the canonical source of truth for `SHUMA_*` defaults and update it first when adding/changing variables.
+- MUST keep variable wiring in sync across setup/seed/runtime workflows so `make setup` and `make config-seed` establish a correct baseline without manual repair.
+- MUST preserve environment profile intent:
+  - dev may apply explicit helper overrides for local manual config/monitoring/tuning,
+  - tests must restore env/config changes they introduce and not leak mutated state,
+  - production defaults must start from the most secure posture (no debug/unsafe defaults enabled by default).
 - MUST provide clear migration notes when breaking behavior is unavoidable.
 - SHOULD prefer additive change and compatibility windows for operationally sensitive paths.
 

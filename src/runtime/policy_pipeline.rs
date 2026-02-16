@@ -260,76 +260,160 @@ pub(crate) fn maybe_handle_geo_policy(
                         ),
                 );
             }
+            if cfg.challenge_enabled {
+                let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
+                    crate::runtime::policy_taxonomy::PolicyTransition::GeoRouteMazeFallbackChallenge,
+                );
+                crate::observability::metrics::record_policy_match(store, &policy_match);
+                crate::observability::metrics::increment(
+                    store,
+                    crate::observability::metrics::MetricName::ChallengesTotal,
+                    None,
+                );
+                crate::observability::metrics::increment(
+                    store,
+                    crate::observability::metrics::MetricName::ChallengeServedTotal,
+                    None,
+                );
+                crate::admin::log_event(
+                    store,
+                    &crate::admin::EventLogEntry {
+                        ts: crate::admin::now_ts(),
+                        event: crate::admin::EventType::Challenge,
+                        ip: Some(ip.to_string()),
+                        reason: Some("geo_policy_challenge_fallback".to_string()),
+                        outcome: Some(policy_match.annotate_outcome("maze_disabled")),
+                        admin: None,
+                    },
+                );
+                return Some(
+                    provider_registry
+                        .challenge_engine_provider()
+                        .render_challenge(req, cfg.challenge_transform_count as usize),
+                );
+            }
             let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
-                crate::runtime::policy_taxonomy::PolicyTransition::GeoRouteMazeFallbackChallenge,
+                crate::runtime::policy_taxonomy::PolicyTransition::ChallengeDisabledFallbackBlock(vec![
+                    crate::runtime::policy_taxonomy::SignalId::GeoRouteMaze,
+                ]),
             );
             crate::observability::metrics::record_policy_match(store, &policy_match);
             crate::observability::metrics::increment(
                 store,
-                crate::observability::metrics::MetricName::ChallengesTotal,
-                None,
-            );
-            crate::observability::metrics::increment(
-                store,
-                crate::observability::metrics::MetricName::ChallengeServedTotal,
+                crate::observability::metrics::MetricName::BlocksTotal,
                 None,
             );
             crate::admin::log_event(
                 store,
                 &crate::admin::EventLogEntry {
                     ts: crate::admin::now_ts(),
-                    event: crate::admin::EventType::Challenge,
+                    event: crate::admin::EventType::Block,
                     ip: Some(ip.to_string()),
-                    reason: Some("geo_policy_challenge_fallback".to_string()),
-                    outcome: Some(policy_match.annotate_outcome("maze_disabled")),
+                    reason: Some("geo_policy_challenge_disabled_fallback_block".to_string()),
+                    outcome: Some(policy_match.annotate_outcome("maze_disabled challenge_disabled")),
                     admin: None,
                 },
             );
-            Some(
-                provider_registry
-                    .challenge_engine_provider()
-                    .render_challenge(req, cfg.challenge_transform_count as usize),
-            )
+            Some(Response::new(
+                403,
+                crate::enforcement::block_page::render_block_page(
+                    crate::enforcement::block_page::BlockReason::GeoPolicy,
+                ),
+            ))
         }
         crate::signals::geo::GeoPolicyRoute::Challenge => {
+            let country_summary = format!(
+                "country={}",
+                geo_assessment.country.as_deref().unwrap_or("unknown")
+            );
+            if cfg.challenge_enabled {
+                let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
+                    crate::runtime::policy_taxonomy::PolicyTransition::GeoRouteChallenge,
+                );
+                crate::observability::metrics::record_policy_match(store, &policy_match);
+                crate::observability::metrics::increment(
+                    store,
+                    crate::observability::metrics::MetricName::ChallengesTotal,
+                    None,
+                );
+                crate::observability::metrics::increment(
+                    store,
+                    crate::observability::metrics::MetricName::ChallengeServedTotal,
+                    None,
+                );
+                crate::admin::log_event(
+                    store,
+                    &crate::admin::EventLogEntry {
+                        ts: crate::admin::now_ts(),
+                        event: crate::admin::EventType::Challenge,
+                        ip: Some(ip.to_string()),
+                        reason: Some("geo_policy_challenge".to_string()),
+                        outcome: Some(policy_match.annotate_outcome(country_summary.as_str())),
+                        admin: None,
+                    },
+                );
+                return Some(
+                    provider_registry
+                        .challenge_engine_provider()
+                        .render_challenge(req, cfg.challenge_transform_count as usize),
+                );
+            }
+            if cfg.maze_enabled {
+                let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
+                    crate::runtime::policy_taxonomy::PolicyTransition::ChallengeDisabledFallbackMaze(vec![
+                        crate::runtime::policy_taxonomy::SignalId::GeoRouteChallenge,
+                    ]),
+                );
+                crate::observability::metrics::record_policy_match(store, &policy_match);
+                let event_outcome = policy_match.annotate_outcome(
+                    format!("{} challenge_disabled", country_summary).as_str(),
+                );
+                return Some(
+                    provider_registry
+                        .maze_tarpit_provider()
+                        .serve_maze_with_tracking(
+                            req,
+                            store,
+                            cfg,
+                            ip,
+                            req.header("user-agent")
+                                .map(|v| v.as_str().unwrap_or(""))
+                                .unwrap_or(""),
+                            "/maze/geo-policy-challenge-fallback",
+                            "geo_policy_challenge_fallback_maze",
+                            event_outcome.as_str(),
+                            None,
+                        ),
+                );
+            }
             let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
-                crate::runtime::policy_taxonomy::PolicyTransition::GeoRouteChallenge,
+                crate::runtime::policy_taxonomy::PolicyTransition::ChallengeDisabledFallbackBlock(vec![
+                    crate::runtime::policy_taxonomy::SignalId::GeoRouteChallenge,
+                ]),
             );
             crate::observability::metrics::record_policy_match(store, &policy_match);
             crate::observability::metrics::increment(
                 store,
-                crate::observability::metrics::MetricName::ChallengesTotal,
-                None,
-            );
-            crate::observability::metrics::increment(
-                store,
-                crate::observability::metrics::MetricName::ChallengeServedTotal,
+                crate::observability::metrics::MetricName::BlocksTotal,
                 None,
             );
             crate::admin::log_event(
                 store,
                 &crate::admin::EventLogEntry {
                     ts: crate::admin::now_ts(),
-                    event: crate::admin::EventType::Challenge,
+                    event: crate::admin::EventType::Block,
                     ip: Some(ip.to_string()),
-                    reason: Some("geo_policy_challenge".to_string()),
-                    outcome: Some(
-                        policy_match.annotate_outcome(
-                            format!(
-                                "country={}",
-                                geo_assessment.country.as_deref().unwrap_or("unknown")
-                            )
-                            .as_str(),
-                        ),
-                    ),
+                    reason: Some("geo_policy_challenge_disabled_fallback_block".to_string()),
+                    outcome: Some(policy_match.annotate_outcome("challenge_disabled maze_disabled")),
                     admin: None,
                 },
             );
-            Some(
-                provider_registry
-                    .challenge_engine_provider()
-                    .render_challenge(req, cfg.challenge_transform_count as usize),
-            )
+            Some(Response::new(
+                403,
+                crate::enforcement::block_page::render_block_page(
+                    crate::enforcement::block_page::BlockReason::GeoPolicy,
+                ),
+            ))
         }
         crate::signals::geo::GeoPolicyRoute::Allow | crate::signals::geo::GeoPolicyRoute::None => {
             None
@@ -432,61 +516,115 @@ pub(crate) fn maybe_handle_botness(
     }
 
     if botness.score >= cfg.challenge_risk_threshold {
+        let ua = req
+            .header("user-agent")
+            .map(|v| v.as_str().unwrap_or(""))
+            .unwrap_or("");
+        let base_outcome = format!(
+            "score={} signals={} signal_states={} {} providers={}",
+            botness.score,
+            botness_summary,
+            botness_state_summary,
+            runtime_metadata_summary,
+            provider_summary
+        );
+        if cfg.challenge_enabled {
+            let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
+                crate::runtime::policy_taxonomy::PolicyTransition::BotnessGateChallenge(
+                    botness_signal_ids,
+                ),
+            );
+            crate::observability::metrics::record_policy_match(store, &policy_match);
+            crate::observability::metrics::increment(
+                store,
+                crate::observability::metrics::MetricName::ChallengesTotal,
+                None,
+            );
+            crate::observability::metrics::increment(
+                store,
+                crate::observability::metrics::MetricName::ChallengeServedTotal,
+                None,
+            );
+            crate::admin::log_event(
+                store,
+                &crate::admin::EventLogEntry {
+                    ts: crate::admin::now_ts(),
+                    event: crate::admin::EventType::Challenge,
+                    ip: Some(ip.to_string()),
+                    reason: Some("botness_gate_challenge".to_string()),
+                    outcome: Some(policy_match.annotate_outcome(base_outcome.as_str())),
+                    admin: None,
+                },
+            );
+            let challenge_response = provider_registry
+                .challenge_engine_provider()
+                .render_challenge(req, cfg.challenge_transform_count as usize);
+            let response = crate::maze::covert_decoy::maybe_inject_non_maze_decoy(
+                req,
+                cfg,
+                ip,
+                ua,
+                challenge_response,
+                botness.score,
+            );
+            return Some(response);
+        }
+        if cfg.maze_enabled {
+            let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
+                crate::runtime::policy_taxonomy::PolicyTransition::ChallengeDisabledFallbackMaze(
+                    botness_signal_ids.clone(),
+                ),
+            );
+            crate::observability::metrics::record_policy_match(store, &policy_match);
+            let event_outcome = policy_match
+                .annotate_outcome(format!("{} challenge_disabled", base_outcome).as_str());
+            return Some(
+                provider_registry
+                    .maze_tarpit_provider()
+                    .serve_maze_with_tracking(
+                        req,
+                        store,
+                        cfg,
+                        ip,
+                        ua,
+                        "/maze/botness-challenge-fallback",
+                        "botness_gate_challenge_disabled_fallback_maze",
+                        event_outcome.as_str(),
+                        Some(botness.score),
+                    ),
+            );
+        }
         let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
-            crate::runtime::policy_taxonomy::PolicyTransition::BotnessGateChallenge(
+            crate::runtime::policy_taxonomy::PolicyTransition::ChallengeDisabledFallbackBlock(
                 botness_signal_ids,
             ),
         );
         crate::observability::metrics::record_policy_match(store, &policy_match);
         crate::observability::metrics::increment(
             store,
-            crate::observability::metrics::MetricName::ChallengesTotal,
-            None,
-        );
-        crate::observability::metrics::increment(
-            store,
-            crate::observability::metrics::MetricName::ChallengeServedTotal,
+            crate::observability::metrics::MetricName::BlocksTotal,
             None,
         );
         crate::admin::log_event(
             store,
             &crate::admin::EventLogEntry {
                 ts: crate::admin::now_ts(),
-                event: crate::admin::EventType::Challenge,
+                event: crate::admin::EventType::Block,
                 ip: Some(ip.to_string()),
-                reason: Some("botness_gate_challenge".to_string()),
+                reason: Some("botness_gate_challenge_disabled_fallback_block".to_string()),
                 outcome: Some(
-                    policy_match.annotate_outcome(
-                        format!(
-                            "score={} signals={} signal_states={} {} providers={}",
-                            botness.score,
-                            botness_summary,
-                            botness_state_summary,
-                            runtime_metadata_summary,
-                            provider_summary
-                        )
-                        .as_str(),
-                    ),
+                    policy_match
+                        .annotate_outcome(format!("{} challenge_disabled maze_disabled", base_outcome).as_str()),
                 ),
                 admin: None,
             },
         );
-        let ua = req
-            .header("user-agent")
-            .map(|v| v.as_str().unwrap_or(""))
-            .unwrap_or("");
-        let challenge_response = provider_registry
-            .challenge_engine_provider()
-            .render_challenge(req, cfg.challenge_transform_count as usize);
-        let response = crate::maze::covert_decoy::maybe_inject_non_maze_decoy(
-            req,
-            cfg,
-            ip,
-            ua,
-            challenge_response,
-            botness.score,
-        );
-        return Some(response);
+        return Some(Response::new(
+            403,
+            crate::enforcement::block_page::render_block_page(
+                crate::enforcement::block_page::BlockReason::GeoPolicy,
+            ),
+        ));
     }
 
     None

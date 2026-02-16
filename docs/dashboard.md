@@ -47,15 +47,25 @@ Tables:
 - Recent events (type, IP, timestamp, reason)
 - CDP detections & bans table (time-windowed CDP-only feed)
 - CDP cumulative totals (all-time detections + auto-bans)
+- Runtime Variable Inventory tables in Status tab:
+- full runtime config snapshot (including nested keys)
+- grouped by concern for faster operator scanning
+- admin-writable variables highlighted with row background
+- per-variable meaning text so operators can read value + intent in one place
 
 Controls:
 - Test mode toggle
 - Manual ban/unban
 - JS Required enforcement toggle
 - Rate limit (requests/minute) config
+- Honeypot path list editor (`honeypots`)
+- Browser policy rule editors (`browser_block`, `browser_whitelist`)
+- Bypass allowlist editors (`whitelist`, `path_whitelist`)
+- Per-trigger ban durations, including CDP automation duration (`ban_durations.cdp`)
 - robots.txt configuration
 - CDP detection controls
-- PoW status panel and difficulty/TTL tuning (when `SHUMA_POW_CONFIG_MUTABLE=true`)
+- PoW enable toggle plus difficulty/TTL tuning (when `SHUMA_POW_CONFIG_MUTABLE=true`)
+- Challenge puzzle controls (`challenge_enabled`, `challenge_transform_count`, when `SHUMA_CHALLENGE_CONFIG_MUTABLE=true`)
 - Botness scoring controls:
 - challenge threshold
 - maze threshold
@@ -70,6 +80,10 @@ Controls:
 - Enter key submits inputs (API key, ban, unban)
 - Active-tab scoped auto-refresh (no background full-dashboard refresh on hidden tabs)
 - API client defensively parses JSON-shaped payloads even when upstream omits `Content-Type`, to prevent false empty-state rendering
+- Advanced Config JSON editor:
+- prefilled with a writable-key template from current config snapshot
+- accepts JSON object patch and submits directly to `POST /admin/config`
+- dirty-state + validation guarded (save enabled only for valid changed JSON)
 
 ## 🐙 Access
 
@@ -149,6 +163,7 @@ If a regression appears in the tabbed SPA shell, use this rollback sequence:
 5. Keep session/csrf hardening (`modules/admin-session.js`) unchanged unless rollback requires it.
 
 Note: `SHUMA_KV_STORE_FAIL_OPEN` is an environment-level policy and is shown read-only in the dashboard.
-Note: PoW enable/disable is environment-level; difficulty/TTL are editable only if `SHUMA_POW_CONFIG_MUTABLE=true`.
+Note: PoW enable/disable and difficulty/TTL are editable only if `SHUMA_POW_CONFIG_MUTABLE=true`.
+Note: Challenge enable/disable + transform-count are editable only if `SHUMA_CHALLENGE_CONFIG_MUTABLE=true`.
 Note: PoW config changes are logged to the event log as admin actions.
 Note: Botness scoring changes are logged as `botness_config_update` admin actions.

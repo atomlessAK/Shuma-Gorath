@@ -202,6 +202,8 @@ pub enum DetectionId {
     GeoRouteChallenge,
     GeoRouteMaze,
     GeoRouteMazeFallbackChallenge,
+    ChallengeDisabledFallbackMaze,
+    ChallengeDisabledFallbackBlock,
     BotnessGateChallenge,
     BotnessGateMaze,
     JsVerificationRequired,
@@ -246,6 +248,10 @@ impl DetectionId {
             DetectionId::GeoRouteChallenge => "D_GEO_ROUTE_CHALLENGE",
             DetectionId::GeoRouteMaze => "D_GEO_ROUTE_MAZE",
             DetectionId::GeoRouteMazeFallbackChallenge => "D_GEO_ROUTE_MAZE_FALLBACK_CHALLENGE",
+            DetectionId::ChallengeDisabledFallbackMaze => "D_CHALLENGE_DISABLED_FALLBACK_MAZE",
+            DetectionId::ChallengeDisabledFallbackBlock => {
+                "D_CHALLENGE_DISABLED_FALLBACK_BLOCK"
+            }
             DetectionId::BotnessGateChallenge => "D_BOTNESS_GATE_CHALLENGE",
             DetectionId::BotnessGateMaze => "D_BOTNESS_GATE_MAZE",
             DetectionId::JsVerificationRequired => "D_JS_VERIFICATION_REQUIRED",
@@ -346,6 +352,8 @@ pub enum PolicyTransition {
     GeoRouteChallenge,
     GeoRouteMaze,
     GeoRouteMazeFallbackChallenge,
+    ChallengeDisabledFallbackMaze(Vec<SignalId>),
+    ChallengeDisabledFallbackBlock(Vec<SignalId>),
     BotnessGateChallenge(Vec<SignalId>),
     BotnessGateMaze(Vec<SignalId>),
     JsVerificationRequired,
@@ -452,6 +460,16 @@ pub fn resolve_policy_match(transition: PolicyTransition) -> PolicyMatch {
             EscalationLevelId::L6ChallengeStrong,
             DetectionId::GeoRouteMazeFallbackChallenge,
             vec![SignalId::GeoRouteMaze],
+        ),
+        PolicyTransition::ChallengeDisabledFallbackMaze(signals) => PolicyMatch::new(
+            EscalationLevelId::L7DeceptionExplicit,
+            DetectionId::ChallengeDisabledFallbackMaze,
+            signals,
+        ),
+        PolicyTransition::ChallengeDisabledFallbackBlock(signals) => PolicyMatch::new(
+            EscalationLevelId::L10DenyTemp,
+            DetectionId::ChallengeDisabledFallbackBlock,
+            signals,
         ),
         PolicyTransition::BotnessGateChallenge(signals) => PolicyMatch::new(
             EscalationLevelId::L6ChallengeStrong,
@@ -655,6 +673,21 @@ mod tests {
             matched.signal_ids(),
             vec!["S_GEO_RISK", "S_JS_REQUIRED_MISSING", "S_RATE_USAGE_HIGH"]
         );
+    }
+
+    #[test]
+    fn challenge_disabled_fallback_transition_uses_canonical_ids() {
+        let matched = resolve_policy_match(PolicyTransition::ChallengeDisabledFallbackBlock(vec![
+            SignalId::GeoRouteChallenge,
+            SignalId::GeoRouteChallenge,
+        ]));
+        assert_eq!(matched.level_id(), "L10_DENY_TEMP");
+        assert_eq!(matched.action_id(), "A_DENY_TEMP");
+        assert_eq!(
+            matched.detection_id(),
+            "D_CHALLENGE_DISABLED_FALLBACK_BLOCK"
+        );
+        assert_eq!(matched.signal_ids(), vec!["S_GEO_ROUTE_CHALLENGE"]);
     }
 
     #[test]

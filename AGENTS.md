@@ -47,6 +47,12 @@ This file provides instructions for coding agents working in this repository.
    - push after each validated atomic commit unless the user explicitly asks for batching.
 10. Document security, operational, and resource implications.
 11. When a full TODO section is completed, move its completed checklist items from `todos/todo.md` to `todos/completed-todo-history.md` and preserve the original section title as a heading in the archive entry.
+12. For any new `SHUMA_*` variable, follow the single-source-of-truth lifecycle:
+   - define/update canonical default in `config/defaults.env` first and classify it as env-only or KV-tunable,
+   - wire seeding/bootstrap paths so `make config-seed`/`make setup` produce a correct local baseline (at minimum update `scripts/config_seed.sh`, `scripts/bootstrap/setup.sh`, and `Makefile` env wiring/help as applicable),
+   - keep dev-only overrides intentional for local manual config/monitoring/tuning workflows (do not silently broaden them),
+   - ensure tests leave no strange state behind (restore env mutations and reset runtime config they toggle),
+   - ensure production-start defaults remain secure-by-default (no debug/unsafe defaults enabled by default).
 
 ## Security and abuse posture
 

@@ -29,10 +29,58 @@
         }
         result = await resp.json();
       }
+      if (statusPanel && result && result.config && typeof result.config === 'object') {
+        statusPanel.update({ configSnapshot: result.config });
+        statusPanel.render();
+      }
       if (typeof options.onConfigSaved === 'function') {
         options.onConfigSaved(patch, result);
       }
       return result;
+    }
+
+    function parseList(raw) {
+      if (typeof options.parseListTextarea === 'function') {
+        return options.parseListTextarea(raw);
+      }
+      return String(raw || '')
+        .split(/[\n,]/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+    }
+
+    function normalizeList(raw) {
+      if (typeof options.normalizeListTextareaForCompare === 'function') {
+        return options.normalizeListTextareaForCompare(raw);
+      }
+      return parseList(raw).join('\n');
+    }
+
+    function parseHoneypotPaths(raw) {
+      if (typeof options.parseHoneypotPathsTextarea === 'function') {
+        return options.parseHoneypotPathsTextarea(raw);
+      }
+      const values = parseList(raw);
+      values.forEach((path) => {
+        if (!String(path).startsWith('/')) {
+          throw new Error(`Invalid honeypot path '${path}'. Paths must start with '/'.`);
+        }
+      });
+      return values;
+    }
+
+    function parseBrowserRules(raw) {
+      if (typeof options.parseBrowserRulesTextarea === 'function') {
+        return options.parseBrowserRulesTextarea(raw);
+      }
+      return [];
+    }
+
+    function normalizeBrowserRules(raw) {
+      if (typeof options.normalizeBrowserRulesForCompare === 'function') {
+        return options.normalizeBrowserRulesForCompare(raw);
+      }
+      return String(raw || '').trim();
     }
 
     const saveMazeButton = document.getElementById('save-maze-config');
@@ -293,12 +341,159 @@
       };
     }
 
+    const saveHoneypotButton = document.getElementById('save-honeypot-config');
+    if (saveHoneypotButton) {
+      saveHoneypotButton.onclick = async function saveHoneypotConfig() {
+        const msg = document.getElementById('admin-msg');
+        const btn = this;
+        const field = document.getElementById('honeypot-paths');
+        let honeypots;
+
+        try {
+          honeypots = parseHoneypotPaths(field ? field.value : '');
+        } catch (e) {
+          msg.textContent = `Error: ${e.message}`;
+          msg.className = 'message error';
+          return;
+        }
+
+        btn.textContent = 'Saving...';
+        btn.dataset.saving = 'true';
+        btn.disabled = true;
+        try {
+          const data = await saveConfigPatch(msg, { honeypots });
+          if (data && data.config && typeof options.updateHoneypotConfig === 'function') {
+            options.updateHoneypotConfig(data.config);
+          } else if (typeof options.setHoneypotSavedState === 'function') {
+            options.setHoneypotSavedState({
+              values: normalizeList(field ? field.value : '')
+            });
+            if (typeof options.checkHoneypotConfigChanged === 'function') {
+              options.checkHoneypotConfigChanged();
+            }
+          }
+          msg.textContent = 'Honeypot paths saved';
+          msg.className = 'message success';
+          btn.textContent = 'Save Honeypots';
+          btn.dataset.saving = 'false';
+        } catch (e) {
+          msg.textContent = `Error: ${e.message}`;
+          msg.className = 'message error';
+          btn.textContent = 'Save Honeypots';
+          btn.dataset.saving = 'false';
+          if (typeof options.checkHoneypotConfigChanged === 'function') {
+            options.checkHoneypotConfigChanged();
+          }
+        }
+      };
+    }
+
+    const saveBrowserPolicyButton = document.getElementById('save-browser-policy-config');
+    if (saveBrowserPolicyButton) {
+      saveBrowserPolicyButton.onclick = async function saveBrowserPolicyConfig() {
+        const msg = document.getElementById('admin-msg');
+        const btn = this;
+        const blockField = document.getElementById('browser-block-rules');
+        const whitelistField = document.getElementById('browser-whitelist-rules');
+        let browserBlock;
+        let browserWhitelist;
+
+        try {
+          browserBlock = parseBrowserRules(blockField ? blockField.value : '');
+          browserWhitelist = parseBrowserRules(whitelistField ? whitelistField.value : '');
+        } catch (e) {
+          msg.textContent = `Error: ${e.message}`;
+          msg.className = 'message error';
+          return;
+        }
+
+        btn.textContent = 'Saving...';
+        btn.dataset.saving = 'true';
+        btn.disabled = true;
+        try {
+          const data = await saveConfigPatch(msg, {
+            browser_block: browserBlock,
+            browser_whitelist: browserWhitelist
+          });
+          if (data && data.config && typeof options.updateBrowserPolicyConfig === 'function') {
+            options.updateBrowserPolicyConfig(data.config);
+          } else if (typeof options.setBrowserPolicySavedState === 'function') {
+            options.setBrowserPolicySavedState({
+              block: normalizeBrowserRules(blockField ? blockField.value : ''),
+              whitelist: normalizeBrowserRules(whitelistField ? whitelistField.value : '')
+            });
+            if (typeof options.checkBrowserPolicyConfigChanged === 'function') {
+              options.checkBrowserPolicyConfigChanged();
+            }
+          }
+          msg.textContent = 'Browser policy saved';
+          msg.className = 'message success';
+          btn.textContent = 'Save Browser Policy';
+          btn.dataset.saving = 'false';
+        } catch (e) {
+          msg.textContent = `Error: ${e.message}`;
+          msg.className = 'message error';
+          btn.textContent = 'Save Browser Policy';
+          btn.dataset.saving = 'false';
+          if (typeof options.checkBrowserPolicyConfigChanged === 'function') {
+            options.checkBrowserPolicyConfigChanged();
+          }
+        }
+      };
+    }
+
+    const saveWhitelistButton = document.getElementById('save-whitelist-config');
+    if (saveWhitelistButton) {
+      saveWhitelistButton.onclick = async function saveWhitelistConfig() {
+        const msg = document.getElementById('admin-msg');
+        const btn = this;
+        const networkField = document.getElementById('network-whitelist');
+        const pathField = document.getElementById('path-whitelist');
+        const whitelist = parseList(networkField ? networkField.value : '');
+        const pathWhitelist = parseList(pathField ? pathField.value : '');
+
+        btn.textContent = 'Saving...';
+        btn.dataset.saving = 'true';
+        btn.disabled = true;
+        try {
+          const data = await saveConfigPatch(msg, {
+            whitelist,
+            path_whitelist: pathWhitelist
+          });
+          if (data && data.config && typeof options.updateBypassAllowlistConfig === 'function') {
+            options.updateBypassAllowlistConfig(data.config);
+          } else if (typeof options.setBypassAllowlistSavedState === 'function') {
+            options.setBypassAllowlistSavedState({
+              network: normalizeList(networkField ? networkField.value : ''),
+              path: normalizeList(pathField ? pathField.value : '')
+            });
+            if (typeof options.checkBypassAllowlistsConfigChanged === 'function') {
+              options.checkBypassAllowlistsConfigChanged();
+            }
+          }
+          msg.textContent = 'Bypass allowlists saved';
+          msg.className = 'message success';
+          btn.textContent = 'Save Allowlists';
+          btn.dataset.saving = 'false';
+        } catch (e) {
+          msg.textContent = `Error: ${e.message}`;
+          msg.className = 'message error';
+          btn.textContent = 'Save Allowlists';
+          btn.dataset.saving = 'false';
+          if (typeof options.checkBypassAllowlistsConfigChanged === 'function') {
+            options.checkBypassAllowlistsConfigChanged();
+          }
+        }
+      };
+    }
+
     const savePowButton = document.getElementById('save-pow-config');
     if (savePowButton) {
       savePowButton.onclick = async function savePowConfig() {
         const btn = this;
         const msg = document.getElementById('admin-msg');
 
+        const powEnabled = document.getElementById('pow-enabled-toggle').checked;
         const powDifficulty = options.readIntegerFieldValue('pow-difficulty', msg);
         const powTtl = options.readIntegerFieldValue('pow-ttl', msg);
         if (powDifficulty === null || powTtl === null) return;
@@ -309,11 +504,13 @@
 
         try {
           await saveConfigPatch(msg, {
+            pow_enabled: powEnabled,
             pow_difficulty: powDifficulty,
             pow_ttl_seconds: powTtl
           });
 
           options.setPowSavedState({
+            enabled: powEnabled,
             difficulty: powDifficulty,
             ttl: powTtl,
             mutable: true
@@ -329,6 +526,49 @@
           btn.textContent = 'Save PoW Settings';
           btn.dataset.saving = 'false';
           options.checkPowConfigChanged();
+        }
+      };
+    }
+
+    const saveChallengeTransformButton = document.getElementById('save-challenge-transform-config');
+    if (saveChallengeTransformButton) {
+      saveChallengeTransformButton.onclick = async function saveChallengeTransformConfig() {
+        const btn = this;
+        const msg = document.getElementById('admin-msg');
+        const challengeEnabled = document.getElementById('challenge-enabled-toggle').checked;
+        const transformCount = options.readIntegerFieldValue('challenge-transform-count', msg);
+        if (transformCount === null) return;
+
+        btn.textContent = 'Saving...';
+        btn.dataset.saving = 'true';
+        btn.disabled = true;
+        try {
+          await saveConfigPatch(msg, {
+            challenge_enabled: challengeEnabled,
+            challenge_transform_count: transformCount
+          });
+          if (typeof options.setChallengeTransformSavedState === 'function') {
+            options.setChallengeTransformSavedState({
+              enabled: challengeEnabled,
+              count: transformCount,
+              mutable: true
+            });
+          }
+          msg.textContent = 'Challenge puzzle settings saved';
+          msg.className = 'message success';
+          btn.textContent = 'Save Challenge Puzzle';
+          btn.dataset.saving = 'false';
+          if (typeof options.checkChallengeTransformConfigChanged === 'function') {
+            options.checkChallengeTransformConfigChanged();
+          }
+        } catch (e) {
+          msg.textContent = `Error: ${e.message}`;
+          msg.className = 'message error';
+          btn.textContent = 'Save Challenge Puzzle';
+          btn.dataset.saving = 'false';
+          if (typeof options.checkChallengeTransformConfigChanged === 'function') {
+            options.checkChallengeTransformConfigChanged();
+          }
         }
       };
     }
@@ -551,6 +791,7 @@
           honeypot: options.readBanDurationSeconds('honeypot'),
           rate_limit: options.readBanDurationSeconds('rateLimit'),
           browser: options.readBanDurationSeconds('browser'),
+          cdp: options.readBanDurationSeconds('cdp'),
           admin: options.readBanDurationSeconds('admin')
         };
 
@@ -558,6 +799,7 @@
           banDurations.honeypot === null ||
           banDurations.rate_limit === null ||
           banDurations.browser === null ||
+          banDurations.cdp === null ||
           banDurations.admin === null
         ) {
           return;
@@ -583,6 +825,46 @@
           btn.dataset.saving = 'false';
           btn.textContent = 'Save Durations';
           options.checkBanDurationsChanged();
+        }
+      };
+    }
+
+    const saveAdvancedConfigButton = document.getElementById('save-advanced-config');
+    if (saveAdvancedConfigButton) {
+      saveAdvancedConfigButton.onclick = async function saveAdvancedConfig() {
+        const msg = document.getElementById('admin-msg');
+        const btn = this;
+        const patch = typeof options.readAdvancedConfigPatch === 'function'
+          ? options.readAdvancedConfigPatch(msg)
+          : null;
+        if (!patch) return;
+
+        btn.textContent = 'Saving...';
+        btn.dataset.saving = 'true';
+        btn.disabled = true;
+
+        try {
+          const data = await saveConfigPatch(msg, patch);
+          if (data && data.config && typeof options.setAdvancedConfigFromConfig === 'function') {
+            options.setAdvancedConfigFromConfig(data.config, false);
+          } else if (typeof options.checkAdvancedConfigChanged === 'function') {
+            options.checkAdvancedConfigChanged();
+          }
+          msg.textContent = 'Advanced config patch saved';
+          msg.className = 'message success';
+          btn.textContent = 'Save Advanced Config';
+          btn.dataset.saving = 'false';
+          if (typeof options.checkAdvancedConfigChanged === 'function') {
+            options.checkAdvancedConfigChanged();
+          }
+        } catch (e) {
+          msg.textContent = `Error: ${e.message}`;
+          msg.className = 'message error';
+          btn.textContent = 'Save Advanced Config';
+          btn.dataset.saving = 'false';
+          if (typeof options.checkAdvancedConfigChanged === 'function') {
+            options.checkAdvancedConfigChanged();
+          }
         }
       };
     }

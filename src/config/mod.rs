@@ -416,6 +416,8 @@ pub struct Config {
     pub pow_difficulty: u8,
     #[serde(default = "default_pow_ttl_seconds")]
     pub pow_ttl_seconds: u64,
+    #[serde(default = "default_challenge_enabled")]
+    pub challenge_enabled: bool,
     #[serde(default = "default_challenge_transform_count")]
     pub challenge_transform_count: u8,
     #[serde(default = "default_challenge_threshold")]
@@ -734,6 +736,7 @@ static DEFAULT_CONFIG: Lazy<Config> = Lazy::new(|| {
         pow_enabled: defaults_bool("SHUMA_POW_ENABLED"),
         pow_difficulty: defaults_u8("SHUMA_POW_DIFFICULTY"),
         pow_ttl_seconds: defaults_u64("SHUMA_POW_TTL_SECONDS"),
+        challenge_enabled: defaults_bool("SHUMA_CHALLENGE_ENABLED"),
         challenge_transform_count: defaults_u8("SHUMA_CHALLENGE_TRANSFORM_COUNT"),
         challenge_risk_threshold: defaults_u8("SHUMA_CHALLENGE_RISK_THRESHOLD"),
         botness_maze_threshold: defaults_u8("SHUMA_BOTNESS_MAZE_THRESHOLD"),
@@ -771,6 +774,10 @@ pub fn validate_env_only_once() -> Result<(), String> {
     }
 }
 
+// Env-only runtime guardrails. Keep this list aligned with:
+// - config/defaults.env (env-only section),
+// - Makefile Spin env injection lists,
+// - docs/configuration.md env-only reference table.
 fn validate_env_only_impl() -> Result<(), String> {
     validate_non_empty("SHUMA_API_KEY")?;
     validate_non_empty("SHUMA_JS_SECRET")?;
@@ -1589,6 +1596,10 @@ fn default_pow_difficulty() -> u8 {
 
 fn default_pow_ttl_seconds() -> u64 {
     clamp_pow_ttl(defaults_u64("SHUMA_POW_TTL_SECONDS"))
+}
+
+fn default_challenge_enabled() -> bool {
+    defaults_bool("SHUMA_CHALLENGE_ENABLED")
 }
 
 fn default_challenge_transform_count() -> u8 {

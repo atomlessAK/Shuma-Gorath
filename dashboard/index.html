@@ -18,7 +18,7 @@
         <img src="assets/shuma-gorath.png" alt="Shuma-Gorath" class="shuma-gorath-img">
       </div>
       <h1>Shuma-Gorath</h1>
-      <p class="subtitle text-muted">Chaos Dimension Bot Defence</p>
+      <p class="subtitle text-muted">Multi-Dimensional Bot Defence</p>
       <div id="test-mode-banner" class="test-mode-banner hidden">TEST MODE ACTIVE - Logging only, no blocking</div>
     </header>
 
@@ -216,6 +216,14 @@
             <div class="control-group panel-soft pad-md">
               <div id="status-items"></div>
             </div>
+            <div class="control-group panel-soft pad-md status-inventory-group">
+              <h3>Runtime Variable Inventory</h3>
+              <p class="control-desc text-muted">
+                Complete runtime snapshot of active configuration variables, grouped by concern.
+                Rows with highlighted background are runtime admin-writable variables.
+              </p>
+              <div id="status-vars-groups" class="status-var-groups"></div>
+            </div>
           </div>
         </section>
 
@@ -258,6 +266,13 @@
               <h3>Proof-of-Work (PoW)</h3>
               <p class="control-desc text-muted">Set verification work cost. Higher values increase scraper cost but can add friction on slower devices.</p>
               <div class="admin-controls">
+                <div class="toggle-row">
+                  <label class="control-label control-label--wide" for="pow-enabled-toggle">Enable PoW</label>
+                  <label class="toggle-switch" for="pow-enabled-toggle">
+                    <input type="checkbox" id="pow-enabled-toggle" checked aria-label="Enable PoW challenge verification">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
                 <div class="input-row">
                   <label class="control-label" for="pow-difficulty">Difficulty (bits)</label>
                   <input class="input-field" type="number" id="pow-difficulty" min="12" max="20" step="1" inputmode="numeric" value="15" aria-label="PoW difficulty in leading zero bits">
@@ -270,6 +285,24 @@
               <button id="save-pow-config" class="btn btn-submit" disabled>Save PoW Settings</button>
             </div>
             <div class="control-group panel-soft pad-md config-edit-pane hidden">
+              <h3>Challenge Puzzle</h3>
+              <p class="control-desc text-muted">Set how many transform options are shown in puzzle challenges (higher values can increase solve time).</p>
+              <div class="admin-controls">
+                <div class="toggle-row">
+                  <label class="control-label control-label--wide" for="challenge-enabled-toggle">Enable Challenge Puzzle</label>
+                  <label class="toggle-switch" for="challenge-enabled-toggle">
+                    <input type="checkbox" id="challenge-enabled-toggle" aria-label="Enable challenge puzzle routing">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <div class="input-row">
+                  <label class="control-label" for="challenge-transform-count">Transform Options</label>
+                  <input class="input-field" type="number" id="challenge-transform-count" min="4" max="8" step="1" inputmode="numeric" value="6" aria-label="Challenge transform option count">
+                </div>
+              </div>
+              <button id="save-challenge-transform-config" class="btn btn-submit" disabled>Save Challenge Puzzle</button>
+            </div>
+            <div class="control-group panel-soft pad-md config-edit-pane hidden">
               <h3>Rate Limiting</h3>
               <p class="control-desc text-muted">Set allowed requests per minute. Lower values are stricter but can affect legitimate burst traffic.</p>
               <div class="admin-controls">
@@ -279,6 +312,47 @@
                 </div>
               </div>
               <button id="save-rate-limit-config" class="btn btn-submit" disabled>Save Rate Limit</button>
+            </div>
+            <div class="control-group panel-soft pad-md config-edit-pane hidden">
+              <h3>Honeypot Paths</h3>
+              <p class="control-desc text-muted">One path per line. Requests that hit these paths are treated as high-confidence bot behavior. Paths must start with <code>/</code>.</p>
+              <div class="admin-controls">
+                <div class="geo-field">
+                  <label class="control-label" for="honeypot-paths">Paths</label>
+                  <textarea class="input-field geo-textarea" id="honeypot-paths" rows="3" aria-label="Honeypot paths" spellcheck="false"></textarea>
+                </div>
+              </div>
+              <button id="save-honeypot-config" class="btn btn-submit" disabled>Save Honeypots</button>
+            </div>
+            <div class="control-group panel-soft pad-md config-edit-pane hidden">
+              <h3>Browser Policy</h3>
+              <p class="control-desc text-muted">Use one rule per line in <code>BrowserName,min_major</code> format (for example <code>Chrome,120</code>).</p>
+              <div class="admin-controls">
+                <div class="geo-field">
+                  <label class="control-label" for="browser-block-rules">Minimum Versions (Block)</label>
+                  <textarea class="input-field geo-textarea" id="browser-block-rules" rows="3" aria-label="Browser block minimum versions" spellcheck="false"></textarea>
+                </div>
+                <div class="geo-field">
+                  <label class="control-label" for="browser-whitelist-rules">Allowlist Exceptions</label>
+                  <textarea class="input-field geo-textarea" id="browser-whitelist-rules" rows="2" aria-label="Browser allowlist exceptions" spellcheck="false"></textarea>
+                </div>
+              </div>
+              <button id="save-browser-policy-config" class="btn btn-submit" disabled>Save Browser Policy</button>
+            </div>
+            <div class="control-group panel-soft pad-md config-edit-pane hidden">
+              <h3>Bypass Allowlists</h3>
+              <p class="control-desc text-muted">Define trusted bypass entries. Use one entry per line.</p>
+              <div class="admin-controls">
+                <div class="geo-field">
+                  <label class="control-label" for="network-whitelist">IP/CIDR Allowlist</label>
+                  <textarea class="input-field geo-textarea" id="network-whitelist" rows="3" aria-label="IP and CIDR allowlist" spellcheck="false"></textarea>
+                </div>
+                <div class="geo-field">
+                  <label class="control-label" for="path-whitelist">Path Allowlist</label>
+                  <textarea class="input-field geo-textarea" id="path-whitelist" rows="3" aria-label="Path allowlist" spellcheck="false"></textarea>
+                </div>
+              </div>
+              <button id="save-whitelist-config" class="btn btn-submit" disabled>Save Allowlists</button>
             </div>
             <div class="control-group panel-soft pad-md config-edit-pane hidden">
               <h3>Maze</h3>
@@ -446,6 +520,23 @@
                   </div>
                 </div>
                 <div class="duration-row">
+                  <label class="control-label" for="dur-cdp-days">CDP Automation Detected</label>
+                  <div class="duration-inputs">
+                    <label class="duration-input" for="dur-cdp-days">
+                      <input id="dur-cdp-days" class="input-field" type="number" min="0" max="365" step="1" inputmode="numeric" value="0" />
+                      <span class="input-unit">days</span>
+                    </label>
+                    <label class="duration-input" for="dur-cdp-hours">
+                      <input id="dur-cdp-hours" class="input-field" type="number" min="0" max="23" step="1" inputmode="numeric" value="12" />
+                      <span class="input-unit">hrs</span>
+                    </label>
+                    <label class="duration-input" for="dur-cdp-minutes">
+                      <input id="dur-cdp-minutes" class="input-field" type="number" min="0" max="59" step="1" inputmode="numeric" value="0" />
+                      <span class="input-unit">mins</span>
+                    </label>
+                  </div>
+                </div>
+                <div class="duration-row">
                   <label class="control-label" for="dur-admin-days">Admin Manual Ban Default</label>
                   <div class="duration-inputs">
                     <label class="duration-input" for="dur-admin-days">
@@ -514,6 +605,17 @@
                 <h4>robots.txt Preview</h4>
                 <pre id="robots-preview-content"></pre>
               </div>
+            </div>
+            <div class="control-group panel-soft pad-md config-edit-pane hidden">
+              <h3>Advanced Config JSON</h3>
+              <p class="control-desc text-muted">Directly edit writable config keys as a JSON object. This exposes advanced keys that do not yet have dedicated pane controls.</p>
+              <div class="admin-controls">
+                <div class="geo-field">
+                  <label class="control-label" for="advanced-config-json">JSON Patch</label>
+                  <textarea class="input-field geo-textarea" id="advanced-config-json" rows="8" aria-label="Advanced config JSON patch" spellcheck="false"></textarea>
+                </div>
+              </div>
+              <button id="save-advanced-config" class="btn btn-submit" disabled>Save Advanced Config</button>
             </div>
           </div>
         </section>

@@ -248,6 +248,7 @@ The unified botness model uses weighted scored signals plus terminal hard-ban si
 Core enforcement fields:
 - `js_required_enforced` - enable/disable JS-required enforcement
 - `rate_limit` - per-minute request limit used for hard rate limiting and rate-pressure scoring
+- `challenge_enabled` - enable/disable challenge serving at challenge-tier routes (when disabled, challenge tier falls back to maze or block)
 - `defence_modes.rate` / `defence_modes.geo` / `defence_modes.js` - per-module composability mode (`off`, `signal`, `enforce`, `both`)
 
 Scored thresholds:

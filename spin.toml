@@ -3,7 +3,7 @@ spin_manifest_version = 2
 name = "shuma-gorath"
 version = "0.1.0"
 authors = ["Your Name <your@email.com>"]
-description = "Shuma-Gorath: Chaos Dimension Bot Defence for Fermyon Spin."
+description = "Shuma-Gorath: Multi-Dimensional Bot Defence for Fermyon Spin."
 
 # Dashboard static files (served first)
 [[trigger.http]]

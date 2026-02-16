@@ -1,7 +1,7 @@
 use once_cell::sync::Lazy;
 use rand::random;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 /// Event types for activity logging
@@ -32,6 +32,8 @@ const POW_DIFFICULTY_MIN: u8 = crate::config::POW_DIFFICULTY_MIN;
 const POW_DIFFICULTY_MAX: u8 = crate::config::POW_DIFFICULTY_MAX;
 const POW_TTL_MIN: u64 = crate::config::POW_TTL_MIN;
 const POW_TTL_MAX: u64 = crate::config::POW_TTL_MAX;
+const CHALLENGE_TRANSFORM_COUNT_MIN: u64 = 4;
+const CHALLENGE_TRANSFORM_COUNT_MAX: u64 = 8;
 const CONFIG_EXPORT_SECRET_KEYS: [&str; 8] = [
     "SHUMA_API_KEY",
     "SHUMA_ADMIN_READONLY_API_KEY",
@@ -330,6 +332,7 @@ mod admin_config_tests {
         let store = TestStore::default();
         let mut cfg = crate::config::defaults().clone();
         cfg.rate_limit = 321;
+        cfg.challenge_enabled = false;
         cfg.honeypots = vec!["/trap-a".to_string(), "/trap-b".to_string()];
         cfg.defence_modes.rate = crate::config::ComposabilityMode::Signal;
         cfg.provider_backends.fingerprint_signal = crate::config::ProviderBackend::External;
@@ -360,6 +363,10 @@ mod admin_config_tests {
         assert_eq!(
             env.get("SHUMA_EDGE_INTEGRATION_MODE"),
             Some(&serde_json::json!("advisory"))
+        );
+        assert_eq!(
+            env.get("SHUMA_CHALLENGE_ENABLED"),
+            Some(&serde_json::json!("false"))
         );
         assert_eq!(
             env.get("SHUMA_ADMIN_IP_ALLOWLIST"),
@@ -410,6 +417,7 @@ mod admin_config_tests {
         assert!(env_text.contains("SHUMA_RATE_LIMIT=321"));
         assert!(env_text.contains("SHUMA_MODE_RATE=signal"));
         assert!(env_text.contains("SHUMA_PROVIDER_FINGERPRINT_SIGNAL=external"));
+        assert!(env_text.contains("SHUMA_CHALLENGE_ENABLED=false"));
         assert!(env_text.contains("SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE=17"));
         assert!(env_text.contains("SHUMA_RATE_LIMITER_REDIS_URL=redis://redis:6379"));
         assert!(env_text.contains("SHUMA_BAN_STORE_REDIS_URL=redis://redis:6379"));
@@ -491,8 +499,10 @@ mod admin_config_tests {
         assert_eq!(*resp.status(), 200u16);
         let body: serde_json::Value = serde_json::from_slice(resp.body()).unwrap();
         assert!(body.get("challenge_risk_threshold").is_some());
+        assert!(body.get("challenge_enabled").is_some());
         assert!(body.get("challenge_config_mutable").is_some());
         assert!(body.get("challenge_risk_threshold_default").is_some());
+        assert!(body.get("challenge_transform_count").is_some());
         assert!(body.get("ai_policy_block_training").is_some());
         assert!(body.get("ai_policy_block_search").is_some());
         assert!(body.get("ai_policy_allow_search_engines").is_some());
@@ -880,6 +890,265 @@ mod admin_config_tests {
         assert!(msg.contains("rate_limit out of range"));
 
         std::env::remove_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED");
+    }
+
+    #[test]
+    fn admin_config_updates_lists_and_cdp_ban_duration() {
+        let _lock = crate::test_support::lock_env();
+        std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
+        let store = TestStore::default();
+
+        let post_req = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{
+                "honeypots": ["/instaban", "/trap-b"],
+                "browser_block": [["Chrome",126],["Firefox",120]],
+                "browser_whitelist": [["Safari",16]],
+                "whitelist": ["203.0.113.0/24", "198.51.100.9"],
+                "path_whitelist": ["/status", "/assets/*"],
+                "ban_durations": {"cdp": 777}
+            }"#
+            .to_vec(),
+        );
+        let post_resp = handle_admin_config(&post_req, &store, "default");
+        assert_eq!(*post_resp.status(), 200u16);
+        let post_json: serde_json::Value = serde_json::from_slice(post_resp.body()).unwrap();
+        let cfg = post_json.get("config").unwrap();
+        assert_eq!(cfg.get("honeypots"), Some(&serde_json::json!(["/instaban", "/trap-b"])));
+        assert_eq!(
+            cfg.get("browser_block"),
+            Some(&serde_json::json!([["Chrome", 126], ["Firefox", 120]]))
+        );
+        assert_eq!(
+            cfg.get("browser_whitelist"),
+            Some(&serde_json::json!([["Safari", 16]]))
+        );
+        assert_eq!(
+            cfg.get("whitelist"),
+            Some(&serde_json::json!(["203.0.113.0/24", "198.51.100.9"]))
+        );
+        assert_eq!(
+            cfg.get("path_whitelist"),
+            Some(&serde_json::json!(["/status", "/assets/*"]))
+        );
+        assert_eq!(
+            cfg.get("ban_durations")
+                .and_then(|v| v.get("cdp"))
+                .and_then(|v| v.as_u64()),
+            Some(777)
+        );
+
+        let saved_bytes = store.get("config:default").unwrap().unwrap();
+        let saved_cfg: crate::config::Config = serde_json::from_slice(&saved_bytes).unwrap();
+        assert_eq!(
+            saved_cfg.honeypots,
+            vec!["/instaban".to_string(), "/trap-b".to_string()]
+        );
+        assert_eq!(
+            saved_cfg.browser_block,
+            vec![("Chrome".to_string(), 126), ("Firefox".to_string(), 120)]
+        );
+        assert_eq!(
+            saved_cfg.browser_whitelist,
+            vec![("Safari".to_string(), 16)]
+        );
+        assert_eq!(
+            saved_cfg.whitelist,
+            vec!["203.0.113.0/24".to_string(), "198.51.100.9".to_string()]
+        );
+        assert_eq!(
+            saved_cfg.path_whitelist,
+            vec!["/status".to_string(), "/assets/*".to_string()]
+        );
+        assert_eq!(saved_cfg.ban_durations.cdp, 777);
+
+        std::env::remove_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED");
+    }
+
+    #[test]
+    fn admin_config_rejects_invalid_honeypot_path() {
+        let _lock = crate::test_support::lock_env();
+        std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
+        let store = TestStore::default();
+        let post_req = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{"honeypots":["instaban"]}"#.to_vec(),
+        );
+        let post_resp = handle_admin_config(&post_req, &store, "default");
+        assert_eq!(*post_resp.status(), 400u16);
+        let msg = String::from_utf8_lossy(post_resp.body());
+        assert!(msg.contains("must start with '/'"));
+        std::env::remove_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED");
+    }
+
+    #[test]
+    fn admin_config_updates_pow_enabled_when_mutable() {
+        let _lock = crate::test_support::lock_env();
+        std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
+        std::env::set_var("SHUMA_POW_CONFIG_MUTABLE", "true");
+        let store = TestStore::default();
+
+        let post_req = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{"pow_enabled":false}"#.to_vec(),
+        );
+        let post_resp = handle_admin_config(&post_req, &store, "default");
+        assert_eq!(*post_resp.status(), 200u16);
+        let post_json: serde_json::Value = serde_json::from_slice(post_resp.body()).unwrap();
+        let cfg = post_json.get("config").unwrap();
+        assert_eq!(cfg.get("pow_enabled"), Some(&serde_json::Value::Bool(false)));
+
+        let saved_bytes = store.get("config:default").unwrap().unwrap();
+        let saved_cfg: crate::config::Config = serde_json::from_slice(&saved_bytes).unwrap();
+        assert!(!saved_cfg.pow_enabled);
+
+        clear_env(&["SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "SHUMA_POW_CONFIG_MUTABLE"]);
+    }
+
+    #[test]
+    fn admin_config_rejects_pow_enabled_update_when_immutable() {
+        let _lock = crate::test_support::lock_env();
+        std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
+        std::env::set_var("SHUMA_POW_CONFIG_MUTABLE", "false");
+        let store = TestStore::default();
+        let post_req = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{"pow_enabled":false}"#.to_vec(),
+        );
+        let post_resp = handle_admin_config(&post_req, &store, "default");
+        assert_eq!(*post_resp.status(), 403u16);
+        let msg = String::from_utf8_lossy(post_resp.body());
+        assert!(msg.contains("PoW config is immutable"));
+        clear_env(&["SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "SHUMA_POW_CONFIG_MUTABLE"]);
+    }
+
+    #[test]
+    fn admin_config_updates_challenge_transform_count_when_mutable() {
+        let _lock = crate::test_support::lock_env();
+        std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
+        std::env::set_var("SHUMA_CHALLENGE_CONFIG_MUTABLE", "true");
+        let store = TestStore::default();
+
+        let post_req = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{"challenge_transform_count":7}"#.to_vec(),
+        );
+        let post_resp = handle_admin_config(&post_req, &store, "default");
+        assert_eq!(*post_resp.status(), 200u16);
+        let post_json: serde_json::Value = serde_json::from_slice(post_resp.body()).unwrap();
+        let cfg = post_json.get("config").unwrap();
+        assert_eq!(
+            cfg.get("challenge_transform_count"),
+            Some(&serde_json::Value::Number(7.into()))
+        );
+
+        let saved_bytes = store.get("config:default").unwrap().unwrap();
+        let saved_cfg: crate::config::Config = serde_json::from_slice(&saved_bytes).unwrap();
+        assert_eq!(saved_cfg.challenge_transform_count, 7);
+
+        clear_env(&[
+            "SHUMA_ADMIN_CONFIG_WRITE_ENABLED",
+            "SHUMA_CHALLENGE_CONFIG_MUTABLE",
+        ]);
+    }
+
+    #[test]
+    fn admin_config_updates_challenge_enabled_when_mutable() {
+        let _lock = crate::test_support::lock_env();
+        std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
+        std::env::set_var("SHUMA_CHALLENGE_CONFIG_MUTABLE", "true");
+        let store = TestStore::default();
+
+        let post_req = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{"challenge_enabled":false}"#.to_vec(),
+        );
+        let post_resp = handle_admin_config(&post_req, &store, "default");
+        assert_eq!(*post_resp.status(), 200u16);
+        let post_json: serde_json::Value = serde_json::from_slice(post_resp.body()).unwrap();
+        let cfg = post_json.get("config").unwrap();
+        assert_eq!(
+            cfg.get("challenge_enabled"),
+            Some(&serde_json::Value::Bool(false))
+        );
+
+        let saved_bytes = store.get("config:default").unwrap().unwrap();
+        let saved_cfg: crate::config::Config = serde_json::from_slice(&saved_bytes).unwrap();
+        assert!(!saved_cfg.challenge_enabled);
+
+        clear_env(&[
+            "SHUMA_ADMIN_CONFIG_WRITE_ENABLED",
+            "SHUMA_CHALLENGE_CONFIG_MUTABLE",
+        ]);
+    }
+
+    #[test]
+    fn admin_config_rejects_challenge_transform_count_when_immutable() {
+        let _lock = crate::test_support::lock_env();
+        std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
+        std::env::set_var("SHUMA_CHALLENGE_CONFIG_MUTABLE", "false");
+        let store = TestStore::default();
+        let post_req = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{"challenge_transform_count":7}"#.to_vec(),
+        );
+        let post_resp = handle_admin_config(&post_req, &store, "default");
+        assert_eq!(*post_resp.status(), 403u16);
+        let msg = String::from_utf8_lossy(post_resp.body());
+        assert!(msg.contains("Challenge config is immutable"));
+        clear_env(&[
+            "SHUMA_ADMIN_CONFIG_WRITE_ENABLED",
+            "SHUMA_CHALLENGE_CONFIG_MUTABLE",
+        ]);
+    }
+
+    #[test]
+    fn admin_config_rejects_challenge_enabled_when_immutable() {
+        let _lock = crate::test_support::lock_env();
+        std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
+        std::env::set_var("SHUMA_CHALLENGE_CONFIG_MUTABLE", "false");
+        let store = TestStore::default();
+        let post_req = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{"challenge_enabled":false}"#.to_vec(),
+        );
+        let post_resp = handle_admin_config(&post_req, &store, "default");
+        assert_eq!(*post_resp.status(), 403u16);
+        let msg = String::from_utf8_lossy(post_resp.body());
+        assert!(msg.contains("Challenge config is immutable"));
+        clear_env(&[
+            "SHUMA_ADMIN_CONFIG_WRITE_ENABLED",
+            "SHUMA_CHALLENGE_CONFIG_MUTABLE",
+        ]);
+    }
+
+    #[test]
+    fn admin_config_rejects_challenge_transform_count_out_of_range() {
+        let _lock = crate::test_support::lock_env();
+        std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
+        std::env::set_var("SHUMA_CHALLENGE_CONFIG_MUTABLE", "true");
+        let store = TestStore::default();
+        let post_req = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{"challenge_transform_count":9}"#.to_vec(),
+        );
+        let post_resp = handle_admin_config(&post_req, &store, "default");
+        assert_eq!(*post_resp.status(), 400u16);
+        let msg = String::from_utf8_lossy(post_resp.body());
+        assert!(msg.contains("challenge_transform_count out of range"));
+        clear_env(&[
+            "SHUMA_ADMIN_CONFIG_WRITE_ENABLED",
+            "SHUMA_CHALLENGE_CONFIG_MUTABLE",
+        ]);
     }
 
     #[test]
@@ -1697,6 +1966,10 @@ fn config_export_env_entries(cfg: &crate::config::Config) -> Vec<(String, String
             cfg.pow_ttl_seconds.to_string(),
         ),
         (
+            "SHUMA_CHALLENGE_ENABLED".to_string(),
+            bool_env(cfg.challenge_enabled).to_string(),
+        ),
+        (
             "SHUMA_CHALLENGE_TRANSFORM_COUNT".to_string(),
             cfg.challenge_transform_count.to_string(),
         ),
@@ -2018,6 +2291,57 @@ fn parse_country_list_json(field: &str, value: &serde_json::Value) -> Result<Vec
     Ok(crate::signals::geo::normalize_country_list(&parsed))
 }
 
+fn parse_string_list_json(field: &str, value: &serde_json::Value) -> Result<Vec<String>, String> {
+    let items = value
+        .as_array()
+        .ok_or_else(|| format!("{} must be an array of strings", field))?;
+    let mut parsed = Vec::with_capacity(items.len());
+    let mut seen = HashSet::new();
+    for item in items {
+        let raw = item
+            .as_str()
+            .ok_or_else(|| format!("{} must contain only strings", field))?;
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if seen.insert(trimmed.to_string()) {
+            parsed.push(trimmed.to_string());
+        }
+    }
+    Ok(parsed)
+}
+
+fn parse_honeypot_paths_json(field: &str, value: &serde_json::Value) -> Result<Vec<String>, String> {
+    let paths = parse_string_list_json(field, value)?;
+    for path in &paths {
+        if !path.starts_with('/') {
+            return Err(format!(
+                "{} contains invalid path '{}'; honeypot paths must start with '/'",
+                field, path
+            ));
+        }
+    }
+    Ok(paths)
+}
+
+fn parse_browser_rules_json(
+    field: &str,
+    value: &serde_json::Value,
+) -> Result<Vec<(String, u32)>, String> {
+    let rules: Vec<(String, u32)> = serde_json::from_value(value.clone())
+        .map_err(|_| format!("{} must be an array of [browser, min_major] tuples", field))?;
+    let mut sanitized = Vec::with_capacity(rules.len());
+    for (name, version) in rules {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            return Err(format!("{} contains an empty browser name", field));
+        }
+        sanitized.push((trimmed.to_string(), version));
+    }
+    Ok(sanitized)
+}
+
 fn parse_composability_mode_json(
     field: &str,
     value: &serde_json::Value,
@@ -2071,6 +2395,95 @@ fn parse_maze_seed_provider_json(
         .ok_or_else(|| format!("{} must be one of: internal, operator", field))?;
     crate::config::parse_maze_seed_provider(raw)
         .ok_or_else(|| format!("{} must be one of: internal, operator", field))
+}
+
+fn admin_config_payload(
+    cfg: &crate::config::Config,
+    challenge_default: u8,
+    maze_default: u8,
+) -> serde_json::Value {
+    let mut payload = serde_json::to_value(cfg).unwrap_or_else(|_| json!({}));
+    let Some(obj) = payload.as_object_mut() else {
+        return json!({});
+    };
+
+    obj.insert(
+        "ai_policy_block_training".to_string(),
+        serde_json::Value::Bool(cfg.robots_block_ai_training),
+    );
+    obj.insert(
+        "ai_policy_block_search".to_string(),
+        serde_json::Value::Bool(cfg.robots_block_ai_search),
+    );
+    obj.insert(
+        "ai_policy_allow_search_engines".to_string(),
+        serde_json::Value::Bool(cfg.robots_allow_search_engines),
+    );
+    obj.insert(
+        "pow_config_mutable".to_string(),
+        serde_json::Value::Bool(crate::config::pow_config_mutable()),
+    );
+    obj.insert(
+        "admin_config_write_enabled".to_string(),
+        serde_json::Value::Bool(crate::config::admin_config_write_enabled()),
+    );
+    obj.insert(
+        "kv_store_fail_open".to_string(),
+        serde_json::Value::Bool(crate::config::kv_store_fail_open()),
+    );
+    obj.insert(
+        "https_enforced".to_string(),
+        serde_json::Value::Bool(crate::config::https_enforced()),
+    );
+    obj.insert(
+        "forwarded_header_trust_configured".to_string(),
+        serde_json::Value::Bool(crate::config::forwarded_header_trust_configured()),
+    );
+    obj.insert(
+        "challenge_config_mutable".to_string(),
+        serde_json::Value::Bool(crate::config::challenge_config_mutable()),
+    );
+    obj.insert(
+        "challenge_risk_threshold_default".to_string(),
+        serde_json::Value::Number(challenge_default.into()),
+    );
+    obj.insert(
+        "botness_maze_threshold_default".to_string(),
+        serde_json::Value::Number(maze_default.into()),
+    );
+    obj.insert(
+        "defence_modes_effective".to_string(),
+        serde_json::to_value(cfg.defence_modes_effective()).unwrap_or_else(|_| json!({})),
+    );
+    obj.insert(
+        "defence_mode_warnings".to_string(),
+        serde_json::to_value(cfg.defence_mode_warnings()).unwrap_or_else(|_| json!([])),
+    );
+    obj.insert(
+        "enterprise_multi_instance".to_string(),
+        serde_json::Value::Bool(crate::config::enterprise_multi_instance_enabled()),
+    );
+    obj.insert(
+        "enterprise_unsynced_state_exception_confirmed".to_string(),
+        serde_json::Value::Bool(crate::config::enterprise_unsynced_state_exception_confirmed()),
+    );
+    obj.insert(
+        "enterprise_state_guardrail_warnings".to_string(),
+        serde_json::to_value(cfg.enterprise_state_guardrail_warnings()).unwrap_or_else(|_| json!([])),
+    );
+    obj.insert(
+        "enterprise_state_guardrail_error".to_string(),
+        match cfg.enterprise_state_guardrail_error() {
+            Some(msg) => serde_json::Value::String(msg),
+            None => serde_json::Value::Null,
+        },
+    );
+    obj.insert(
+        "botness_config_mutable".to_string(),
+        serde_json::Value::Bool(crate::config::botness_config_mutable()),
+    );
+    obj.insert("botness_signal_definitions".to_string(), botness_signal_definitions(cfg));
+    payload
 }
 
 fn handle_admin_config(
@@ -2188,6 +2601,52 @@ fn handle_admin_config(
             }
         }
 
+        if let Some(value) = json.get("honeypots") {
+            match parse_honeypot_paths_json("honeypots", value) {
+                Ok(list) => {
+                    cfg.honeypots = list;
+                    changed = true;
+                }
+                Err(msg) => return Response::new(400, msg),
+            }
+        }
+        if let Some(value) = json.get("browser_block") {
+            match parse_browser_rules_json("browser_block", value) {
+                Ok(rules) => {
+                    cfg.browser_block = rules;
+                    changed = true;
+                }
+                Err(msg) => return Response::new(400, msg),
+            }
+        }
+        if let Some(value) = json.get("browser_whitelist") {
+            match parse_browser_rules_json("browser_whitelist", value) {
+                Ok(rules) => {
+                    cfg.browser_whitelist = rules;
+                    changed = true;
+                }
+                Err(msg) => return Response::new(400, msg),
+            }
+        }
+        if let Some(value) = json.get("whitelist") {
+            match parse_string_list_json("whitelist", value) {
+                Ok(list) => {
+                    cfg.whitelist = list;
+                    changed = true;
+                }
+                Err(msg) => return Response::new(400, msg),
+            }
+        }
+        if let Some(value) = json.get("path_whitelist") {
+            match parse_string_list_json("path_whitelist", value) {
+                Ok(list) => {
+                    cfg.path_whitelist = list;
+                    changed = true;
+                }
+                Err(msg) => return Response::new(400, msg),
+            }
+        }
+
         // Update per-type ban durations if provided
         if let Some(ban_durations) = json.get("ban_durations") {
             if let Some(honeypot) = ban_durations.get("honeypot").and_then(|v| v.as_u64()) {
@@ -2204,6 +2663,10 @@ fn handle_admin_config(
             }
             if let Some(admin) = ban_durations.get("admin").and_then(|v| v.as_u64()) {
                 cfg.ban_durations.admin = admin;
+                changed = true;
+            }
+            if let Some(cdp) = ban_durations.get("cdp").and_then(|v| v.as_u64()) {
+                cfg.ban_durations.cdp = cdp;
                 changed = true;
             }
         }
@@ -2456,17 +2919,28 @@ fn handle_admin_config(
             changed = true;
         }
 
+        let old_pow_enabled = cfg.pow_enabled;
         let old_pow_difficulty = cfg.pow_difficulty;
         let old_pow_ttl = cfg.pow_ttl_seconds;
         let mut pow_changed = false;
 
         // Update PoW settings if provided (guarded by env flag)
-        if json.get("pow_difficulty").is_some() || json.get("pow_ttl_seconds").is_some() {
+        if json.get("pow_enabled").is_some()
+            || json.get("pow_difficulty").is_some()
+            || json.get("pow_ttl_seconds").is_some()
+        {
             if !crate::config::pow_config_mutable() {
                 return Response::new(
                     403,
                     "PoW config is immutable (set SHUMA_POW_CONFIG_MUTABLE=1 to allow changes)",
                 );
+            }
+        }
+        if let Some(pow_enabled) = json.get("pow_enabled").and_then(|v| v.as_bool()) {
+            if cfg.pow_enabled != pow_enabled {
+                cfg.pow_enabled = pow_enabled;
+                changed = true;
+                pow_changed = true;
             }
         }
         if let Some(pow_difficulty) = json.get("pow_difficulty").and_then(|v| v.as_u64()) {
@@ -2497,8 +2971,67 @@ fn handle_admin_config(
                     ip: None,
                     reason: Some("pow_config_update".to_string()),
                     outcome: Some(format!(
-                        "difficulty:{}->{} ttl:{}->{}",
-                        old_pow_difficulty, cfg.pow_difficulty, old_pow_ttl, cfg.pow_ttl_seconds
+                        "enabled:{}->{} difficulty:{}->{} ttl:{}->{}",
+                        old_pow_enabled,
+                        cfg.pow_enabled,
+                        old_pow_difficulty,
+                        cfg.pow_difficulty,
+                        old_pow_ttl,
+                        cfg.pow_ttl_seconds
+                    )),
+                    admin: Some(crate::admin::auth::get_admin_id(req)),
+                },
+            );
+        }
+
+        let old_challenge_enabled = cfg.challenge_enabled;
+        let old_transform_count = cfg.challenge_transform_count;
+        let mut challenge_changed = false;
+        let challenge_update_requested =
+            json.get("challenge_enabled").is_some() || json.get("challenge_transform_count").is_some();
+        if challenge_update_requested && !crate::config::challenge_config_mutable() {
+            return Response::new(
+                403,
+                "Challenge config is immutable (set SHUMA_CHALLENGE_CONFIG_MUTABLE=true to allow changes)",
+            );
+        }
+        if let Some(challenge_enabled) = json.get("challenge_enabled").and_then(|v| v.as_bool()) {
+            if cfg.challenge_enabled != challenge_enabled {
+                cfg.challenge_enabled = challenge_enabled;
+                changed = true;
+                challenge_changed = true;
+            }
+        }
+        if let Some(transform_count) = json
+            .get("challenge_transform_count")
+            .and_then(|v| v.as_u64())
+        {
+            if !(CHALLENGE_TRANSFORM_COUNT_MIN..=CHALLENGE_TRANSFORM_COUNT_MAX)
+                .contains(&transform_count)
+            {
+                return Response::new(400, "challenge_transform_count out of range (4-8)");
+            }
+            let next = transform_count as u8;
+            if cfg.challenge_transform_count != next {
+                cfg.challenge_transform_count = next;
+                changed = true;
+                challenge_changed = true;
+            }
+        }
+        if challenge_changed {
+            log_event(
+                store,
+                &EventLogEntry {
+                    ts: now_ts(),
+                    event: EventType::AdminAction,
+                    ip: None,
+                    reason: Some("challenge_config_update".to_string()),
+                    outcome: Some(format!(
+                        "enabled:{}->{} transform_count:{}->{}",
+                        old_challenge_enabled,
+                        cfg.challenge_enabled,
+                        old_transform_count,
+                        cfg.challenge_transform_count
                     )),
                     admin: Some(crate::admin::auth::get_admin_id(req)),
                 },
@@ -2633,9 +3166,9 @@ fn handle_admin_config(
             || json.get("defence_modes").is_some();
         if botness_update_requested && !botness_mutable {
             return Response::new(
-                    403,
-                    "Botness config is immutable (set SHUMA_BOTNESS_CONFIG_MUTABLE=true or SHUMA_CHALLENGE_CONFIG_MUTABLE=true to allow changes)"
-                );
+                403,
+                "Botness config is immutable (set SHUMA_BOTNESS_CONFIG_MUTABLE=true to allow changes)",
+            );
         }
         if let Some(challenge_threshold) = json
             .get("challenge_risk_threshold")
@@ -2788,107 +3321,7 @@ fn handle_admin_config(
 
         let body = serde_json::to_string(&json!({
             "status": "updated",
-            "config": {
-                "test_mode": cfg.test_mode,
-                "ban_duration": cfg.ban_duration,
-                "ban_durations": {
-                    "honeypot": cfg.ban_durations.honeypot,
-                    "rate_limit": cfg.ban_durations.rate_limit,
-                    "browser": cfg.ban_durations.browser,
-                    "admin": cfg.ban_durations.admin
-                },
-                "rate_limit": cfg.rate_limit,
-                "honeypots": cfg.honeypots,
-                "geo_risk": cfg.geo_risk,
-                "geo_allow": cfg.geo_allow,
-                "geo_challenge": cfg.geo_challenge,
-                "geo_maze": cfg.geo_maze,
-                "geo_block": cfg.geo_block,
-                "maze_enabled": cfg.maze_enabled,
-                "maze_auto_ban": cfg.maze_auto_ban,
-                "maze_auto_ban_threshold": cfg.maze_auto_ban_threshold,
-                "maze_rollout_phase": cfg.maze_rollout_phase,
-                "maze_token_ttl_seconds": cfg.maze_token_ttl_seconds,
-                "maze_token_max_depth": cfg.maze_token_max_depth,
-                "maze_token_branch_budget": cfg.maze_token_branch_budget,
-                "maze_replay_ttl_seconds": cfg.maze_replay_ttl_seconds,
-                "maze_entropy_window_seconds": cfg.maze_entropy_window_seconds,
-                "maze_client_expansion_enabled": cfg.maze_client_expansion_enabled,
-                "maze_checkpoint_every_nodes": cfg.maze_checkpoint_every_nodes,
-                "maze_checkpoint_every_ms": cfg.maze_checkpoint_every_ms,
-                "maze_step_ahead_max": cfg.maze_step_ahead_max,
-                "maze_no_js_fallback_max_depth": cfg.maze_no_js_fallback_max_depth,
-                "maze_micro_pow_enabled": cfg.maze_micro_pow_enabled,
-                "maze_micro_pow_depth_start": cfg.maze_micro_pow_depth_start,
-                "maze_micro_pow_base_difficulty": cfg.maze_micro_pow_base_difficulty,
-                "maze_max_concurrent_global": cfg.maze_max_concurrent_global,
-                "maze_max_concurrent_per_ip_bucket": cfg.maze_max_concurrent_per_ip_bucket,
-                "maze_max_response_bytes": cfg.maze_max_response_bytes,
-                "maze_max_response_duration_ms": cfg.maze_max_response_duration_ms,
-                "maze_server_visible_links": cfg.maze_server_visible_links,
-                "maze_max_links": cfg.maze_max_links,
-                "maze_max_paragraphs": cfg.maze_max_paragraphs,
-                "maze_path_entropy_segment_len": cfg.maze_path_entropy_segment_len,
-                "maze_covert_decoys_enabled": cfg.maze_covert_decoys_enabled,
-                "maze_seed_provider": cfg.maze_seed_provider,
-                "maze_seed_refresh_interval_seconds": cfg.maze_seed_refresh_interval_seconds,
-                "maze_seed_refresh_rate_limit_per_hour": cfg.maze_seed_refresh_rate_limit_per_hour,
-                "maze_seed_refresh_max_sources": cfg.maze_seed_refresh_max_sources,
-                "maze_seed_metadata_only": cfg.maze_seed_metadata_only,
-                "robots_enabled": cfg.robots_enabled,
-                "ai_policy_block_training": cfg.robots_block_ai_training,
-                "ai_policy_block_search": cfg.robots_block_ai_search,
-                "ai_policy_allow_search_engines": cfg.robots_allow_search_engines,
-                "robots_block_ai_training": cfg.robots_block_ai_training,
-                "robots_block_ai_search": cfg.robots_block_ai_search,
-                "robots_allow_search_engines": cfg.robots_allow_search_engines,
-                "robots_crawl_delay": cfg.robots_crawl_delay,
-                "cdp_detection_enabled": cfg.cdp_detection_enabled,
-                "cdp_auto_ban": cfg.cdp_auto_ban,
-                "cdp_detection_threshold": cfg.cdp_detection_threshold,
-                "js_required_enforced": cfg.js_required_enforced,
-                "pow_enabled": cfg.pow_enabled,
-                "pow_config_mutable": crate::config::pow_config_mutable(),
-                "pow_difficulty": cfg.pow_difficulty,
-                "pow_ttl_seconds": cfg.pow_ttl_seconds,
-                "admin_config_write_enabled": crate::config::admin_config_write_enabled(),
-                "kv_store_fail_open": crate::config::kv_store_fail_open(),
-                "https_enforced": crate::config::https_enforced(),
-                "forwarded_header_trust_configured": crate::config::forwarded_header_trust_configured(),
-                "challenge_risk_threshold": cfg.challenge_risk_threshold,
-                "challenge_config_mutable": crate::config::challenge_config_mutable(),
-                "challenge_risk_threshold_default": challenge_default,
-                "botness_maze_threshold": cfg.botness_maze_threshold,
-                "botness_maze_threshold_default": maze_default,
-                "botness_weights": {
-                    "js_required": cfg.botness_weights.js_required,
-                    "geo_risk": cfg.botness_weights.geo_risk,
-                    "rate_medium": cfg.botness_weights.rate_medium,
-                    "rate_high": cfg.botness_weights.rate_high,
-                    "maze_behavior": cfg.botness_weights.maze_behavior
-                },
-                "defence_modes": {
-                    "rate": cfg.defence_modes.rate,
-                    "geo": cfg.defence_modes.geo,
-                    "js": cfg.defence_modes.js
-                },
-                "provider_backends": {
-                    "rate_limiter": cfg.provider_backends.rate_limiter,
-                    "ban_store": cfg.provider_backends.ban_store,
-                    "challenge_engine": cfg.provider_backends.challenge_engine,
-                    "maze_tarpit": cfg.provider_backends.maze_tarpit,
-                    "fingerprint_signal": cfg.provider_backends.fingerprint_signal
-                },
-                "edge_integration_mode": cfg.edge_integration_mode,
-                "defence_modes_effective": cfg.defence_modes_effective(),
-                "defence_mode_warnings": cfg.defence_mode_warnings(),
-                "enterprise_multi_instance": crate::config::enterprise_multi_instance_enabled(),
-                "enterprise_unsynced_state_exception_confirmed": crate::config::enterprise_unsynced_state_exception_confirmed(),
-                "enterprise_state_guardrail_warnings": cfg.enterprise_state_guardrail_warnings(),
-                "enterprise_state_guardrail_error": cfg.enterprise_state_guardrail_error(),
-                "botness_config_mutable": botness_mutable,
-                "botness_signal_definitions": botness_signal_definitions(&cfg)
-            }
+            "config": admin_config_payload(&cfg, challenge_default, maze_default)
         }))
         .unwrap();
         return Response::new(200, body);
@@ -2911,112 +3344,9 @@ fn handle_admin_config(
     );
     let challenge_default = challenge_threshold_default();
     let maze_default = maze_threshold_default();
-    let body = serde_json::to_string(&json!({
-        "test_mode": cfg.test_mode,
-        "ban_duration": cfg.ban_duration,
-        "ban_durations": {
-            "honeypot": cfg.ban_durations.honeypot,
-            "rate_limit": cfg.ban_durations.rate_limit,
-            "browser": cfg.ban_durations.browser,
-            "admin": cfg.ban_durations.admin
-        },
-        "rate_limit": cfg.rate_limit,
-        "honeypots": cfg.honeypots,
-        "browser_block": cfg.browser_block,
-        "browser_whitelist": cfg.browser_whitelist,
-        "geo_risk": cfg.geo_risk,
-        "geo_allow": cfg.geo_allow,
-        "geo_challenge": cfg.geo_challenge,
-        "geo_maze": cfg.geo_maze,
-        "geo_block": cfg.geo_block,
-        "whitelist": cfg.whitelist,
-        "path_whitelist": cfg.path_whitelist,
-        "maze_enabled": cfg.maze_enabled,
-        "maze_auto_ban": cfg.maze_auto_ban,
-        "maze_auto_ban_threshold": cfg.maze_auto_ban_threshold,
-        "maze_rollout_phase": cfg.maze_rollout_phase,
-        "maze_token_ttl_seconds": cfg.maze_token_ttl_seconds,
-        "maze_token_max_depth": cfg.maze_token_max_depth,
-        "maze_token_branch_budget": cfg.maze_token_branch_budget,
-        "maze_replay_ttl_seconds": cfg.maze_replay_ttl_seconds,
-        "maze_entropy_window_seconds": cfg.maze_entropy_window_seconds,
-        "maze_client_expansion_enabled": cfg.maze_client_expansion_enabled,
-        "maze_checkpoint_every_nodes": cfg.maze_checkpoint_every_nodes,
-        "maze_checkpoint_every_ms": cfg.maze_checkpoint_every_ms,
-        "maze_step_ahead_max": cfg.maze_step_ahead_max,
-        "maze_no_js_fallback_max_depth": cfg.maze_no_js_fallback_max_depth,
-        "maze_micro_pow_enabled": cfg.maze_micro_pow_enabled,
-        "maze_micro_pow_depth_start": cfg.maze_micro_pow_depth_start,
-        "maze_micro_pow_base_difficulty": cfg.maze_micro_pow_base_difficulty,
-        "maze_max_concurrent_global": cfg.maze_max_concurrent_global,
-        "maze_max_concurrent_per_ip_bucket": cfg.maze_max_concurrent_per_ip_bucket,
-        "maze_max_response_bytes": cfg.maze_max_response_bytes,
-        "maze_max_response_duration_ms": cfg.maze_max_response_duration_ms,
-        "maze_server_visible_links": cfg.maze_server_visible_links,
-        "maze_max_links": cfg.maze_max_links,
-        "maze_max_paragraphs": cfg.maze_max_paragraphs,
-        "maze_path_entropy_segment_len": cfg.maze_path_entropy_segment_len,
-        "maze_covert_decoys_enabled": cfg.maze_covert_decoys_enabled,
-        "maze_seed_provider": cfg.maze_seed_provider,
-        "maze_seed_refresh_interval_seconds": cfg.maze_seed_refresh_interval_seconds,
-        "maze_seed_refresh_rate_limit_per_hour": cfg.maze_seed_refresh_rate_limit_per_hour,
-        "maze_seed_refresh_max_sources": cfg.maze_seed_refresh_max_sources,
-        "maze_seed_metadata_only": cfg.maze_seed_metadata_only,
-        "robots_enabled": cfg.robots_enabled,
-        "ai_policy_block_training": cfg.robots_block_ai_training,
-        "ai_policy_block_search": cfg.robots_block_ai_search,
-        "ai_policy_allow_search_engines": cfg.robots_allow_search_engines,
-        "robots_block_ai_training": cfg.robots_block_ai_training,
-        "robots_block_ai_search": cfg.robots_block_ai_search,
-        "robots_allow_search_engines": cfg.robots_allow_search_engines,
-        "robots_crawl_delay": cfg.robots_crawl_delay,
-        "cdp_detection_enabled": cfg.cdp_detection_enabled,
-        "cdp_auto_ban": cfg.cdp_auto_ban,
-        "cdp_detection_threshold": cfg.cdp_detection_threshold,
-        "js_required_enforced": cfg.js_required_enforced,
-        "pow_enabled": cfg.pow_enabled,
-        "pow_config_mutable": crate::config::pow_config_mutable(),
-        "pow_difficulty": cfg.pow_difficulty,
-        "pow_ttl_seconds": cfg.pow_ttl_seconds,
-        "admin_config_write_enabled": crate::config::admin_config_write_enabled(),
-        "kv_store_fail_open": crate::config::kv_store_fail_open(),
-        "https_enforced": crate::config::https_enforced(),
-        "forwarded_header_trust_configured": crate::config::forwarded_header_trust_configured(),
-        "challenge_risk_threshold": cfg.challenge_risk_threshold,
-        "challenge_config_mutable": crate::config::challenge_config_mutable(),
-        "challenge_risk_threshold_default": challenge_default,
-        "botness_maze_threshold": cfg.botness_maze_threshold,
-        "botness_maze_threshold_default": maze_default,
-        "botness_weights": {
-            "js_required": cfg.botness_weights.js_required,
-            "geo_risk": cfg.botness_weights.geo_risk,
-            "rate_medium": cfg.botness_weights.rate_medium,
-            "rate_high": cfg.botness_weights.rate_high,
-            "maze_behavior": cfg.botness_weights.maze_behavior
-        },
-        "defence_modes": {
-            "rate": cfg.defence_modes.rate,
-            "geo": cfg.defence_modes.geo,
-            "js": cfg.defence_modes.js
-        },
-        "provider_backends": {
-            "rate_limiter": cfg.provider_backends.rate_limiter,
-            "ban_store": cfg.provider_backends.ban_store,
-            "challenge_engine": cfg.provider_backends.challenge_engine,
-            "maze_tarpit": cfg.provider_backends.maze_tarpit,
-            "fingerprint_signal": cfg.provider_backends.fingerprint_signal
-        },
-        "edge_integration_mode": cfg.edge_integration_mode,
-        "defence_modes_effective": cfg.defence_modes_effective(),
-        "defence_mode_warnings": cfg.defence_mode_warnings(),
-        "enterprise_multi_instance": crate::config::enterprise_multi_instance_enabled(),
-        "enterprise_unsynced_state_exception_confirmed": crate::config::enterprise_unsynced_state_exception_confirmed(),
-        "enterprise_state_guardrail_warnings": cfg.enterprise_state_guardrail_warnings(),
-        "enterprise_state_guardrail_error": cfg.enterprise_state_guardrail_error(),
-        "botness_config_mutable": crate::config::botness_config_mutable(),
-        "botness_signal_definitions": botness_signal_definitions(&cfg)
-    }))
-    .unwrap();
+    let body =
+        serde_json::to_string(&admin_config_payload(&cfg, challenge_default, maze_default))
+            .unwrap();
     Response::new(200, body)
 }
 

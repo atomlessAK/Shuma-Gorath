@@ -108,6 +108,7 @@ SHUMA_ADMIN_READONLY_API_KEY=${SHUMA_ADMIN_READONLY_API_KEY:-}
 SHUMA_JS_SECRET=${SHUMA_JS_SECRET:-}
 SHUMA_POW_SECRET=${SHUMA_POW_SECRET:-}
 SHUMA_CHALLENGE_SECRET=${SHUMA_CHALLENGE_SECRET:-}
+SHUMA_MAZE_PREVIEW_SECRET=${SHUMA_MAZE_PREVIEW_SECRET:-}
 SHUMA_FORWARDED_IP_SECRET=${SHUMA_FORWARDED_IP_SECRET:-}
 SHUMA_HEALTH_SECRET=${SHUMA_HEALTH_SECRET:-}
 SHUMA_ADMIN_IP_ALLOWLIST=${SHUMA_ADMIN_IP_ALLOWLIST:-}
@@ -364,6 +365,7 @@ ensure_local_dev_secret "SHUMA_JS_SECRET" 32
 ensure_local_dev_secret "SHUMA_FORWARDED_IP_SECRET" 32
 ensure_env_local_default_from_defaults "SHUMA_POW_SECRET"
 ensure_env_local_default_from_defaults "SHUMA_CHALLENGE_SECRET"
+ensure_env_local_default_from_defaults "SHUMA_MAZE_PREVIEW_SECRET"
 ensure_env_local_default_from_defaults "SHUMA_HEALTH_SECRET"
 ensure_admin_ip_allowlist_local_default
 ensure_env_local_default_from_defaults "SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE"
@@ -384,7 +386,7 @@ ensure_env_local_default_from_defaults "SHUMA_BOTNESS_CONFIG_MUTABLE"
 normalize_env_local_unquoted_style
 success "Local dev secrets are ready in $ENV_LOCAL_FILE"
 
-info "Seeding KV tunables from config/defaults.env (missing values only)..."
+info "Seeding/backfilling KV tunables from config/defaults.env..."
 make --no-print-directory config-seed
 success "KV tunables are seeded"
 

@@ -36,6 +36,7 @@ const INTEGER_FIELD_RULES = {
   'robots-crawl-delay': { min: 0, max: 60, fallback: 2, label: 'Crawl delay' },
   'maze-threshold': { min: 5, max: 500, fallback: 50, label: 'Maze threshold' },
   'rate-limit-threshold': { min: 1, max: 1000000, fallback: 80, label: 'Rate limit' },
+  'challenge-transform-count': { min: 4, max: 8, fallback: 6, label: 'Challenge transform count' },
   'pow-difficulty': { min: 12, max: 20, fallback: 15, label: 'PoW difficulty' },
   'pow-ttl': { min: 30, max: 300, fallback: 90, label: 'PoW seed TTL' },
   'dur-honeypot-days': { min: 0, max: 365, fallback: 1, label: 'Maze Threshold Exceeded days' },
@@ -47,6 +48,9 @@ const INTEGER_FIELD_RULES = {
   'dur-browser-days': { min: 0, max: 365, fallback: 0, label: 'Browser Automation Detected days' },
   'dur-browser-hours': { min: 0, max: 23, fallback: 6, label: 'Browser Automation Detected hours' },
   'dur-browser-minutes': { min: 0, max: 59, fallback: 0, label: 'Browser Automation Detected minutes' },
+  'dur-cdp-days': { min: 0, max: 365, fallback: 0, label: 'CDP Automation Detected days' },
+  'dur-cdp-hours': { min: 0, max: 23, fallback: 12, label: 'CDP Automation Detected hours' },
+  'dur-cdp-minutes': { min: 0, max: 59, fallback: 0, label: 'CDP Automation Detected minutes' },
   'dur-admin-days': { min: 0, max: 365, fallback: 0, label: 'Admin Manual Ban days' },
   'dur-admin-hours': { min: 0, max: 23, fallback: 6, label: 'Admin Manual Ban hours' },
   'dur-admin-minutes': { min: 0, max: 59, fallback: 0, label: 'Admin Manual Ban minutes' },
@@ -82,6 +86,13 @@ const BAN_DURATION_FIELDS = {
     hoursId: 'dur-browser-hours',
     minutesId: 'dur-browser-minutes'
   },
+  cdp: {
+    label: 'CDP Automation Detected duration',
+    fallback: 43200,
+    daysId: 'dur-cdp-days',
+    hoursId: 'dur-cdp-hours',
+    minutesId: 'dur-cdp-minutes'
+  },
   admin: {
     label: 'Admin Manual Ban duration',
     fallback: 21600,
@@ -100,6 +111,88 @@ const MANUAL_BAN_DURATION_FIELD = {
 };
 
 const EDGE_INTEGRATION_MODES = new Set(['off', 'advisory', 'authoritative']);
+
+const ADVANCED_CONFIG_TEMPLATE_PATHS = Object.freeze([
+  'test_mode',
+  'ban_duration',
+  'ban_durations.honeypot',
+  'ban_durations.rate_limit',
+  'ban_durations.browser',
+  'ban_durations.admin',
+  'ban_durations.cdp',
+  'rate_limit',
+  'honeypots',
+  'browser_block',
+  'browser_whitelist',
+  'geo_risk',
+  'geo_allow',
+  'geo_challenge',
+  'geo_maze',
+  'geo_block',
+  'whitelist',
+  'path_whitelist',
+  'maze_enabled',
+  'maze_auto_ban',
+  'maze_auto_ban_threshold',
+  'maze_rollout_phase',
+  'maze_token_ttl_seconds',
+  'maze_token_max_depth',
+  'maze_token_branch_budget',
+  'maze_replay_ttl_seconds',
+  'maze_entropy_window_seconds',
+  'maze_client_expansion_enabled',
+  'maze_checkpoint_every_nodes',
+  'maze_checkpoint_every_ms',
+  'maze_step_ahead_max',
+  'maze_no_js_fallback_max_depth',
+  'maze_micro_pow_enabled',
+  'maze_micro_pow_depth_start',
+  'maze_micro_pow_base_difficulty',
+  'maze_max_concurrent_global',
+  'maze_max_concurrent_per_ip_bucket',
+  'maze_max_response_bytes',
+  'maze_max_response_duration_ms',
+  'maze_server_visible_links',
+  'maze_max_links',
+  'maze_max_paragraphs',
+  'maze_path_entropy_segment_len',
+  'maze_covert_decoys_enabled',
+  'maze_seed_provider',
+  'maze_seed_refresh_interval_seconds',
+  'maze_seed_refresh_rate_limit_per_hour',
+  'maze_seed_refresh_max_sources',
+  'maze_seed_metadata_only',
+  'robots_enabled',
+  'ai_policy_block_training',
+  'ai_policy_block_search',
+  'ai_policy_allow_search_engines',
+  'robots_crawl_delay',
+  'cdp_detection_enabled',
+  'cdp_auto_ban',
+  'cdp_detection_threshold',
+  'js_required_enforced',
+  'pow_enabled',
+  'pow_difficulty',
+  'pow_ttl_seconds',
+  'challenge_enabled',
+  'challenge_transform_count',
+  'challenge_risk_threshold',
+  'botness_maze_threshold',
+  'botness_weights.js_required',
+  'botness_weights.geo_risk',
+  'botness_weights.rate_medium',
+  'botness_weights.rate_high',
+  'botness_weights.maze_behavior',
+  'defence_modes.rate',
+  'defence_modes.geo',
+  'defence_modes.js',
+  'provider_backends.rate_limiter',
+  'provider_backends.ban_store',
+  'provider_backends.challenge_engine',
+  'provider_backends.maze_tarpit',
+  'provider_backends.fingerprint_signal',
+  'edge_integration_mode'
+]);
 
 const IPV4_SEGMENT_PATTERN = /^\d{1,3}$/;
 const IPV6_INPUT_PATTERN = /^[0-9a-fA-F:.]+$/;
@@ -138,6 +231,67 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function cloneJsonValue(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'object') return value;
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (_e) {
+    return null;
+  }
+}
+
+function readValueAtPath(obj, path) {
+  const segments = String(path || '').split('.');
+  let cursor = obj;
+  for (const segment of segments) {
+    if (!segment || cursor === null || typeof cursor !== 'object') return undefined;
+    if (!Object.prototype.hasOwnProperty.call(cursor, segment)) return undefined;
+    cursor = cursor[segment];
+  }
+  return cursor;
+}
+
+function writeValueAtPath(target, path, value) {
+  const segments = String(path || '').split('.');
+  if (segments.length === 0) return;
+  let cursor = target;
+  for (let i = 0; i < segments.length; i += 1) {
+    const segment = segments[i];
+    if (!segment) return;
+    const isLeaf = i === segments.length - 1;
+    if (isLeaf) {
+      cursor[segment] = value;
+      return;
+    }
+    if (!cursor[segment] || typeof cursor[segment] !== 'object' || Array.isArray(cursor[segment])) {
+      cursor[segment] = {};
+    }
+    cursor = cursor[segment];
+  }
+}
+
+function buildAdvancedConfigTemplate(config) {
+  const template = {};
+  ADVANCED_CONFIG_TEMPLATE_PATHS.forEach((path) => {
+    const rawValue = readValueAtPath(config, path);
+    if (rawValue === undefined) return;
+    const cloned = cloneJsonValue(rawValue);
+    writeValueAtPath(template, path, cloned === null && rawValue !== null ? rawValue : cloned);
+  });
+  return template;
+}
+
+function normalizeJsonObjectForCompare(raw) {
+  try {
+    const parsed = JSON.parse(String(raw || '{}'));
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') return null;
+    return JSON.stringify(parsed);
+  } catch (_e) {
+    return null;
+  }
 }
 
 function isLoopbackHostname(hostname) {
@@ -597,8 +751,20 @@ function refreshCoreActionButtonsState() {
   if (typeof checkGeoConfigChanged === 'function') {
     checkGeoConfigChanged();
   }
+  if (typeof checkHoneypotConfigChanged === 'function') {
+    checkHoneypotConfigChanged();
+  }
+  if (typeof checkBrowserPolicyConfigChanged === 'function') {
+    checkBrowserPolicyConfigChanged();
+  }
+  if (typeof checkBypassAllowlistsConfigChanged === 'function') {
+    checkBypassAllowlistsConfigChanged();
+  }
   if (typeof checkPowConfigChanged === 'function') {
     checkPowConfigChanged();
+  }
+  if (typeof checkChallengeTransformConfigChanged === 'function') {
+    checkChallengeTransformConfigChanged();
   }
   if (typeof checkBotnessConfigChanged === 'function') {
     checkBotnessConfigChanged();
@@ -611,6 +777,9 @@ function refreshCoreActionButtonsState() {
   }
   if (typeof checkJsRequiredConfigChanged === 'function') {
     checkJsRequiredConfigChanged();
+  }
+  if (typeof checkAdvancedConfigChanged === 'function') {
+    checkAdvancedConfigChanged();
   }
 }
 
@@ -807,11 +976,13 @@ function updateBanDurations(config) {
     setBanDurationInputFromSeconds('honeypot', config.ban_durations.honeypot);
     setBanDurationInputFromSeconds('rateLimit', config.ban_durations.rate_limit);
     setBanDurationInputFromSeconds('browser', config.ban_durations.browser);
+    setBanDurationInputFromSeconds('cdp', config.ban_durations.cdp);
     setBanDurationInputFromSeconds('admin', config.ban_durations.admin);
     banDurationsSavedState = {
       honeypot: Number.parseInt(config.ban_durations.honeypot, 10) || BAN_DURATION_FIELDS.honeypot.fallback,
       rateLimit: Number.parseInt(config.ban_durations.rate_limit, 10) || BAN_DURATION_FIELDS.rateLimit.fallback,
       browser: Number.parseInt(config.ban_durations.browser, 10) || BAN_DURATION_FIELDS.browser.fallback,
+      cdp: Number.parseInt(config.ban_durations.cdp, 10) || BAN_DURATION_FIELDS.cdp.fallback,
       admin: Number.parseInt(config.ban_durations.admin, 10) || BAN_DURATION_FIELDS.admin.fallback
     };
     const btn = document.getElementById('save-durations-btn');
@@ -1106,6 +1277,61 @@ function updateGeoConfig(config) {
   }
 }
 
+function updateHoneypotConfig(config) {
+  const field = document.getElementById('honeypot-paths');
+  if (!field) return;
+  const formatted = formatListTextarea(config.honeypots);
+  field.value = formatted;
+  honeypotSavedState = {
+    values: normalizeListTextareaForCompare(formatted)
+  };
+  const btn = document.getElementById('save-honeypot-config');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Save Honeypots';
+  }
+}
+
+function updateBrowserPolicyConfig(config) {
+  const blockField = document.getElementById('browser-block-rules');
+  const whitelistField = document.getElementById('browser-whitelist-rules');
+  if (!blockField || !whitelistField) return;
+
+  const blockText = formatBrowserRulesTextarea(config.browser_block);
+  const whitelistText = formatBrowserRulesTextarea(config.browser_whitelist);
+  blockField.value = blockText;
+  whitelistField.value = whitelistText;
+  browserPolicySavedState = {
+    block: normalizeBrowserRulesForCompare(blockText),
+    whitelist: normalizeBrowserRulesForCompare(whitelistText)
+  };
+  const btn = document.getElementById('save-browser-policy-config');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Save Browser Policy';
+  }
+}
+
+function updateBypassAllowlistConfig(config) {
+  const networkField = document.getElementById('network-whitelist');
+  const pathField = document.getElementById('path-whitelist');
+  if (!networkField || !pathField) return;
+
+  const networkText = formatListTextarea(config.whitelist);
+  const pathText = formatListTextarea(config.path_whitelist);
+  networkField.value = networkText;
+  pathField.value = pathText;
+  bypassAllowlistSavedState = {
+    network: normalizeListTextareaForCompare(networkText),
+    path: normalizeListTextareaForCompare(pathText)
+  };
+  const btn = document.getElementById('save-whitelist-config');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Save Allowlists';
+  }
+}
+
 // Update robots.txt config controls from loaded config
 // Track saved state for change detection
 let robotsSavedState = {
@@ -1148,11 +1374,13 @@ let banDurationsSavedState = {
   honeypot: 86400,
   rateLimit: 3600,
   browser: 21600,
+  cdp: 43200,
   admin: 21600
 };
 
 // Track PoW saved state for change detection
 let powSavedState = {
+  enabled: true,
   difficulty: 15,
   ttl: 90,
   mutable: false
@@ -1177,6 +1405,28 @@ let geoSavedState = {
   block: '',
   mutable: false
 };
+
+let honeypotSavedState = {
+  values: '/instaban'
+};
+
+let browserPolicySavedState = {
+  block: '',
+  whitelist: ''
+};
+
+let bypassAllowlistSavedState = {
+  network: '',
+  path: ''
+};
+
+let challengeTransformSavedState = {
+  enabled: true,
+  count: 6,
+  mutable: false
+};
+
+let advancedConfigSavedNormalized = '{}';
 
 const GEO_SCORING_FIELD_IDS = ['geo-risk-list'];
 const GEO_ROUTING_FIELD_IDS = [
@@ -1241,6 +1491,88 @@ function normalizeCountryCodesForCompare(raw) {
 function formatCountryCodes(list) {
   if (!Array.isArray(list) || list.length === 0) return '';
   return list.join(',');
+}
+
+function parseListTextarea(raw) {
+  const source = String(raw || '');
+  const parts = source.split(/[\n,]/);
+  const seen = new Set();
+  const parsed = [];
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    if (seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    parsed.push(trimmed);
+  }
+  return parsed;
+}
+
+function formatListTextarea(values) {
+  if (!Array.isArray(values) || values.length === 0) return '';
+  return values.map((value) => String(value || '').trim()).filter(Boolean).join('\n');
+}
+
+function normalizeListTextareaForCompare(raw) {
+  return parseListTextarea(raw).join('\n');
+}
+
+function parseHoneypotPathsTextarea(raw) {
+  const paths = parseListTextarea(raw);
+  for (const path of paths) {
+    if (!path.startsWith('/')) {
+      throw new Error(`Invalid honeypot path '${path}'. Paths must start with '/'.`);
+    }
+  }
+  return paths;
+}
+
+function formatBrowserRulesTextarea(rules) {
+  if (!Array.isArray(rules) || rules.length === 0) return '';
+  return rules
+    .filter((rule) => Array.isArray(rule) && rule.length >= 2)
+    .map((rule) => `${String(rule[0] || '').trim()},${Number.parseInt(rule[1], 10)}`)
+    .filter((line) => !line.startsWith(',') && !line.endsWith(',NaN'))
+    .join('\n');
+}
+
+function parseBrowserRulesTextarea(raw) {
+  const lines = String(raw || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  const parsed = [];
+  const seen = new Set();
+  for (const line of lines) {
+    const firstComma = line.indexOf(',');
+    if (firstComma <= 0 || firstComma === line.length - 1) {
+      throw new Error(`Invalid browser rule '${line}'. Use BrowserName,min_major.`);
+    }
+    const browser = line.slice(0, firstComma).trim();
+    const versionText = line.slice(firstComma + 1).trim();
+    const version = Number.parseInt(versionText, 10);
+    if (!browser) {
+      throw new Error(`Invalid browser rule '${line}'. Browser name is required.`);
+    }
+    if (!Number.isInteger(version) || version < 0) {
+      throw new Error(`Invalid browser rule '${line}'. Version must be a whole number >= 0.`);
+    }
+    const dedupeKey = `${browser}|${version}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    parsed.push([browser, version]);
+  }
+  return parsed;
+}
+
+function normalizeBrowserRulesForCompare(raw) {
+  try {
+    return parseBrowserRulesTextarea(raw)
+      .map((rule) => `${rule[0]},${rule[1]}`)
+      .join('\n');
+  } catch (_e) {
+    return '__invalid__';
+  }
 }
 
 function updateRobotsConfig(config) {
@@ -1356,22 +1688,101 @@ function checkBanDurationsChanged() {
   const honeypot = readBanDurationFromInputs('honeypot');
   const rateLimit = readBanDurationFromInputs('rateLimit');
   const browser = readBanDurationFromInputs('browser');
+  const cdp = readBanDurationFromInputs('cdp');
   const admin = readBanDurationFromInputs('admin');
-  const fieldsValid = Boolean(honeypot && rateLimit && browser && admin);
+  const fieldsValid = Boolean(honeypot && rateLimit && browser && cdp && admin);
   const apiValid = hasValidApiContext();
   const current = fieldsValid ? {
     honeypot: honeypot.totalSeconds,
     rateLimit: rateLimit.totalSeconds,
     browser: browser.totalSeconds,
+    cdp: cdp.totalSeconds,
     admin: admin.totalSeconds
   } : banDurationsSavedState;
   const changed = fieldsValid && (
     current.honeypot !== banDurationsSavedState.honeypot ||
     current.rateLimit !== banDurationsSavedState.rateLimit ||
     current.browser !== banDurationsSavedState.browser ||
+    current.cdp !== banDurationsSavedState.cdp ||
     current.admin !== banDurationsSavedState.admin
   );
   setDirtySaveButtonState('save-durations-btn', changed, apiValid, fieldsValid);
+}
+
+function validateHoneypotPathsField(showInline = false) {
+  const field = document.getElementById('honeypot-paths');
+  if (!field) return false;
+  try {
+    parseHoneypotPathsTextarea(field.value);
+    setFieldError(field, '', showInline);
+    return true;
+  } catch (e) {
+    setFieldError(field, e.message || 'Invalid honeypot paths.', showInline);
+    return false;
+  }
+}
+
+function checkHoneypotConfigChanged() {
+  const apiValid = hasValidApiContext();
+  const fieldsValid = validateHoneypotPathsField();
+  const current = fieldsValid
+    ? normalizeListTextareaForCompare(document.getElementById('honeypot-paths').value)
+    : honeypotSavedState.values;
+  const changed = fieldsValid && current !== honeypotSavedState.values;
+  setDirtySaveButtonState('save-honeypot-config', changed, apiValid, fieldsValid);
+}
+
+function validateBrowserRulesField(id, showInline = false) {
+  const field = document.getElementById(id);
+  if (!field) return false;
+  try {
+    parseBrowserRulesTextarea(field.value);
+    setFieldError(field, '', showInline);
+    return true;
+  } catch (e) {
+    setFieldError(field, e.message || 'Invalid browser rules.', showInline);
+    return false;
+  }
+}
+
+function checkBrowserPolicyConfigChanged() {
+  const apiValid = hasValidApiContext();
+  const blockValid = validateBrowserRulesField('browser-block-rules');
+  const whitelistValid = validateBrowserRulesField('browser-whitelist-rules');
+  const fieldsValid = blockValid && whitelistValid;
+  const currentBlock = normalizeBrowserRulesForCompare(document.getElementById('browser-block-rules').value);
+  const currentWhitelist = normalizeBrowserRulesForCompare(document.getElementById('browser-whitelist-rules').value);
+  const changed = fieldsValid && (
+    currentBlock !== browserPolicySavedState.block ||
+    currentWhitelist !== browserPolicySavedState.whitelist
+  );
+  setDirtySaveButtonState('save-browser-policy-config', changed, apiValid, fieldsValid);
+}
+
+function checkBypassAllowlistsConfigChanged() {
+  const apiValid = hasValidApiContext();
+  const current = {
+    network: normalizeListTextareaForCompare(document.getElementById('network-whitelist').value),
+    path: normalizeListTextareaForCompare(document.getElementById('path-whitelist').value)
+  };
+  const changed = current.network !== bypassAllowlistSavedState.network || current.path !== bypassAllowlistSavedState.path;
+  setDirtySaveButtonState('save-whitelist-config', changed, apiValid, true);
+}
+
+function checkChallengeTransformConfigChanged() {
+  const apiValid = hasValidApiContext();
+  const fieldsValid = validateIntegerFieldById('challenge-transform-count');
+  const btn = document.getElementById('save-challenge-transform-config');
+  const toggle = document.getElementById('challenge-enabled-toggle');
+  if (!challengeTransformSavedState.mutable) {
+    if (btn) btn.disabled = true;
+    return;
+  }
+  const current = parseIntegerLoose('challenge-transform-count');
+  const enabledChanged = Boolean(toggle && (toggle.checked !== challengeTransformSavedState.enabled));
+  const countChanged = current !== null && current !== challengeTransformSavedState.count;
+  const changed = fieldsValid && (enabledChanged || countChanged);
+  setDirtySaveButtonState('save-challenge-transform-config', changed, apiValid, fieldsValid);
 }
 
 // Add change listeners for robots serving and AI-policy controls.
@@ -1385,6 +1796,48 @@ document.getElementById('robots-crawl-delay').addEventListener('input', checkRob
 ['maze-enabled-toggle', 'maze-auto-ban-toggle'].forEach(id => {
   document.getElementById(id).addEventListener('change', checkMazeConfigChanged);
 });
+['honeypot-paths'].forEach(id => {
+  const field = document.getElementById(id);
+  if (!field) return;
+  field.addEventListener('input', () => {
+    validateHoneypotPathsField(true);
+    checkHoneypotConfigChanged();
+    refreshCoreActionButtonsState();
+  });
+  field.addEventListener('blur', () => {
+    validateHoneypotPathsField(true);
+    checkHoneypotConfigChanged();
+    refreshCoreActionButtonsState();
+  });
+});
+['browser-block-rules', 'browser-whitelist-rules'].forEach((id) => {
+  const field = document.getElementById(id);
+  if (!field) return;
+  field.addEventListener('input', () => {
+    validateBrowserRulesField(id, true);
+    checkBrowserPolicyConfigChanged();
+    refreshCoreActionButtonsState();
+  });
+  field.addEventListener('blur', () => {
+    validateBrowserRulesField(id, true);
+    checkBrowserPolicyConfigChanged();
+    refreshCoreActionButtonsState();
+  });
+});
+['network-whitelist', 'path-whitelist'].forEach((id) => {
+  const field = document.getElementById(id);
+  if (!field) return;
+  field.addEventListener('input', () => {
+    checkBypassAllowlistsConfigChanged();
+    refreshCoreActionButtonsState();
+  });
+  field.addEventListener('blur', () => {
+    checkBypassAllowlistsConfigChanged();
+    refreshCoreActionButtonsState();
+  });
+});
+document.getElementById('challenge-transform-count').addEventListener('input', checkChallengeTransformConfigChanged);
+document.getElementById('challenge-enabled-toggle').addEventListener('change', checkChallengeTransformConfigChanged);
 
 // Fetch and update robots.txt preview content
 async function refreshRobotsPreview() {
@@ -1495,7 +1948,7 @@ function updateJsRequiredConfig(config) {
 
 // Update PoW config controls from loaded config
 function updatePowConfig(config) {
-  const powEnabled = config.pow_enabled === true;
+  const powEnabled = parseBoolLike(config.pow_enabled, true);
   const powMutable = config.pow_config_mutable === true;
   const difficulty = parseInt(config.pow_difficulty, 10);
   const ttl = parseInt(config.pow_ttl_seconds, 10);
@@ -1512,12 +1965,15 @@ function updatePowConfig(config) {
   if (!Number.isNaN(ttl)) {
     document.getElementById('pow-ttl').value = ttl;
   }
+  document.getElementById('pow-enabled-toggle').checked = powEnabled;
 
   // Disable inputs when config is immutable
+  document.getElementById('pow-enabled-toggle').disabled = !powMutable;
   document.getElementById('pow-difficulty').disabled = !powMutable;
   document.getElementById('pow-ttl').disabled = !powMutable;
 
   powSavedState = {
+    enabled: document.getElementById('pow-enabled-toggle').checked,
     difficulty: parseInt(document.getElementById('pow-difficulty').value, 10) || 15,
     ttl: parseInt(document.getElementById('pow-ttl').value, 10) || 90,
     mutable: powMutable
@@ -1561,6 +2017,8 @@ function updateBotnessSignalDefinitions(signalDefinitions) {
 function updateChallengeConfig(config) {
   const mutable = config.botness_config_mutable === true;
   const challengeMutable = config.challenge_config_mutable === true;
+  const challengeEnabled = config.challenge_enabled !== false;
+  const challengeTransformCount = parseInt(config.challenge_transform_count, 10);
   const challengeThreshold = parseInt(config.challenge_risk_threshold, 10);
   const challengeDefault = parseInt(config.challenge_risk_threshold_default, 10);
   const mazeThreshold = parseInt(config.botness_maze_threshold, 10);
@@ -1573,6 +2031,10 @@ function updateChallengeConfig(config) {
   if (!Number.isNaN(mazeThreshold)) {
     document.getElementById('maze-threshold-score').value = mazeThreshold;
   }
+  if (!Number.isNaN(challengeTransformCount)) {
+    document.getElementById('challenge-transform-count').value = challengeTransformCount;
+  }
+  document.getElementById('challenge-enabled-toggle').checked = challengeEnabled;
   document.getElementById('weight-js-required').value = parseInt(weights.js_required, 10) || 1;
   document.getElementById('weight-geo-risk').value = parseInt(weights.geo_risk, 10) || 2;
   document.getElementById('weight-rate-medium').value = parseInt(weights.rate_medium, 10) || 1;
@@ -1583,6 +2045,7 @@ function updateChallengeConfig(config) {
   document.getElementById('maze-threshold-default').textContent = Number.isNaN(mazeDefault) ? '--' : mazeDefault;
 
   statusPanel.update({
+    challengeEnabled,
     challengeThreshold: Number.isNaN(challengeThreshold) ? 3 : challengeThreshold,
     mazeThreshold: Number.isNaN(mazeThreshold) ? 6 : mazeThreshold,
     challengeMutable,
@@ -1622,6 +2085,25 @@ function updateChallengeConfig(config) {
   const btn = document.getElementById('save-botness-config');
   btn.disabled = !mutable;
   btn.textContent = 'Save Botness Settings';
+
+  challengeTransformSavedState = {
+    enabled: document.getElementById('challenge-enabled-toggle').checked,
+    count: parseInt(document.getElementById('challenge-transform-count').value, 10) || 6,
+    mutable: challengeMutable
+  };
+  const challengeBtn = document.getElementById('save-challenge-transform-config');
+  if (challengeBtn) {
+    challengeBtn.disabled = !challengeMutable;
+    challengeBtn.textContent = 'Save Challenge Puzzle';
+  }
+  const challengeTransformField = document.getElementById('challenge-transform-count');
+  const challengeEnabledToggle = document.getElementById('challenge-enabled-toggle');
+  if (challengeTransformField) {
+    challengeTransformField.disabled = !challengeMutable;
+  }
+  if (challengeEnabledToggle) {
+    challengeEnabledToggle.disabled = !challengeMutable;
+  }
   statusPanel.render();
 }
 
@@ -1634,13 +2116,18 @@ function checkPowConfigChanged() {
     return;
   }
   const current = {
+    enabled: document.getElementById('pow-enabled-toggle').checked,
     difficulty: parseInt(document.getElementById('pow-difficulty').value, 10) || 15,
     ttl: parseInt(document.getElementById('pow-ttl').value, 10) || 90
   };
-  const changed = current.difficulty !== powSavedState.difficulty || current.ttl !== powSavedState.ttl;
+  const changed =
+    current.enabled !== powSavedState.enabled ||
+    current.difficulty !== powSavedState.difficulty ||
+    current.ttl !== powSavedState.ttl;
   setDirtySaveButtonState('save-pow-config', changed, apiValid, powFieldsValid);
 }
 
+document.getElementById('pow-enabled-toggle').addEventListener('change', checkPowConfigChanged);
 document.getElementById('pow-difficulty').addEventListener('input', checkPowConfigChanged);
 document.getElementById('pow-ttl').addEventListener('input', checkPowConfigChanged);
 
@@ -1785,6 +2272,84 @@ function checkJsRequiredConfigChanged() {
 
 document.getElementById('js-required-enforced-toggle').addEventListener('change', checkJsRequiredConfigChanged);
 
+function setAdvancedConfigEditorFromConfig(config, preserveDirty = true) {
+  const field = document.getElementById('advanced-config-json');
+  if (!field) return;
+  const previousBaseline = advancedConfigSavedNormalized;
+  const template = buildAdvancedConfigTemplate(config || {});
+  const formatted = JSON.stringify(template, null, 2);
+  const currentNormalized = normalizeJsonObjectForCompare(field.value);
+  const hasUnsavedEdits = field.dataset.dirty === 'true';
+
+  advancedConfigSavedNormalized = normalizeJsonObjectForCompare(formatted) || '{}';
+
+  const shouldReplace =
+    !preserveDirty ||
+    !hasUnsavedEdits ||
+    currentNormalized === previousBaseline ||
+    !String(field.value || '').trim();
+
+  if (shouldReplace) {
+    field.value = formatted;
+  }
+  checkAdvancedConfigChanged();
+}
+
+function readAdvancedConfigPatch(messageTarget) {
+  const field = document.getElementById('advanced-config-json');
+  if (!field) return null;
+  const raw = String(field.value || '').trim();
+  const parsedText = raw.length > 0 ? raw : '{}';
+  let patch;
+  try {
+    patch = JSON.parse(parsedText);
+  } catch (e) {
+    const message = `Advanced config JSON parse error: ${e.message}`;
+    setFieldError(field, message, true);
+    if (messageTarget) {
+      messageTarget.textContent = message;
+      messageTarget.className = 'message error';
+    }
+    return null;
+  }
+  if (!patch || Array.isArray(patch) || typeof patch !== 'object') {
+    const message = 'Advanced config patch must be a JSON object.';
+    setFieldError(field, message, true);
+    if (messageTarget) {
+      messageTarget.textContent = message;
+      messageTarget.className = 'message error';
+    }
+    return null;
+  }
+  setFieldError(field, '', true);
+  return patch;
+}
+
+function checkAdvancedConfigChanged() {
+  const field = document.getElementById('advanced-config-json');
+  const btn = document.getElementById('save-advanced-config');
+  if (!field || !btn) return;
+  const apiValid = hasValidApiContext();
+  const normalized = normalizeJsonObjectForCompare(field.value);
+  const valid = normalized !== null;
+  const changed = valid && normalized !== advancedConfigSavedNormalized;
+  field.dataset.dirty = changed ? 'true' : 'false';
+  setFieldError(field, valid ? '' : 'Advanced config patch must be valid JSON object syntax.', true);
+  setDirtySaveButtonState('save-advanced-config', changed, apiValid, valid);
+}
+
+const advancedConfigField = document.getElementById('advanced-config-json');
+if (advancedConfigField) {
+  advancedConfigField.addEventListener('input', () => {
+    checkAdvancedConfigChanged();
+    refreshCoreActionButtonsState();
+  });
+  advancedConfigField.addEventListener('blur', () => {
+    checkAdvancedConfigChanged();
+    refreshCoreActionButtonsState();
+  });
+}
+
 // Update threshold display when slider moves
 document.getElementById('cdp-threshold-slider').addEventListener('input', function() {
   document.getElementById('cdp-threshold-value').textContent = this.value;
@@ -1810,17 +2375,22 @@ async function refreshSharedConfig(reason = 'manual') {
   if (dashboardState && reason === 'auto-refresh' && !dashboardState.isTabStale('config')) return;
   const config = await dashboardApiClient.getConfig();
   if (dashboardState) dashboardState.setSnapshot('config', config);
+  statusPanel.update({ configSnapshot: config });
   updateConfigModeUi(config);
   updateBanDurations(config);
   updateRateLimitConfig(config);
   updateJsRequiredConfig(config);
   updateMazeConfig(config);
   updateGeoConfig(config);
+  updateHoneypotConfig(config);
+  updateBrowserPolicyConfig(config);
+  updateBypassAllowlistConfig(config);
   updateRobotsConfig(config);
   updateCdpConfig(config);
   updateEdgeIntegrationModeConfig(config);
   updatePowConfig(config);
   updateChallengeConfig(config);
+  setAdvancedConfigEditorFromConfig(config, true);
 }
 
 async function refreshMonitoringTab(reason = 'manual') {
@@ -2059,12 +2629,26 @@ configControls.bind({
   readIntegerFieldValue,
   readBanDurationSeconds,
   parseCountryCodesStrict,
+  parseHoneypotPathsTextarea,
+  parseBrowserRulesTextarea,
+  parseListTextarea,
+  normalizeListTextareaForCompare,
+  normalizeBrowserRulesForCompare,
   updateBanDurations,
   updateGeoConfig,
+  updateHoneypotConfig,
+  updateBrowserPolicyConfig,
+  updateBypassAllowlistConfig,
   updateEdgeIntegrationModeConfig,
   refreshRobotsPreview,
+  readAdvancedConfigPatch,
+  setAdvancedConfigFromConfig: setAdvancedConfigEditorFromConfig,
   refreshDashboard: () => refreshActiveTab('config-controls'),
-  onConfigSaved: () => {
+  onConfigSaved: (_patch, result) => {
+    if (result && result.config) {
+      statusPanel.update({ configSnapshot: result.config });
+      setAdvancedConfigEditorFromConfig(result.config, true);
+    }
     if (dashboardState) {
       dashboardState.invalidate('securityConfig');
       dashboardState.invalidate('monitoring');
@@ -2075,12 +2659,17 @@ configControls.bind({
   checkRobotsConfigChanged,
   checkAiPolicyConfigChanged,
   checkGeoConfigChanged,
+  checkHoneypotConfigChanged,
+  checkBrowserPolicyConfigChanged,
+  checkBypassAllowlistsConfigChanged,
   checkPowConfigChanged,
+  checkChallengeTransformConfigChanged,
   checkBotnessConfigChanged,
   checkCdpConfigChanged,
   checkEdgeIntegrationModeChanged,
   checkRateLimitConfigChanged,
   checkJsRequiredConfigChanged,
+  checkAdvancedConfigChanged,
   checkBanDurationsChanged,
   getGeoSavedState: () => geoSavedState,
   setGeoSavedState: (next) => {
@@ -2088,6 +2677,15 @@ configControls.bind({
   },
   setMazeSavedState: (next) => {
     mazeSavedState = next;
+  },
+  setHoneypotSavedState: (next) => {
+    honeypotSavedState = next;
+  },
+  setBrowserPolicySavedState: (next) => {
+    browserPolicySavedState = next;
+  },
+  setBypassAllowlistSavedState: (next) => {
+    bypassAllowlistSavedState = next;
   },
   setRobotsSavedState: (next) => {
     robotsSavedState = next;
@@ -2097,6 +2695,9 @@ configControls.bind({
   },
   setPowSavedState: (next) => {
     powSavedState = next;
+  },
+  setChallengeTransformSavedState: (next) => {
+    challengeTransformSavedState = next;
   },
   setBotnessSavedState: (next) => {
     botnessSavedState = next;
