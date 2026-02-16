@@ -221,20 +221,31 @@ pub fn handle_pow_verify(req: &Request, ip: &str, pow_enabled: bool) -> Response
         crate::request_validation::MAX_POW_VERIFY_BYTES,
     ) {
         Ok(v) => v,
-        Err(e) => return Response::new(400, e),
+        Err(e) => {
+            record_pow_failure("sequence_violation", ip);
+            return Response::new(400, e);
+        }
     };
     let seed = match json.get("seed").and_then(|v| v.as_str()) {
         Some(v) => v,
-        None => return Response::new(400, "Missing seed"),
+        None => {
+            record_pow_failure("missing_seed_nonce", ip);
+            return Response::new(400, "Missing seed");
+        }
     };
     if !crate::request_validation::validate_seed_token(seed) {
+        record_pow_failure("sequence_violation", ip);
         return Response::new(400, "Invalid seed");
     }
     let nonce = match json.get("nonce").and_then(|v| v.as_str()) {
         Some(v) => v,
-        None => return Response::new(400, "Missing nonce"),
+        None => {
+            record_pow_failure("missing_seed_nonce", ip);
+            return Response::new(400, "Missing nonce");
+        }
     };
     if !crate::request_validation::validate_nonce(nonce) {
+        record_pow_failure("missing_seed_nonce", ip);
         return Response::new(400, "Invalid nonce");
     }
 
@@ -247,6 +258,7 @@ pub fn handle_pow_verify(req: &Request, ip: &str, pow_enabled: bool) -> Response
                 crate::runtime::policy_taxonomy::PolicyTransition::SeqOpMissing,
                 "missing_operation_id",
             );
+            record_pow_failure("sequence_violation", ip);
             return Response::new(400, "Invalid seed");
         }
         Err(PowSeedTokenError::InvalidOperationEnvelope(_)) => {
@@ -254,6 +266,7 @@ pub fn handle_pow_verify(req: &Request, ip: &str, pow_enabled: bool) -> Response
                 crate::runtime::policy_taxonomy::PolicyTransition::SeqOpInvalid,
                 "invalid_operation_envelope",
             );
+            record_pow_failure("sequence_violation", ip);
             return Response::new(400, "Invalid seed");
         }
         Err(_) => {
@@ -261,6 +274,7 @@ pub fn handle_pow_verify(req: &Request, ip: &str, pow_enabled: bool) -> Response
                 crate::runtime::policy_taxonomy::PolicyTransition::SeqOpInvalid,
                 "invalid_seed_token",
             );
+            record_pow_failure("sequence_violation", ip);
             return Response::new(400, "Invalid seed");
         }
     };
@@ -271,6 +285,7 @@ pub fn handle_pow_verify(req: &Request, ip: &str, pow_enabled: bool) -> Response
             crate::runtime::policy_taxonomy::PolicyTransition::SeqOpExpired,
             "seed_expired",
         );
+        record_pow_failure("expired_replay", ip);
         return Response::new(400, "Seed expired");
     }
     match crate::challenge::operation_envelope::validate_ordering_window(
@@ -291,6 +306,7 @@ pub fn handle_pow_verify(req: &Request, ip: &str, pow_enabled: bool) -> Response
                 crate::runtime::policy_taxonomy::PolicyTransition::SeqOrderViolation,
                 "invalid_step_order",
             );
+            record_pow_failure("sequence_violation", ip);
             return Response::new(400, "Invalid step order");
         }
         Err(crate::challenge::operation_envelope::OrderingValidationError::WindowExceeded) => {
@@ -298,6 +314,7 @@ pub fn handle_pow_verify(req: &Request, ip: &str, pow_enabled: bool) -> Response
                 crate::runtime::policy_taxonomy::PolicyTransition::SeqWindowExceeded,
                 "sequence_window_exceeded",
             );
+            record_pow_failure("expired_replay", ip);
             return Response::new(400, "Seed expired");
         }
     }
@@ -320,6 +337,7 @@ pub fn handle_pow_verify(req: &Request, ip: &str, pow_enabled: bool) -> Response
             crate::runtime::policy_taxonomy::PolicyTransition::SeqBindingMismatch,
             "binding_mismatch",
         );
+        record_pow_failure("binding_timing_mismatch", ip);
         return Response::new(400, "Binding mismatch");
     }
 
@@ -352,6 +370,7 @@ pub fn handle_pow_verify(req: &Request, ip: &str, pow_enabled: bool) -> Response
                 crate::runtime::policy_taxonomy::PolicyTransition::SeqTimingTooFast,
                 "timing_too_fast",
             );
+            record_pow_failure("binding_timing_mismatch", ip);
             return Response::new(400, "Proof submitted too quickly");
         }
         Err(crate::challenge::operation_envelope::TimingValidationError::TooRegular) => {
@@ -359,6 +378,7 @@ pub fn handle_pow_verify(req: &Request, ip: &str, pow_enabled: bool) -> Response
                 crate::runtime::policy_taxonomy::PolicyTransition::SeqTimingTooRegular,
                 "timing_too_regular",
             );
+            record_pow_failure("binding_timing_mismatch", ip);
             return Response::new(400, "Suspicious request cadence");
         }
         Err(crate::challenge::operation_envelope::TimingValidationError::TooSlow) => {
@@ -366,6 +386,7 @@ pub fn handle_pow_verify(req: &Request, ip: &str, pow_enabled: bool) -> Response
                 crate::runtime::policy_taxonomy::PolicyTransition::SeqTimingTooSlow,
                 "timing_too_slow",
             );
+            record_pow_failure("binding_timing_mismatch", ip);
             return Response::new(400, "Seed expired");
         }
     }
@@ -383,6 +404,7 @@ pub fn handle_pow_verify(req: &Request, ip: &str, pow_enabled: bool) -> Response
                 crate::runtime::policy_taxonomy::PolicyTransition::SeqOpReplay,
                 "operation_replay_detected",
             );
+            record_pow_failure("expired_replay", ip);
             return Response::new(400, "Seed already used");
         }
         Err(crate::challenge::operation_envelope::ReplayValidationError::ExpiredOperation) => {
@@ -390,11 +412,13 @@ pub fn handle_pow_verify(req: &Request, ip: &str, pow_enabled: bool) -> Response
                 crate::runtime::policy_taxonomy::PolicyTransition::SeqOpExpired,
                 "operation_expired",
             );
+            record_pow_failure("expired_replay", ip);
             return Response::new(400, "Seed expired");
         }
     }
 
     if !verify_pow(seed, nonce, payload.difficulty) {
+        record_pow_failure("invalid_proof", ip);
         return Response::new(400, "Invalid proof");
     }
 
@@ -451,6 +475,12 @@ fn record_sequence_policy_violation(
                 admin: None,
             },
         );
+    }
+}
+
+fn record_pow_failure(reason: &str, ip: &str) {
+    if let Some(store) = try_open_default_store() {
+        crate::observability::monitoring::record_pow_failure(&store, ip, reason);
     }
 }
 

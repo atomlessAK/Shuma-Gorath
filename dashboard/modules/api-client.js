@@ -154,6 +154,17 @@
   /**
    * @param {unknown} payload
    */
+  function adaptMonitoring(payload) {
+    const source = asRecord(payload);
+    return {
+      summary: asRecord(source.summary),
+      prometheus: asRecord(source.prometheus)
+    };
+  }
+
+  /**
+   * @param {unknown} payload
+   */
   function adaptConfig(payload) {
     return asRecord(payload);
   }
@@ -321,6 +332,19 @@
       return adaptConfig(await request('/admin/config'));
     }
 
+    /**
+     * @param {{hours?: number, limit?: number}} [options]
+     */
+    async function getMonitoring(options = {}) {
+      const hours = Number.isFinite(options.hours) ? Number(options.hours) : 24;
+      const limit = Number.isFinite(options.limit) ? Number(options.limit) : 10;
+      return adaptMonitoring(
+        await request(
+          `/admin/monitoring?hours=${encodeURIComponent(String(hours))}&limit=${encodeURIComponent(String(limit))}`
+        )
+      );
+    }
+
     async function getRobotsPreview() {
       return adaptRobots(await request('/admin/robots'));
     }
@@ -370,6 +394,7 @@
       getMaze,
       getCdp,
       getCdpEvents,
+      getMonitoring,
       getConfig,
       getRobotsPreview,
       updateConfig,
@@ -387,6 +412,7 @@
     adaptMaze,
     adaptCdp,
     adaptCdpEvents,
+    adaptMonitoring,
     adaptConfig
   };
 })(window);

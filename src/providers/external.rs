@@ -369,6 +369,12 @@ fn record_rate_outage_decision_metric(
         crate::observability::metrics::MetricName::RateLimiterOutageDecisions,
         Some(label.as_str()),
     );
+    if action == RateLimiterOutageAction::Allow && decision == RateLimitDecision::Allowed {
+        crate::observability::monitoring::record_rate_outcome(store, "fallback_allow");
+    }
+    if action == RateLimiterOutageAction::Deny && decision == RateLimitDecision::Limited {
+        crate::observability::monitoring::record_rate_outcome(store, "fallback_deny");
+    }
 }
 
 fn record_rate_usage_fallback_metric(store: &Store, route_class: &str, reason: &str) {

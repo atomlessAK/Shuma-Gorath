@@ -28,6 +28,7 @@ pub(crate) fn maybe_handle_honeypot(
     if !crate::enforcement::honeypot::is_honeypot(path, &cfg.honeypots) {
         return None;
     }
+    crate::observability::monitoring::record_honeypot_hit(store, ip, path);
     let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
         crate::runtime::policy_taxonomy::PolicyTransition::HoneypotHit,
     );
@@ -47,6 +48,8 @@ pub(crate) fn maybe_handle_honeypot(
                 summary: Some(format!("path={}", path)),
             }),
         );
+    crate::observability::monitoring::record_rate_violation(store, ip, "limited");
+    crate::observability::monitoring::record_rate_outcome(store, "banned");
     crate::observability::metrics::increment(
         store,
         crate::observability::metrics::MetricName::BansTotal,
@@ -199,6 +202,11 @@ pub(crate) fn maybe_handle_geo_policy(
 
     match geo_assessment.route {
         crate::signals::geo::GeoPolicyRoute::Block => {
+            crate::observability::monitoring::record_geo_violation(
+                store,
+                geo_assessment.country.as_deref(),
+                "block",
+            );
             let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
                 crate::runtime::policy_taxonomy::PolicyTransition::GeoRouteBlock,
             );
@@ -240,6 +248,11 @@ pub(crate) fn maybe_handle_geo_policy(
                 geo_assessment.country.as_deref().unwrap_or("unknown")
             );
             if cfg.maze_enabled {
+                crate::observability::monitoring::record_geo_violation(
+                    store,
+                    geo_assessment.country.as_deref(),
+                    "maze",
+                );
                 let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
                     crate::runtime::policy_taxonomy::PolicyTransition::GeoRouteMaze,
                 );
@@ -264,6 +277,11 @@ pub(crate) fn maybe_handle_geo_policy(
                 );
             }
             if cfg.challenge_puzzle_enabled {
+                crate::observability::monitoring::record_geo_violation(
+                    store,
+                    geo_assessment.country.as_deref(),
+                    "challenge",
+                );
                 let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
                     crate::runtime::policy_taxonomy::PolicyTransition::GeoRouteMazeFallbackChallenge,
                 );
@@ -300,6 +318,11 @@ pub(crate) fn maybe_handle_geo_policy(
                     crate::runtime::policy_taxonomy::SignalId::GeoRouteMaze,
                 ]),
             );
+            crate::observability::monitoring::record_geo_violation(
+                store,
+                geo_assessment.country.as_deref(),
+                "block",
+            );
             crate::observability::metrics::record_policy_match(store, &policy_match);
             crate::observability::metrics::increment(
                 store,
@@ -330,6 +353,11 @@ pub(crate) fn maybe_handle_geo_policy(
                 geo_assessment.country.as_deref().unwrap_or("unknown")
             );
             if cfg.challenge_puzzle_enabled {
+                crate::observability::monitoring::record_geo_violation(
+                    store,
+                    geo_assessment.country.as_deref(),
+                    "challenge",
+                );
                 let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
                     crate::runtime::policy_taxonomy::PolicyTransition::GeoRouteChallenge,
                 );
@@ -362,6 +390,11 @@ pub(crate) fn maybe_handle_geo_policy(
                 );
             }
             if cfg.maze_enabled {
+                crate::observability::monitoring::record_geo_violation(
+                    store,
+                    geo_assessment.country.as_deref(),
+                    "maze",
+                );
                 let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
                     crate::runtime::policy_taxonomy::PolicyTransition::ChallengeDisabledFallbackMaze(vec![
                         crate::runtime::policy_taxonomy::SignalId::GeoRouteChallenge,
@@ -393,6 +426,11 @@ pub(crate) fn maybe_handle_geo_policy(
                 crate::runtime::policy_taxonomy::PolicyTransition::ChallengeDisabledFallbackBlock(vec![
                     crate::runtime::policy_taxonomy::SignalId::GeoRouteChallenge,
                 ]),
+            );
+            crate::observability::monitoring::record_geo_violation(
+                store,
+                geo_assessment.country.as_deref(),
+                "block",
             );
             crate::observability::metrics::record_policy_match(store, &policy_match);
             crate::observability::metrics::increment(

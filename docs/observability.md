@@ -10,6 +10,23 @@ GET /metrics
 
 This endpoint is unauthenticated for Prometheus compatibility. Restrict access at the network edge if required.
 
+## 🐙 Dashboard Monitoring Summary API
+
+The Monitoring tab now consumes a consolidated admin summary endpoint:
+
+```
+GET /admin/monitoring?hours=24&limit=10
+```
+
+This endpoint returns bounded-cardinality summaries for:
+- honeypot hits (top crawler buckets + top paths)
+- challenge failures (reasons + trend)
+- PoW failures (reasons + trend)
+- rate-limiting violations (outcomes + offenders)
+- GEO violations (actions + top countries)
+
+Use this endpoint for dashboard UX and operator API queries; use `/metrics` for external time-series scraping.
+
 ### 🐙 Metrics Included
 
 - `bot_defence_requests_total`

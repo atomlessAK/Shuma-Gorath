@@ -166,6 +166,171 @@
         </div>
       </div>
     </div>
+
+    <div class="section maze-section panel panel-border pad-md">
+      <h2>Honeypot Hits</h2>
+      <p class="section-desc text-muted">Structured honeypot telemetry (hits, offender buckets, and trap paths).</p>
+      <div class="maze-stats">
+        <div class="maze-stat panel panel-border pad-md">
+          <h3 class="caps-label">Total Hits</h3>
+          <span class="stat-value" id="honeypot-total-hits">-</span>
+        </div>
+        <div class="maze-stat panel panel-border pad-md">
+          <h3 class="caps-label">Unique Crawlers</h3>
+          <span class="stat-value" id="honeypot-unique-crawlers">-</span>
+        </div>
+      </div>
+      <div class="charts-row monitoring-split">
+        <div class="panel panel-border pad-md">
+          <h3>Top Crawlers in Honeypot</h3>
+          <div id="honeypot-top-crawlers" class="crawler-list">
+            <p class="no-data">No honeypot crawler data yet</p>
+          </div>
+        </div>
+        <div class="panel panel-border pad-md">
+          <h3>Top Honeypot Paths</h3>
+          <div id="honeypot-top-paths" class="crawler-list">
+            <p class="no-data">No honeypot path data yet</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section events">
+      <h2>Challenge Failures</h2>
+      <p class="section-desc text-muted">Challenge submit failures by reason class with trend and top offender buckets.</p>
+      <div class="stats-cards stats-cards--compact">
+        <div class="card panel panel-border pad-md">
+          <h3 class="caps-label">Total Failures</h3>
+          <div class="stat-value" id="challenge-failures-total">-</div>
+        </div>
+        <div class="card panel panel-border pad-md">
+          <h3 class="caps-label">Unique Offenders</h3>
+          <div class="stat-value" id="challenge-failures-unique">-</div>
+        </div>
+      </div>
+      <div class="chart-container panel-soft panel-border pad-md">
+        <canvas id="challengeFailuresTrendChart"></canvas>
+      </div>
+      <div class="charts-row monitoring-split">
+        <div class="panel panel-border pad-md">
+          <h3>Reason Breakdown</h3>
+          <div class="table-wrapper">
+            <table class="panel panel-border">
+              <thead>
+                <tr>
+                  <th class="caps-label">Reason</th>
+                  <th class="caps-label">Count</th>
+                </tr>
+              </thead>
+              <tbody id="challenge-failure-reasons"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel panel-border pad-md">
+          <h3>Top Offender Buckets</h3>
+          <div id="challenge-top-offenders" class="crawler-list">
+            <p class="no-data">No challenge failures yet</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section events">
+      <h2>PoW Failures</h2>
+      <p class="section-desc text-muted">PoW verification failures by reason class with trend and top offender buckets.</p>
+      <div class="stats-cards stats-cards--compact">
+        <div class="card panel panel-border pad-md">
+          <h3 class="caps-label">Total Failures</h3>
+          <div class="stat-value" id="pow-failures-total">-</div>
+        </div>
+        <div class="card panel panel-border pad-md">
+          <h3 class="caps-label">Unique Offenders</h3>
+          <div class="stat-value" id="pow-failures-unique">-</div>
+        </div>
+      </div>
+      <div class="chart-container panel-soft panel-border pad-md">
+        <canvas id="powFailuresTrendChart"></canvas>
+      </div>
+      <div class="charts-row monitoring-split">
+        <div class="panel panel-border pad-md">
+          <h3>Reason Breakdown</h3>
+          <div class="table-wrapper">
+            <table class="panel panel-border">
+              <thead>
+                <tr>
+                  <th class="caps-label">Reason</th>
+                  <th class="caps-label">Count</th>
+                </tr>
+              </thead>
+              <tbody id="pow-failure-reasons"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel panel-border pad-md">
+          <h3>Top Offender Buckets</h3>
+          <div id="pow-top-offenders" class="crawler-list">
+            <p class="no-data">No PoW failures yet</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section events">
+      <h2>Rate Limiting Violations</h2>
+      <p class="section-desc text-muted">Rate-limit offender buckets and enforcement outcomes.</p>
+      <div class="stats-cards stats-cards--compact">
+        <div class="card panel panel-border pad-md">
+          <h3 class="caps-label">Total Violations</h3>
+          <div class="stat-value" id="rate-violations-total">-</div>
+        </div>
+        <div class="card panel panel-border pad-md">
+          <h3 class="caps-label">Unique Offenders</h3>
+          <div class="stat-value" id="rate-violations-unique">-</div>
+        </div>
+      </div>
+      <div class="charts-row monitoring-split">
+        <div class="panel panel-border pad-md">
+          <h3>Enforcement Outcomes</h3>
+          <ul id="rate-outcomes-list" class="metric-list"></ul>
+        </div>
+        <div class="panel panel-border pad-md">
+          <h3>Top Offender Buckets</h3>
+          <div id="rate-top-offenders" class="crawler-list">
+            <p class="no-data">No rate-limit violations yet</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section events">
+      <h2>GEO Violations</h2>
+      <p class="section-desc text-muted">GEO policy actions by route and top country sources.</p>
+      <div class="stats-cards stats-cards--compact">
+        <div class="card panel panel-border pad-md">
+          <h3 class="caps-label">Total Violations</h3>
+          <div class="stat-value" id="geo-violations-total">-</div>
+        </div>
+        <div class="card panel panel-border pad-md">
+          <h3 class="caps-label">Action Mix</h3>
+          <div class="stat-value stat-value--small" id="geo-action-mix">-</div>
+        </div>
+      </div>
+      <div class="panel panel-border pad-md">
+        <h3>Top Countries Triggering GEO Actions</h3>
+        <div id="geo-top-countries" class="crawler-list">
+          <p class="no-data">No GEO violations yet</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="section panel panel-border pad-md">
+      <h2>Prometheus Export</h2>
+      <p class="section-desc text-muted">Pull the same telemetry series in Prometheus text format for Grafana/Prometheus external dashboards.</p>
+      <pre id="monitoring-prometheus-example" class="prometheus-example">curl -s http://127.0.0.1:3000/metrics | rg '^bot_defence_'</pre>
+      <button id="monitoring-prometheus-copy" class="btn btn-subtle" type="button">Copy Example Command</button>
+      <p id="monitoring-prometheus-note" class="text-muted prometheus-note"></p>
+    </div>
     </section>
 
     <!-- Admin Controls -->

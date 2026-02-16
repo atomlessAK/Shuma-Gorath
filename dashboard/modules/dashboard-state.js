@@ -51,6 +51,7 @@
         maze: null,
         cdp: null,
         cdpEvents: null,
+        monitoring: null,
         config: null
       },
       tabStatus: createTabStatusState()

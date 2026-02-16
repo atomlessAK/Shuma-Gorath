@@ -80,6 +80,13 @@ test('dashboard API adapters normalize sparse payloads safely', () => {
   assert.equal(maze.total_hits, 9);
   assert.equal(maze.unique_crawlers, 2);
   assert.deepEqual(toPlain(maze.top_crawlers), []);
+
+  const monitoring = api.adaptMonitoring({
+    summary: { honeypot: { total_hits: 1 } },
+    prometheus: { endpoint: '/metrics' }
+  });
+  assert.equal(monitoring.summary.honeypot.total_hits, 1);
+  assert.equal(monitoring.prometheus.endpoint, '/metrics');
 });
 
 test('dashboard API client parses JSON payloads when content-type is missing', async () => {

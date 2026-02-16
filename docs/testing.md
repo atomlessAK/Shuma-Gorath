@@ -95,7 +95,8 @@ Integration coverage includes:
 6. Metrics endpoint
 7. CDP report ingestion and auto-ban flow
 8. CDP stats counters in `/admin/cdp`
-9. Unban behavior
+9. Monitoring summary endpoint in `/admin/monitoring`
+10. Unban behavior
 
 ## 🐙 Dashboard E2E Smoke Tests (Playwright)
 

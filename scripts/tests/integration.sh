@@ -35,6 +35,7 @@
 #   23. External fingerprint advisory vs authoritative precedence
 #   24. External fingerprint authoritative mode enforces edge ban
 #   25. External rate-limiter unavailable downgrade-to-internal behavior
+#   26. Monitoring summary endpoint returns structured telemetry sections
 
 set -e
 
@@ -608,7 +609,29 @@ else
   echo -e "${YELLOW}DEBUG /admin/cdp:${NC} $cdp_stats_resp"
 fi
 
-# Test 21: unban_ip function works via admin endpoint  
+# Test 21: Consolidated monitoring summary endpoint
+info "Testing monitoring summary endpoint..."
+monitoring_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/monitoring?hours=24&limit=5")
+monitoring_shape_ok=$(python3 -c 'import json,sys
+try:
+    data=json.loads(sys.stdin.read())
+except Exception:
+    print("0")
+    raise SystemExit(0)
+summary=data.get("summary") or {}
+sections=["honeypot","challenge","pow","rate","geo"]
+ok=all(isinstance(summary.get(section), dict) for section in sections)
+prom=data.get("prometheus") or {}
+ok=ok and prom.get("endpoint")=="/metrics"
+print("1" if ok else "0")' <<< "$monitoring_resp")
+if [[ "$monitoring_shape_ok" == "1" ]]; then
+  pass "/admin/monitoring returns structured telemetry summary"
+else
+  fail "/admin/monitoring did not return expected summary shape"
+  echo -e "${YELLOW}DEBUG /admin/monitoring:${NC} $monitoring_resp"
+fi
+
+# Test 22: unban_ip function works via admin endpoint
 info "Testing unban functionality..."
 # First ban an IP
 curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/ban?ip=10.0.0.202&reason=test" > /dev/null
@@ -621,7 +644,7 @@ else
   echo -e "${YELLOW}DEBUG unban response:${NC} $unban_resp"
 fi
 
-# Test 22: External fingerprint advisory mode should not immediately ban on strong edge report
+# Test 23: External fingerprint advisory mode should not immediately ban on strong edge report
 info "Testing external fingerprint advisory precedence..."
 fingerprint_advisory_cfg=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -X POST \
   -H "Authorization: Bearer $SHUMA_API_KEY" \
@@ -655,7 +678,7 @@ else
   fi
 fi
 
-# Test 23: External fingerprint authoritative mode should enforce strong edge bans
+# Test 24: External fingerprint authoritative mode should enforce strong edge bans
 info "Testing external fingerprint authoritative precedence..."
 fingerprint_authoritative_cfg=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -X POST \
   -H "Authorization: Bearer $SHUMA_API_KEY" \
@@ -686,7 +709,7 @@ else
   fi
 fi
 
-# Test 24: External rate limiter missing backend explicitly downgrades to internal behavior
+# Test 25: External rate limiter missing backend explicitly downgrades to internal behavior
 info "Testing external rate limiter downgrade-to-internal behavior..."
 rate_fallback_cfg=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -X POST \
   -H "Authorization: Bearer $SHUMA_API_KEY" \

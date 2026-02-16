@@ -1066,6 +1066,40 @@ input:checked + .toggle-slider:before {
   font-style: italic;
 }
 
+.monitoring-split {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.metric-list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+}
+
+.metric-list li {
+  color: var(--panel-fg);
+}
+
+.stat-value--small {
+  font-size: var(--text-lg);
+  line-height: 1.35;
+}
+
+.prometheus-example {
+  margin: 10px 0;
+  padding: 12px 14px;
+  background: var(--panel-soft-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  overflow-x: auto;
+}
+
+.prometheus-note {
+  margin-top: 10px;
+}
+
 /* ===========================================
    Shared Admin Control Components
    =========================================== */

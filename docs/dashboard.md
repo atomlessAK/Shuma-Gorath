@@ -47,6 +47,13 @@ Tables:
 - Recent events (type, IP, timestamp, reason)
 - CDP detections & bans table (time-windowed CDP-only feed)
 - CDP cumulative totals (all-time detections + auto-bans)
+- Monitoring summaries:
+- Honeypot Hits (total hits, unique crawler buckets, top crawlers, top paths)
+- Challenge Failures (reason breakdown + trend)
+- PoW Failures (reason breakdown + trend)
+- Rate Limiting Violations (total, offenders, outcomes)
+- GEO Violations (actions + top countries)
+- Prometheus helper panel (copyable `/metrics` scrape examples)
 - Runtime Variable Inventory tables in Status tab:
 - full runtime config snapshot (including nested keys)
 - grouped by concern for faster operator scanning
@@ -111,6 +118,7 @@ Event log retention is controlled by `SHUMA_EVENT_LOG_RETENTION_HOURS` (default:
 - `GET  /admin/analytics`
 - `GET  /admin/events?hours=24`
 - `GET  /admin/cdp/events?hours=24&limit=500`
+- `GET  /admin/monitoring?hours=24&limit=10`
 - `GET  /admin/config`
 - `POST /admin/config`
 - `POST /admin/ban`

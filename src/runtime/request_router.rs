@@ -91,6 +91,7 @@ pub(crate) fn maybe_handle_early_route(req: &Request, path: &str) -> Option<Resp
         if let Ok(store) = Store::open_default() {
             let (response, outcome) =
                 crate::boundaries::handle_challenge_submit_with_outcome(&store, req);
+            let challenge_ip = crate::extract_client_ip(req);
             match outcome {
                 crate::boundaries::ChallengeSubmitOutcome::Solved => {
                     crate::observability::metrics::increment(
@@ -105,8 +106,18 @@ pub(crate) fn maybe_handle_early_route(req: &Request, path: &str) -> Option<Resp
                         crate::observability::metrics::MetricName::ChallengeIncorrectTotal,
                         None,
                     );
+                    crate::observability::monitoring::record_challenge_failure(
+                        &store,
+                        challenge_ip.as_str(),
+                        "incorrect",
+                    );
                 }
                 crate::boundaries::ChallengeSubmitOutcome::SequenceOpMissing => {
+                    crate::observability::monitoring::record_challenge_failure(
+                        &store,
+                        challenge_ip.as_str(),
+                        "sequence_violation",
+                    );
                     record_sequence_violation_for_challenge_submit(
                         &store,
                         req,
@@ -115,6 +126,11 @@ pub(crate) fn maybe_handle_early_route(req: &Request, path: &str) -> Option<Resp
                     );
                 }
                 crate::boundaries::ChallengeSubmitOutcome::SequenceOpInvalid => {
+                    crate::observability::monitoring::record_challenge_failure(
+                        &store,
+                        challenge_ip.as_str(),
+                        "sequence_violation",
+                    );
                     record_sequence_violation_for_challenge_submit(
                         &store,
                         req,
@@ -127,6 +143,11 @@ pub(crate) fn maybe_handle_early_route(req: &Request, path: &str) -> Option<Resp
                         &store,
                         crate::observability::metrics::MetricName::ChallengeExpiredReplayTotal,
                         None,
+                    );
+                    crate::observability::monitoring::record_challenge_failure(
+                        &store,
+                        challenge_ip.as_str(),
+                        "expired_replay",
                     );
                     record_sequence_violation_for_challenge_submit(
                         &store,
@@ -141,6 +162,11 @@ pub(crate) fn maybe_handle_early_route(req: &Request, path: &str) -> Option<Resp
                         crate::observability::metrics::MetricName::ChallengeExpiredReplayTotal,
                         None,
                     );
+                    crate::observability::monitoring::record_challenge_failure(
+                        &store,
+                        challenge_ip.as_str(),
+                        "expired_replay",
+                    );
                     record_sequence_violation_for_challenge_submit(
                         &store,
                         req,
@@ -154,6 +180,11 @@ pub(crate) fn maybe_handle_early_route(req: &Request, path: &str) -> Option<Resp
                         crate::observability::metrics::MetricName::ChallengeExpiredReplayTotal,
                         None,
                     );
+                    crate::observability::monitoring::record_challenge_failure(
+                        &store,
+                        challenge_ip.as_str(),
+                        "expired_replay",
+                    );
                     record_sequence_violation_for_challenge_submit(
                         &store,
                         req,
@@ -162,6 +193,11 @@ pub(crate) fn maybe_handle_early_route(req: &Request, path: &str) -> Option<Resp
                     );
                 }
                 crate::boundaries::ChallengeSubmitOutcome::SequenceOrderViolation => {
+                    crate::observability::monitoring::record_challenge_failure(
+                        &store,
+                        challenge_ip.as_str(),
+                        "sequence_violation",
+                    );
                     record_sequence_violation_for_challenge_submit(
                         &store,
                         req,
@@ -170,6 +206,11 @@ pub(crate) fn maybe_handle_early_route(req: &Request, path: &str) -> Option<Resp
                     );
                 }
                 crate::boundaries::ChallengeSubmitOutcome::SequenceBindingMismatch => {
+                    crate::observability::monitoring::record_challenge_failure(
+                        &store,
+                        challenge_ip.as_str(),
+                        "sequence_violation",
+                    );
                     record_sequence_violation_for_challenge_submit(
                         &store,
                         req,
@@ -178,6 +219,11 @@ pub(crate) fn maybe_handle_early_route(req: &Request, path: &str) -> Option<Resp
                     );
                 }
                 crate::boundaries::ChallengeSubmitOutcome::SequenceTimingTooFast => {
+                    crate::observability::monitoring::record_challenge_failure(
+                        &store,
+                        challenge_ip.as_str(),
+                        "sequence_violation",
+                    );
                     record_sequence_violation_for_challenge_submit(
                         &store,
                         req,
@@ -186,6 +232,11 @@ pub(crate) fn maybe_handle_early_route(req: &Request, path: &str) -> Option<Resp
                     );
                 }
                 crate::boundaries::ChallengeSubmitOutcome::SequenceTimingTooRegular => {
+                    crate::observability::monitoring::record_challenge_failure(
+                        &store,
+                        challenge_ip.as_str(),
+                        "sequence_violation",
+                    );
                     record_sequence_violation_for_challenge_submit(
                         &store,
                         req,
@@ -194,6 +245,11 @@ pub(crate) fn maybe_handle_early_route(req: &Request, path: &str) -> Option<Resp
                     );
                 }
                 crate::boundaries::ChallengeSubmitOutcome::SequenceTimingTooSlow => {
+                    crate::observability::monitoring::record_challenge_failure(
+                        &store,
+                        challenge_ip.as_str(),
+                        "sequence_violation",
+                    );
                     record_sequence_violation_for_challenge_submit(
                         &store,
                         req,
@@ -201,8 +257,20 @@ pub(crate) fn maybe_handle_early_route(req: &Request, path: &str) -> Option<Resp
                         "challenge_submit_timing_too_slow",
                     );
                 }
-                crate::boundaries::ChallengeSubmitOutcome::Forbidden
-                | crate::boundaries::ChallengeSubmitOutcome::InvalidOutput => {}
+                crate::boundaries::ChallengeSubmitOutcome::Forbidden => {
+                    crate::observability::monitoring::record_challenge_failure(
+                        &store,
+                        challenge_ip.as_str(),
+                        "forbidden",
+                    );
+                }
+                crate::boundaries::ChallengeSubmitOutcome::InvalidOutput => {
+                    crate::observability::monitoring::record_challenge_failure(
+                        &store,
+                        challenge_ip.as_str(),
+                        "invalid_output",
+                    );
+                }
             }
             return Some(response);
         }

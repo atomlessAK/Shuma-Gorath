@@ -217,6 +217,8 @@ let dashboardApiClient = null;
 let dashboardState = null;
 let autoRefreshTimer = null;
 let pageVisible = document.visibilityState !== 'hidden';
+let challengeFailuresTrendChart = null;
+let powFailuresTrendChart = null;
 
 const TAB_REFRESH_INTERVAL_MS = Object.freeze({
   monitoring: 30000,
@@ -224,6 +226,29 @@ const TAB_REFRESH_INTERVAL_MS = Object.freeze({
   status: 60000,
   config: 60000,
   tuning: 60000
+});
+
+const CHALLENGE_REASON_LABELS = Object.freeze({
+  incorrect: 'Incorrect',
+  expired_replay: 'Expired/Replay',
+  sequence_violation: 'Sequence Violation',
+  invalid_output: 'Invalid Output',
+  forbidden: 'Forbidden'
+});
+
+const POW_REASON_LABELS = Object.freeze({
+  invalid_proof: 'Invalid Proof',
+  missing_seed_nonce: 'Missing Seed/Nonce',
+  sequence_violation: 'Sequence Violation',
+  expired_replay: 'Expired/Replay',
+  binding_timing_mismatch: 'Binding/Timing Mismatch'
+});
+
+const RATE_OUTCOME_LABELS = Object.freeze({
+  limited: 'Limited',
+  banned: 'Banned',
+  fallback_allow: 'Fallback Allow',
+  fallback_deny: 'Fallback Deny'
 });
 
 function sanitizeIntegerText(value) {
@@ -1226,6 +1251,218 @@ function updateMazeStats(data) {
       </div>
     `;
   }).join('');
+}
+
+function formatMetricLabel(key, fallbackMap) {
+  if (fallbackMap && fallbackMap[key]) return fallbackMap[key];
+  return String(key || '-')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function formatTrendTimestamp(ts) {
+  if (!Number.isFinite(ts)) return '-';
+  return new Date(ts * 1000).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric'
+  });
+}
+
+function renderCountList(containerId, entries, emptyText, valueSuffix = '') {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const rows = Array.isArray(entries) ? entries : [];
+  if (!rows.length) {
+    container.innerHTML = `<p class="no-data">${escapeHtml(emptyText)}</p>`;
+    return;
+  }
+  container.innerHTML = rows.map((row) => {
+    const label = escapeHtml(row.label || '-');
+    const count = Number(row.count || 0).toLocaleString();
+    const suffix = valueSuffix ? ` ${escapeHtml(valueSuffix)}` : '';
+    return `
+      <div class="crawler-item panel panel-border">
+        <span class="crawler-ip">${label}</span>
+        <span class="crawler-hits">${count}${suffix}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderReasonTable(tbodyId, reasons, labels) {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  const source = reasons && typeof reasons === 'object' ? reasons : {};
+  const rows = Object.entries(source).sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0));
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="2" style="text-align: center; color: #6b7280;">No failures in window</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(([key, value]) => `
+    <tr>
+      <td>${escapeHtml(formatMetricLabel(key, labels))}</td>
+      <td>${Number(value || 0).toLocaleString()}</td>
+    </tr>
+  `).join('');
+}
+
+function renderOutcomeList(listId, outcomes) {
+  const list = document.getElementById(listId);
+  if (!list) return;
+  const source = outcomes && typeof outcomes === 'object' ? outcomes : {};
+  const rows = Object.entries(source).sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0));
+  if (!rows.length) {
+    list.innerHTML = '<li class="text-muted">No outcomes yet</li>';
+    return;
+  }
+  list.innerHTML = rows.map(([key, value]) => `
+    <li><strong>${escapeHtml(formatMetricLabel(key, RATE_OUTCOME_LABELS))}:</strong> ${Number(value || 0).toLocaleString()}</li>
+  `).join('');
+}
+
+function updateMonitoringTrendChart(existingChart, canvasId, trend, title, color) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || typeof Chart === 'undefined') return existingChart;
+  const ctx = canvas.getContext('2d');
+  const points = Array.isArray(trend) ? trend : [];
+  const labels = points.map((point) => formatTrendTimestamp(Number(point.ts || 0)));
+  const data = points.map((point) => Number(point.total || 0));
+
+  if (!existingChart) {
+    return new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: title,
+          data,
+          backgroundColor: color,
+          fill: true,
+          tension: 0.35,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: { stepSize: 1 }
+          }
+        }
+      }
+    });
+  }
+
+  existingChart.data.labels = labels;
+  existingChart.data.datasets[0].data = data;
+  existingChart.update();
+  return existingChart;
+}
+
+function updateMonitoringSummary(data) {
+  const summary = data && typeof data === 'object' ? data : {};
+  const honeypot = summary.honeypot || {};
+  const challenge = summary.challenge || {};
+  const pow = summary.pow || {};
+  const rate = summary.rate || {};
+  const geo = summary.geo || {};
+
+  const honeypotTotal = document.getElementById('honeypot-total-hits');
+  const honeypotUnique = document.getElementById('honeypot-unique-crawlers');
+  if (honeypotTotal) honeypotTotal.textContent = Number(honeypot.total_hits || 0).toLocaleString();
+  if (honeypotUnique) honeypotUnique.textContent = Number(honeypot.unique_crawlers || 0).toLocaleString();
+  renderCountList('honeypot-top-crawlers', honeypot.top_crawlers, 'No honeypot crawler data yet', 'hits');
+  renderCountList('honeypot-top-paths', honeypot.top_paths, 'No honeypot path data yet', 'hits');
+
+  const challengeTotal = document.getElementById('challenge-failures-total');
+  const challengeUnique = document.getElementById('challenge-failures-unique');
+  if (challengeTotal) challengeTotal.textContent = Number(challenge.total_failures || 0).toLocaleString();
+  if (challengeUnique) challengeUnique.textContent = Number(challenge.unique_offenders || 0).toLocaleString();
+  renderReasonTable('challenge-failure-reasons', challenge.reasons, CHALLENGE_REASON_LABELS);
+  renderCountList('challenge-top-offenders', challenge.top_offenders, 'No challenge failures yet', 'hits');
+  challengeFailuresTrendChart = updateMonitoringTrendChart(
+    challengeFailuresTrendChart,
+    'challengeFailuresTrendChart',
+    challenge.trend,
+    'Challenge Failures',
+    'rgba(255,205,235,0.95)'
+  );
+
+  const powTotal = document.getElementById('pow-failures-total');
+  const powUnique = document.getElementById('pow-failures-unique');
+  if (powTotal) powTotal.textContent = Number(pow.total_failures || 0).toLocaleString();
+  if (powUnique) powUnique.textContent = Number(pow.unique_offenders || 0).toLocaleString();
+  renderReasonTable('pow-failure-reasons', pow.reasons, POW_REASON_LABELS);
+  renderCountList('pow-top-offenders', pow.top_offenders, 'No PoW failures yet', 'hits');
+  powFailuresTrendChart = updateMonitoringTrendChart(
+    powFailuresTrendChart,
+    'powFailuresTrendChart',
+    pow.trend,
+    'PoW Failures',
+    'rgba(205,155,185,0.95)'
+  );
+
+  const rateTotal = document.getElementById('rate-violations-total');
+  const rateUnique = document.getElementById('rate-violations-unique');
+  if (rateTotal) rateTotal.textContent = Number(rate.total_violations || 0).toLocaleString();
+  if (rateUnique) rateUnique.textContent = Number(rate.unique_offenders || 0).toLocaleString();
+  renderOutcomeList('rate-outcomes-list', rate.outcomes);
+  renderCountList('rate-top-offenders', rate.top_offenders, 'No rate-limit violations yet', 'hits');
+
+  const geoTotal = document.getElementById('geo-violations-total');
+  const geoActionMix = document.getElementById('geo-action-mix');
+  if (geoTotal) geoTotal.textContent = Number(geo.total_violations || 0).toLocaleString();
+  if (geoActionMix) {
+    const block = Number(geo.actions?.block || 0).toLocaleString();
+    const challengeCount = Number(geo.actions?.challenge || 0).toLocaleString();
+    const maze = Number(geo.actions?.maze || 0).toLocaleString();
+    geoActionMix.textContent = `B:${block} C:${challengeCount} M:${maze}`;
+  }
+  renderCountList('geo-top-countries', geo.top_countries, 'No GEO violations yet', 'hits');
+}
+
+function updatePrometheusHelper(prometheusData) {
+  const example = document.getElementById('monitoring-prometheus-example');
+  const note = document.getElementById('monitoring-prometheus-note');
+  const endpoint = prometheusData && typeof prometheusData.endpoint === 'string'
+    ? prometheusData.endpoint
+    : '/metrics';
+  const examples = Array.isArray(prometheusData?.examples) ? prometheusData.examples : [];
+  const notes = Array.isArray(prometheusData?.notes) ? prometheusData.notes : [];
+  if (example) {
+    example.textContent = examples[1] || `curl -s http://127.0.0.1:3000${endpoint} | rg '^bot_defence_'`;
+  }
+  if (note) {
+    note.textContent = notes[0] || `Prometheus scrape endpoint: ${endpoint}`;
+  }
+}
+
+function bindPrometheusCopyButton() {
+  const button = document.getElementById('monitoring-prometheus-copy');
+  const example = document.getElementById('monitoring-prometheus-example');
+  if (!button || !example) return;
+  button.addEventListener('click', async () => {
+    const text = String(example.textContent || '').trim();
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      button.textContent = 'Copied';
+      window.setTimeout(() => {
+        button.textContent = 'Copy Example Command';
+      }, 1200);
+    } catch (_err) {
+      button.textContent = 'Copy Failed';
+      window.setTimeout(() => {
+        button.textContent = 'Copy Example Command';
+      }, 1500);
+    }
+  });
 }
 
 // Update maze config controls from loaded config
@@ -2414,14 +2651,25 @@ async function refreshMonitoringTab(reason = 'manual') {
   const cdpTotalAutoBans = document.getElementById('cdp-total-auto-bans');
   if (cdpTotalDetections) cdpTotalDetections.textContent = '...';
   if (cdpTotalAutoBans) cdpTotalAutoBans.textContent = '...';
+  const honeypotTotal = document.getElementById('honeypot-total-hits');
+  const challengeTotal = document.getElementById('challenge-failures-total');
+  const powTotal = document.getElementById('pow-failures-total');
+  const rateTotal = document.getElementById('rate-violations-total');
+  const geoTotal = document.getElementById('geo-violations-total');
+  if (honeypotTotal) honeypotTotal.textContent = '...';
+  if (challengeTotal) challengeTotal.textContent = '...';
+  if (powTotal) powTotal.textContent = '...';
+  if (rateTotal) rateTotal.textContent = '...';
+  if (geoTotal) geoTotal.textContent = '...';
 
-  const [analytics, events, bansData, mazeData, cdpData, cdpEventsData] = await Promise.all([
+  const [analytics, events, bansData, mazeData, cdpData, cdpEventsData, monitoringData] = await Promise.all([
     dashboardApiClient.getAnalytics(),
     dashboardApiClient.getEvents(24),
     dashboardApiClient.getBans(),
     dashboardApiClient.getMaze(),
     dashboardApiClient.getCdp(),
-    dashboardApiClient.getCdpEvents({ hours: 24, limit: 500 })
+    dashboardApiClient.getCdpEvents({ hours: 24, limit: 500 }),
+    dashboardApiClient.getMonitoring({ hours: 24, limit: 10 })
   ]);
 
   if (dashboardState) {
@@ -2431,6 +2679,7 @@ async function refreshMonitoringTab(reason = 'manual') {
     dashboardState.setSnapshot('maze', mazeData);
     dashboardState.setSnapshot('cdp', cdpData);
     dashboardState.setSnapshot('cdpEvents', cdpEventsData);
+    dashboardState.setSnapshot('monitoring', monitoringData);
   }
 
   updateStatCards(analytics, events, bansData.bans || []);
@@ -2441,6 +2690,8 @@ async function refreshMonitoringTab(reason = 'manual') {
   updateCdpTotals(cdpData);
   updateCdpEventsTable(cdpEventsData.events || []);
   updateMazeStats(mazeData);
+  updateMonitoringSummary(monitoringData.summary || {});
+  updatePrometheusHelper(monitoringData.prometheus || {});
 
   if (dashboardState && dashboardState.getDerivedState().monitoringEmpty) {
     showTabEmpty('monitoring', 'No operational events yet. Monitoring will populate as traffic arrives.');
@@ -2624,6 +2875,7 @@ dashboardTabCoordinator = tabLifecycleModule.createTabLifecycleCoordinator({
 });
 dashboardTabCoordinator.init();
 initInputValidation();
+bindPrometheusCopyButton();
 dashboardCharts.init({
   getAdminContext,
   apiClient: dashboardApiClient

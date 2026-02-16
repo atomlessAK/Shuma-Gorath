@@ -293,6 +293,11 @@ mod admin_config_tests {
             m.remove(key);
             Ok(())
         }
+
+        fn get_keys(&self) -> Result<Vec<String>, ()> {
+            let m = self.map.lock().unwrap();
+            Ok(m.keys().cloned().collect())
+        }
     }
 
     impl crate::maze::state::MazeStateStore for TestStore {
@@ -658,6 +663,52 @@ mod admin_config_tests {
             &Method::Get
         ));
         assert!(sanitize_path("/admin/maze/preview"));
+    }
+
+    #[test]
+    fn admin_monitoring_returns_structured_summary_shape() {
+        let _lock = crate::test_support::lock_env();
+        let store = TestStore::default();
+        crate::observability::monitoring::record_honeypot_hit(&store, "10.0.0.8", "/instaban");
+        crate::observability::monitoring::record_challenge_failure(
+            &store,
+            "198.51.100.7",
+            "incorrect",
+        );
+        crate::observability::monitoring::record_pow_failure(
+            &store,
+            "198.51.100.9",
+            "invalid_proof",
+        );
+        crate::observability::monitoring::record_rate_violation(&store, "203.0.113.11", "limited");
+        crate::observability::monitoring::record_geo_violation(&store, Some("US"), "challenge");
+
+        let req = make_request(Method::Get, "/admin/monitoring?hours=24&limit=5", Vec::new());
+        let resp = handle_admin_monitoring(&req, &store);
+        assert_eq!(*resp.status(), 200u16);
+        let body: serde_json::Value = serde_json::from_slice(resp.body()).unwrap();
+        let summary = body.get("summary").unwrap();
+
+        assert!(summary.get("honeypot").is_some());
+        assert!(summary.get("challenge").is_some());
+        assert!(summary.get("pow").is_some());
+        assert!(summary.get("rate").is_some());
+        assert!(summary.get("geo").is_some());
+        assert_eq!(
+            body.get("prometheus")
+                .and_then(|v| v.get("endpoint"))
+                .and_then(|v| v.as_str()),
+            Some("/metrics")
+        );
+        assert!(
+            summary
+                .get("challenge")
+                .and_then(|v| v.get("reasons"))
+                .and_then(|v| v.get("incorrect"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+                >= 1
+        );
     }
 
     #[test]
@@ -1347,6 +1398,10 @@ mod admin_auth_tests {
             "/admin/events",
             &Method::Post
         ));
+        assert!(!request_requires_admin_write(
+            "/admin/monitoring",
+            &Method::Post
+        ));
         assert!(!request_requires_admin_write("/admin/config", &Method::Get));
         assert!(!request_requires_admin_write(
             "/admin/analytics",
@@ -1394,6 +1449,7 @@ fn sanitize_path(path: &str) -> bool {
             | "/admin/robots"
             | "/admin/cdp"
             | "/admin/cdp/events"
+            | "/admin/monitoring"
     )
 }
 
@@ -3558,6 +3614,44 @@ where
     Response::new(200, body)
 }
 
+fn handle_admin_monitoring<S>(req: &Request, store: &S) -> Response
+where
+    S: crate::challenge::KeyValueStore,
+{
+    let hours = query_u64_param(req.query(), "hours", 24).clamp(1, 720);
+    let limit = query_u64_param(req.query(), "limit", 10).clamp(1, 50) as usize;
+    let summary = crate::observability::monitoring::summarize_with_store(store, hours, limit);
+
+    log_event(
+        store,
+        &EventLogEntry {
+            ts: now_ts(),
+            event: EventType::AdminAction,
+            ip: None,
+            reason: Some("monitoring_view".to_string()),
+            outcome: Some(format!("hours={} limit={}", hours, limit)),
+            admin: Some(crate::admin::auth::get_admin_id(req)),
+        },
+    );
+
+    let body = serde_json::to_string(&json!({
+        "summary": summary,
+        "prometheus": {
+            "endpoint": "/metrics",
+            "notes": [
+                "Use /metrics to scrape raw bot_defence_* series into Prometheus-compatible systems.",
+                "Monitoring widgets use bounded-cardinality counters; prefer the same labels in external dashboards."
+            ],
+            "examples": [
+                "curl -s http://127.0.0.1:3000/metrics",
+                "curl -s http://127.0.0.1:3000/metrics | rg '^bot_defence_'"
+            ]
+        }
+    }))
+    .unwrap();
+    Response::new(200, body)
+}
+
 /// Handles all /admin API endpoints.
 /// Supports:
 ///   - POST /admin/login: Exchange API key for short-lived admin session cookie
@@ -3569,6 +3663,7 @@ where
 ///   - GET /admin/analytics: Return ban count and test_mode status
 ///   - GET /admin/events: Query event log
 ///   - GET /admin/cdp/events: Query CDP-only events
+///   - GET /admin/monitoring: Query consolidated monitoring telemetry summaries
 ///   - GET /admin/config: Get current config including test_mode status
 ///   - POST /admin/config: Update config (e.g., toggle test_mode)
 ///   - GET /admin/config/export: Export non-secret runtime config for immutable deploy handoff
@@ -3775,6 +3870,9 @@ pub fn handle_admin(req: &Request) -> Response {
             .unwrap();
             Response::new(200, body)
         }
+        "/admin/monitoring" => {
+            handle_admin_monitoring(req, &store)
+        }
         "/admin/ban" => {
             let cfg = match crate::config::load_runtime_cached(&store, site_id) {
                 Ok(cfg) => cfg,
@@ -3964,7 +4062,7 @@ pub fn handle_admin(req: &Request) -> Response {
                     admin: Some(crate::admin::auth::get_admin_id(req)),
                 },
             );
-            Response::new(200, "WASM Bot Defence Admin API. Endpoints: /admin/ban, /admin/unban?ip=IP, /admin/analytics, /admin/events, /admin/config, /admin/config/export, /admin/maze (GET for maze stats), /admin/maze/preview (GET non-operational maze preview), /admin/maze/seeds (GET/POST seed source adapters), /admin/maze/seeds/refresh (POST manual seed refresh), /admin/robots (GET for robots.txt config & preview), /admin/cdp (GET for CDP detection config & stats), /admin/cdp/events (GET for CDP detection and auto-ban events).")
+            Response::new(200, "WASM Bot Defence Admin API. Endpoints: /admin/ban, /admin/unban?ip=IP, /admin/analytics, /admin/events, /admin/monitoring, /admin/config, /admin/config/export, /admin/maze (GET for maze stats), /admin/maze/preview (GET non-operational maze preview), /admin/maze/seeds (GET/POST seed source adapters), /admin/maze/seeds/refresh (POST manual seed refresh), /admin/robots (GET for robots.txt config & preview), /admin/cdp (GET for CDP detection config & stats), /admin/cdp/events (GET for CDP detection and auto-ban events).")
         }
         "/admin/maze" => {
             // Return maze statistics
