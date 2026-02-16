@@ -740,7 +740,12 @@ function adminConfigWriteEnabled(config) {
 
 function updateConfigModeUi(config) {
   const writeEnabled = adminConfigWriteEnabled(config);
+  const failModeFromConfig = parseBoolLike(config && config.kv_store_fail_open, true)
+    ? 'open'
+    : 'closed';
   statusPanel.update({
+    testMode: parseBoolLike(config && config.test_mode, false),
+    failMode: statusPanel.normalizeFailMode(failModeFromConfig),
     httpsEnforced: parseBoolLike(config && config.https_enforced, false),
     forwardedHeaderTrustConfigured: parseBoolLike(
       config && config.forwarded_header_trust_configured,

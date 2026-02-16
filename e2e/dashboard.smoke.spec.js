@@ -93,26 +93,33 @@ async function assertActiveTabPanelVisibility(page, activeTab) {
   }
 }
 
-async function openDashboard(page) {
+async function openDashboard(page, options = {}) {
+  const initialTab = typeof options.initialTab === "string" ? options.initialTab : "monitoring";
+  const targetUrl = `${BASE_URL}/dashboard/index.html#${initialTab}`;
   ensureRuntimeGuard(page);
-  await page.goto(`${BASE_URL}/dashboard/index.html`);
+  await page.goto(targetUrl);
   await page.waitForTimeout(250);
   if (page.url().includes("/dashboard/login.html")) {
     await page.fill("#login-apikey", API_KEY);
     await page.click("#login-submit");
     await expect(page).toHaveURL(/\/dashboard\/index\.html/);
   }
+  if (!page.url().endsWith(`#${initialTab}`)) {
+    await page.goto(targetUrl);
+  }
   await page.waitForSelector("#logout-btn", { timeout: 15000 });
   await expect(page.locator("#logout-btn")).toBeEnabled();
-  await page.waitForFunction(() => {
-    const total = document.getElementById("total-events")?.textContent?.trim();
-    return Boolean(total && total !== "-" && total !== "...");
-  }, { timeout: 15000 });
+  if (initialTab === "monitoring") {
+    await page.waitForFunction(() => {
+      const total = document.getElementById("total-events")?.textContent?.trim();
+      return Boolean(total && total !== "-" && total !== "...");
+    }, { timeout: 15000 });
+  }
   await page.waitForFunction(() => {
     const subtitle = document.getElementById("config-mode-subtitle")?.textContent || "";
     return !subtitle.includes("LOADING");
   }, { timeout: 15000 });
-  await assertActiveTabPanelVisibility(page, "monitoring");
+  await assertActiveTabPanelVisibility(page, initialTab);
   assertNoRuntimeFailures(page);
 }
 
@@ -205,6 +212,7 @@ test("dashboard clean-state renders explicit empty placeholders", async ({ page 
     rate_limit: 80,
     js_required_enforced: true,
     test_mode: false,
+    kv_store_fail_open: true,
     edge_integration_mode: "off",
     geo_risk: [],
     geo_allow: [],
@@ -296,6 +304,17 @@ test("dashboard loads and shows seeded operational data", async ({ page }) => {
 
   await expect(page.locator("#cdp-events tbody tr").first()).toBeVisible();
   await expect(page.locator("#cdp-total-detections")).not.toHaveText("-");
+});
+
+test("status tab resolves fail mode without requiring monitoring bootstrap", async ({ page }) => {
+  await openDashboard(page, { initialTab: "status" });
+  const failModeCard = page
+    .locator("#status-items .status-item")
+    .filter({ has: page.locator("h3", { hasText: "Fail Mode Policy" }) });
+
+  await expect(failModeCard).toHaveCount(1);
+  await expect(failModeCard.locator(".status-value")).toHaveText(/OPEN|CLOSED/);
+  await expect(failModeCard.locator(".status-value")).not.toHaveText("UNKNOWN");
 });
 
 test("ban form enforces IP validity and submit state", async ({ page }) => {

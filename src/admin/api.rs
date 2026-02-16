@@ -498,6 +498,7 @@ mod admin_config_tests {
         assert!(body.get("ai_policy_allow_search_engines").is_some());
         assert!(body.get("botness_maze_threshold").is_some());
         assert!(body.get("js_required_enforced").is_some());
+        assert!(body.get("kv_store_fail_open").is_some());
         assert!(body.get("botness_weights").is_some());
         assert!(body.get("defence_modes").is_some());
         assert!(body.get("provider_backends").is_some());
@@ -2851,6 +2852,7 @@ fn handle_admin_config(
                 "pow_difficulty": cfg.pow_difficulty,
                 "pow_ttl_seconds": cfg.pow_ttl_seconds,
                 "admin_config_write_enabled": crate::config::admin_config_write_enabled(),
+                "kv_store_fail_open": crate::config::kv_store_fail_open(),
                 "https_enforced": crate::config::https_enforced(),
                 "forwarded_header_trust_configured": crate::config::forwarded_header_trust_configured(),
                 "challenge_risk_threshold": cfg.challenge_risk_threshold,
@@ -2977,6 +2979,7 @@ fn handle_admin_config(
         "pow_difficulty": cfg.pow_difficulty,
         "pow_ttl_seconds": cfg.pow_ttl_seconds,
         "admin_config_write_enabled": crate::config::admin_config_write_enabled(),
+        "kv_store_fail_open": crate::config::kv_store_fail_open(),
         "https_enforced": crate::config::https_enforced(),
         "forwarded_header_trust_configured": crate::config::forwarded_header_trust_configured(),
         "challenge_risk_threshold": cfg.challenge_risk_threshold,
