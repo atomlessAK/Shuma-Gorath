@@ -11,6 +11,7 @@ function loadBrowserModule(relativePath, overrides = {}) {
     window: {
       ...overrides
     },
+    fetch: overrides.fetch || (typeof fetch === 'undefined' ? undefined : fetch),
     console,
     URL,
     Headers: typeof Headers === 'undefined' ? function HeadersShim() {} : Headers,
@@ -40,6 +41,37 @@ test('dashboard API adapters normalize sparse payloads safely', () => {
   assert.equal(maze.total_hits, 9);
   assert.equal(maze.unique_crawlers, 2);
   assert.deepEqual(toPlain(maze.top_crawlers), []);
+});
+
+test('dashboard API client parses JSON payloads when content-type is missing', async () => {
+  const payload = {
+    recent_events: [{ event: 'AdminAction', ts: 1700000000 }],
+    event_counts: { AdminAction: 1 },
+    top_ips: [['198.51.100.8', 1]],
+    unique_ips: 1
+  };
+  let requestUrl = '';
+  const browser = loadBrowserModule('dashboard/modules/api-client.js', {
+    fetch: async (url) => {
+      requestUrl = String(url);
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => '' },
+        text: async () => JSON.stringify(payload),
+        json: async () => payload
+      };
+    }
+  });
+  const api = browser.ShumaDashboardApiClient.create({
+    getAdminContext: () => ({ endpoint: 'http://example.test', apikey: '' })
+  });
+
+  const events = await api.getEvents(24);
+  assert.equal(requestUrl, 'http://example.test/admin/events?hours=24');
+  assert.equal(events.recent_events.length, 1);
+  assert.equal(events.unique_ips, 1);
+  assert.deepEqual(toPlain(events.top_ips), [['198.51.100.8', 1]]);
 });
 
 test('dashboard state invalidation scopes are explicit and bounded', () => {

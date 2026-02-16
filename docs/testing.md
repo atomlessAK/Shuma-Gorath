@@ -111,7 +111,7 @@ make test-dashboard-e2e
 
 Behavior:
 1. Installs pinned Playwright dependencies via `pnpm` (through `corepack`).
-2. Runs dashboard module unit tests (`node --test e2e/dashboard.modules.unit.test.js`) for response adapters, shared state primitives, and tab-router helpers.
+2. Runs dashboard module unit tests (`node --test e2e/dashboard.modules.unit.test.js`) for response adapters (including missing `Content-Type` JSON fallback), shared state primitives, and tab-router helpers.
 3. Seeds deterministic dashboard data before tests (admin ban + CDP report + admin view events).
 4. Runs browser smoke checks for core dashboard behavior:
    - page loads and refresh succeeds

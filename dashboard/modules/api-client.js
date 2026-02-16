@@ -181,6 +181,37 @@
     const onApiError = typeof options.onApiError === 'function' ? options.onApiError : null;
 
     /**
+     * Parse response payloads defensively because some local/runtime paths may
+     * omit content-type headers even when returning JSON.
+     *
+     * @param {Response} response
+     * @returns {Promise<unknown>}
+     */
+    async function parseResponsePayload(response) {
+      const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+      if (contentType.includes(JSON_CONTENT_TYPE)) {
+        try {
+          return await response.json();
+        } catch (_e) {
+          return await response.text();
+        }
+      }
+
+      const text = await response.text();
+      if (!text) return '';
+      const trimmed = text.trim();
+      if (!trimmed) return '';
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          return JSON.parse(trimmed);
+        } catch (_e) {
+          return text;
+        }
+      }
+      return text;
+    }
+
+    /**
      * @param {string} path
      * @param {RequestOptions} [options]
      */
@@ -221,10 +252,7 @@
         signal: options.signal
       });
 
-      const contentType = response.headers.get('content-type') || '';
-      const payload = contentType.includes(JSON_CONTENT_TYPE)
-        ? await response.json()
-        : await response.text();
+      const payload = await parseResponsePayload(response);
 
       if (response.status === 401) {
         if (onUnauthorized) onUnauthorized();

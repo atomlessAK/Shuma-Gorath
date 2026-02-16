@@ -68,6 +68,7 @@ Controls:
 - non-operational Maze Preview link in Maze config
 - Enter key submits inputs (API key, ban, unban)
 - Active-tab scoped auto-refresh (no background full-dashboard refresh on hidden tabs)
+- API client defensively parses JSON-shaped payloads even when upstream omits `Content-Type`, to prevent false empty-state rendering
 
 ## 🐙 Access
 
