@@ -10,11 +10,13 @@ Scope: `DSH-ESM-6`
 - Files:
   - `dashboard/modules/core/dom.js`
   - `dashboard/modules/core/format.js`
+  - `dashboard/modules/core/json-object.js`
 
 2. `services`
 - Stateful/runtime adapters and shared orchestration primitives.
 - Files:
   - `dashboard/modules/services/runtime-effects.js`
+  - `dashboard/modules/services/admin-endpoint.js`
   - `dashboard/modules/api-client.js`
   - `dashboard/modules/admin-session.js`
   - `dashboard/modules/dashboard-state.js`
@@ -28,6 +30,7 @@ Scope: `DSH-ESM-6`
 - Files:
   - `dashboard/modules/monitoring-view.js`
   - `dashboard/modules/tables-view.js`
+  - `dashboard/modules/tab-state-view.js`
   - `dashboard/modules/status.js`
   - `dashboard/modules/charts.js`
   - `dashboard/modules/config-controls.js`

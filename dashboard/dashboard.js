@@ -9,11 +9,15 @@ import * as dashboardApiClientModule from './modules/api-client.js';
 import * as dashboardStateModule from './modules/dashboard-state.js';
 import * as monitoringViewModule from './modules/monitoring-view.js';
 import * as tablesViewModule from './modules/tables-view.js';
+import * as configUiStateModule from './modules/config-ui-state.js';
+import * as tabStateViewModule from './modules/tab-state-view.js';
 import * as formatModule from './modules/core/format.js';
 import * as domModule from './modules/core/dom.js';
+import * as jsonObjectModule from './modules/core/json-object.js';
 import * as configSchemaModule from './modules/config-schema.js';
 import * as configDraftStoreModule from './modules/config-draft-store.js';
 import * as configFormUtilsModule from './modules/config-form-utils.js';
+import * as adminEndpointModule from './modules/services/admin-endpoint.js';
 import { createRuntimeEffects } from './modules/services/runtime-effects.js';
 
 const {
@@ -117,13 +121,14 @@ const ADVANCED_CONFIG_TEMPLATE_PATHS = Object.freeze(
 
 const IPV4_SEGMENT_PATTERN = /^\d{1,3}$/;
 const IPV6_INPUT_PATTERN = /^[0-9a-fA-F:.]+$/;
-let adminEndpointContext = null;
 let adminSessionController = null;
 let dashboardTabCoordinator = null;
 let dashboardApiClient = null;
 let dashboardState = null;
 let monitoringView = null;
 let tablesView = null;
+let tabStateView = null;
+let configUiState = null;
 let configDraftStore = null;
 let runtimeEffects = null;
 let autoRefreshTimer = null;
@@ -133,6 +138,7 @@ const getById = domCache.byId;
 const query = domCache.query;
 const queryAll = domCache.queryAll;
 const domWriteScheduler = domModule.createWriteScheduler();
+const resolveAdminApiEndpoint = adminEndpointModule.createAdminEndpointResolver({ window });
 
 const TAB_REFRESH_INTERVAL_MS = Object.freeze({
   monitoring: 30000,
@@ -159,80 +165,10 @@ function sanitizeIpText(value) {
   return (value || '').replace(/[^0-9a-fA-F:.]/g, '');
 }
 
-function sanitizeEndpointText(value) {
-  return (value || '').replace(/\s+/g, '').trim();
-}
-
-function cloneJsonValue(value) {
-  if (value === null || value === undefined) return null;
-  if (typeof value !== 'object') return value;
-  try {
-    return JSON.parse(JSON.stringify(value));
-  } catch (_e) {
-    return null;
-  }
-}
-
-function readValueAtPath(obj, path) {
-  const segments = String(path || '').split('.');
-  let cursor = obj;
-  for (const segment of segments) {
-    if (!segment || cursor === null || typeof cursor !== 'object') return undefined;
-    if (!Object.prototype.hasOwnProperty.call(cursor, segment)) return undefined;
-    cursor = cursor[segment];
-  }
-  return cursor;
-}
-
-function writeValueAtPath(target, path, value) {
-  const segments = String(path || '').split('.');
-  if (segments.length === 0) return;
-  let cursor = target;
-  for (let i = 0; i < segments.length; i += 1) {
-    const segment = segments[i];
-    if (!segment) return;
-    const isLeaf = i === segments.length - 1;
-    if (isLeaf) {
-      cursor[segment] = value;
-      return;
-    }
-    if (!cursor[segment] || typeof cursor[segment] !== 'object' || Array.isArray(cursor[segment])) {
-      cursor[segment] = {};
-    }
-    cursor = cursor[segment];
-  }
-}
-
-function buildAdvancedConfigTemplate(config) {
-  const template = {};
-  ADVANCED_CONFIG_TEMPLATE_PATHS.forEach((path) => {
-    const rawValue = readValueAtPath(config, path);
-    if (rawValue === undefined) return;
-    const cloned = cloneJsonValue(rawValue);
-    writeValueAtPath(template, path, cloned === null && rawValue !== null ? rawValue : cloned);
-  });
-  return template;
-}
-
-function normalizeJsonObjectForCompare(raw) {
-  try {
-    const parsed = JSON.parse(String(raw || '{}'));
-    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') return null;
-    return JSON.stringify(parsed);
-  } catch (_e) {
-    return null;
-  }
-}
-
-function isLoopbackHostname(hostname) {
-  const normalized = String(hostname || '').trim().toLowerCase();
-  return (
-    normalized === 'localhost' ||
-    normalized === '127.0.0.1' ||
-    normalized === '::1' ||
-    normalized === '[::1]'
-  );
-}
+const cloneJsonValue = jsonObjectModule.cloneJsonValue;
+const buildAdvancedConfigTemplate = (config) =>
+  jsonObjectModule.buildTemplateFromPaths(config, ADVANCED_CONFIG_TEMPLATE_PATHS);
+const normalizeJsonObjectForCompare = jsonObjectModule.normalizeJsonObjectForCompare;
 
 function fieldErrorIdFor(input) {
   const raw = input.id || input.name || 'field';
@@ -448,47 +384,6 @@ function isValidIpAddress(value) {
   return false;
 }
 
-function parseEndpointUrl(value) {
-  const sanitized = sanitizeEndpointText(value);
-  if (!sanitized) return null;
-  try {
-    const url = new URL(sanitized);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-    if (!url.hostname) return null;
-    const pathname = url.pathname === '/' ? '' : url.pathname.replace(/\/+$/, '');
-    return `${url.protocol}//${url.host}${pathname}`;
-  } catch (e) {
-    return null;
-  }
-}
-
-function resolveAdminApiEndpoint() {
-  if (adminEndpointContext) return adminEndpointContext;
-
-  const origin = window.location.origin || `${window.location.protocol}//${window.location.host}`;
-  let endpoint = parseEndpointUrl(origin) || origin;
-
-  // Local diagnostics only: allow ?api_endpoint=http://127.0.0.1:3000 override on loopback dashboards.
-  if (isLoopbackHostname(window.location.hostname)) {
-    const params = new URLSearchParams(window.location.search || '');
-    const override = sanitizeEndpointText(params.get('api_endpoint') || '');
-    if (override) {
-      const parsed = parseEndpointUrl(override);
-      if (parsed) {
-        try {
-          const parsedUrl = new URL(parsed);
-          if (isLoopbackHostname(parsedUrl.hostname)) {
-            endpoint = parsed;
-          }
-        } catch (_e) {}
-      }
-    }
-  }
-
-  adminEndpointContext = { endpoint };
-  return adminEndpointContext;
-}
-
 function validateIntegerFieldById(id, showInline = false) {
   const input = getById(id);
   const rules = INTEGER_FIELD_RULES[id];
@@ -583,58 +478,24 @@ function redirectToLogin() {
   window.location.replace(`/dashboard/login.html?next=${next}`);
 }
 
-function tabStateElement(tab) {
-  return query(`[data-tab-state="${tab}"]`);
-}
-
-function setTabStateMessage(tab, kind, message) {
-  const stateEl = tabStateElement(tab);
-  if (!stateEl) return;
-  const normalizedKind = kind === 'error' || kind === 'loading' || kind === 'empty' ? kind : '';
-  if (!normalizedKind) {
-    stateEl.hidden = true;
-    stateEl.textContent = '';
-    stateEl.className = 'tab-state';
-    return;
-  }
-  stateEl.hidden = false;
-  stateEl.textContent = String(message || '');
-  stateEl.className = `tab-state tab-state--${normalizedKind}`;
-}
-
 function showTabLoading(tab, message = 'Loading...') {
-  if (dashboardState) {
-    dashboardState.setTabLoading(tab, true);
-    dashboardState.clearTabError(tab);
-  }
-  setTabStateMessage(tab, 'loading', message);
+  if (!tabStateView) return;
+  tabStateView.showLoading(tab, message);
 }
 
 function showTabError(tab, message) {
-  if (dashboardState) {
-    dashboardState.setTabError(tab, message);
-    dashboardState.setTabEmpty(tab, false);
-  }
-  setTabStateMessage(tab, 'error', message);
+  if (!tabStateView) return;
+  tabStateView.showError(tab, message);
 }
 
 function showTabEmpty(tab, message) {
-  if (dashboardState) {
-    dashboardState.setTabEmpty(tab, true);
-    dashboardState.clearTabError(tab);
-    dashboardState.markTabUpdated(tab);
-  }
-  setTabStateMessage(tab, 'empty', message);
+  if (!tabStateView) return;
+  tabStateView.showEmpty(tab, message);
 }
 
 function clearTabStateMessage(tab) {
-  if (dashboardState) {
-    dashboardState.setTabLoading(tab, false);
-    dashboardState.setTabEmpty(tab, false);
-    dashboardState.clearTabError(tab);
-    dashboardState.markTabUpdated(tab);
-  }
-  setTabStateMessage(tab, '', '');
+  if (!tabStateView) return;
+  tabStateView.clear(tab);
 }
 
 function validateGeoFieldById(id, showInline = false) {
@@ -902,190 +763,37 @@ function updateStatCards(analytics, events, bans) {
 
 // Update ban duration fields from config
 function updateBanDurations(config) {
-  if (config.ban_durations) {
-    setBanDurationInputFromSeconds('honeypot', config.ban_durations.honeypot);
-    setBanDurationInputFromSeconds('rateLimit', config.ban_durations.rate_limit);
-    setBanDurationInputFromSeconds('browser', config.ban_durations.browser);
-    setBanDurationInputFromSeconds('cdp', config.ban_durations.cdp);
-    setBanDurationInputFromSeconds('admin', config.ban_durations.admin);
-    setDraft('banDurations', {
-      honeypot: Number.parseInt(config.ban_durations.honeypot, 10) || BAN_DURATION_FIELDS.honeypot.fallback,
-      rateLimit: Number.parseInt(config.ban_durations.rate_limit, 10) || BAN_DURATION_FIELDS.rateLimit.fallback,
-      browser: Number.parseInt(config.ban_durations.browser, 10) || BAN_DURATION_FIELDS.browser.fallback,
-      cdp: Number.parseInt(config.ban_durations.cdp, 10) || BAN_DURATION_FIELDS.cdp.fallback,
-      admin: Number.parseInt(config.ban_durations.admin, 10) || BAN_DURATION_FIELDS.admin.fallback
-    });
-    const btn = getById('save-durations-btn');
-    if (btn) {
-      btn.dataset.saving = 'false';
-      btn.disabled = true;
-      btn.textContent = 'Save Durations';
-    }
-  }
+  if (!configUiState) return;
+  configUiState.updateBanDurations(config);
 }
 
 // Update maze config controls from loaded config
 function updateMazeConfig(config) {
-  const statusPatch = {};
-  if (config.maze_enabled !== undefined) {
-    getById('maze-enabled-toggle').checked = config.maze_enabled;
-    statusPatch.mazeEnabled = config.maze_enabled === true;
-  }
-  if (config.maze_auto_ban !== undefined) {
-    getById('maze-auto-ban-toggle').checked = config.maze_auto_ban;
-    statusPatch.mazeAutoBan = config.maze_auto_ban === true;
-  }
-  if (config.maze_auto_ban_threshold !== undefined) {
-    getById('maze-threshold').value = config.maze_auto_ban_threshold;
-  }
-  setDraft('maze', {
-    enabled: getById('maze-enabled-toggle').checked,
-    autoBan: getById('maze-auto-ban-toggle').checked,
-    threshold: parseInt(getById('maze-threshold').value, 10) || 50
-  });
-  const btn = getById('save-maze-config');
-  if (btn) {
-    btn.dataset.saving = 'false';
-    btn.disabled = true;
-    btn.textContent = 'Save Maze Settings';
-  }
-  statusPanel.update(statusPatch);
-  statusPanel.render();
+  if (!configUiState) return;
+  configUiState.updateMazeConfig(config);
 }
 
 function updateGeoConfig(config) {
-  const mutable = adminConfigWriteEnabled(config);
-  const risk = formatCountryCodes(config.geo_risk);
-  const allow = formatCountryCodes(config.geo_allow);
-  const challenge = formatCountryCodes(config.geo_challenge);
-  const maze = formatCountryCodes(config.geo_maze);
-  const block = formatCountryCodes(config.geo_block);
-
-  getById('geo-risk-list').value = risk;
-  getById('geo-allow-list').value = allow;
-  getById('geo-challenge-list').value = challenge;
-  getById('geo-maze-list').value = maze;
-  getById('geo-block-list').value = block;
-
-  setDraft('geo', {
-    risk: normalizeCountryCodesForCompare(risk),
-    allow: normalizeCountryCodesForCompare(allow),
-    challenge: normalizeCountryCodesForCompare(challenge),
-    maze: normalizeCountryCodesForCompare(maze),
-    block: normalizeCountryCodesForCompare(block),
-    mutable
-  });
-
-  statusPanel.update({
-    geoRiskCount: Array.isArray(config.geo_risk) ? config.geo_risk.length : 0,
-    geoAllowCount: Array.isArray(config.geo_allow) ? config.geo_allow.length : 0,
-    geoChallengeCount: Array.isArray(config.geo_challenge) ? config.geo_challenge.length : 0,
-    geoMazeCount: Array.isArray(config.geo_maze) ? config.geo_maze.length : 0,
-    geoBlockCount: Array.isArray(config.geo_block) ? config.geo_block.length : 0
-  });
-  statusPanel.render();
-
-  setGeoConfigEditable(mutable);
-
-  const scoringBtn = getById('save-geo-scoring-config');
-  if (scoringBtn) {
-    scoringBtn.disabled = true;
-    scoringBtn.textContent = 'Save GEO Scoring';
-  }
-
-  const routingBtn = getById('save-geo-routing-config');
-  if (routingBtn) {
-    routingBtn.disabled = true;
-    routingBtn.textContent = 'Save GEO Routing';
-  }
+  if (!configUiState) return;
+  configUiState.updateGeoConfig(config);
 }
 
 function updateHoneypotConfig(config) {
-  const enabledToggle = getById('honeypot-enabled-toggle');
-  const field = getById('honeypot-paths');
-  if (!field) return;
-  if (enabledToggle) {
-    enabledToggle.checked = config.honeypot_enabled !== false;
-  }
-  const formatted = formatListTextarea(config.honeypots);
-  field.value = formatted;
-  setDraft('honeypot', {
-    enabled: enabledToggle ? enabledToggle.checked : true,
-    values: normalizeListTextareaForCompare(formatted)
-  });
-  const btn = getById('save-honeypot-config');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'Save Honeypots';
-  }
+  if (!configUiState) return;
+  configUiState.updateHoneypotConfig(config);
 }
 
 function updateBrowserPolicyConfig(config) {
-  const blockField = getById('browser-block-rules');
-  const whitelistField = getById('browser-whitelist-rules');
-  if (!blockField || !whitelistField) return;
-
-  const blockText = formatBrowserRulesTextarea(config.browser_block);
-  const whitelistText = formatBrowserRulesTextarea(config.browser_whitelist);
-  blockField.value = blockText;
-  whitelistField.value = whitelistText;
-  setDraft('browserPolicy', {
-    block: normalizeBrowserRulesForCompare(blockText),
-    whitelist: normalizeBrowserRulesForCompare(whitelistText)
-  });
-  const btn = getById('save-browser-policy-config');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'Save Browser Policy';
-  }
+  if (!configUiState) return;
+  configUiState.updateBrowserPolicyConfig(config);
 }
 
 function updateBypassAllowlistConfig(config) {
-  const networkField = getById('network-whitelist');
-  const pathField = getById('path-whitelist');
-  if (!networkField || !pathField) return;
-
-  const networkText = formatListTextarea(config.whitelist);
-  const pathText = formatListTextarea(config.path_whitelist);
-  networkField.value = networkText;
-  pathField.value = pathText;
-  setDraft('bypassAllowlists', {
-    network: normalizeListTextareaForCompare(networkText),
-    path: normalizeListTextareaForCompare(pathText)
-  });
-  const btn = getById('save-whitelist-config');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'Save Allowlists';
-  }
+  if (!configUiState) return;
+  configUiState.updateBypassAllowlistConfig(config);
 }
 
-const CONFIG_DRAFT_DEFAULTS = Object.freeze({
-  robots: { enabled: true, crawlDelay: 2 },
-  aiPolicy: { blockTraining: true, blockSearch: false, allowSearch: false },
-  cdp: { enabled: true, autoBan: true, threshold: 0.6 },
-  edgeMode: { mode: 'off' },
-  rateLimit: { value: 80 },
-  jsRequired: { enforced: true },
-  maze: { enabled: false, autoBan: false, threshold: 50 },
-  banDurations: { honeypot: 86400, rateLimit: 3600, browser: 21600, cdp: 43200, admin: 21600 },
-  pow: { enabled: true, difficulty: 15, ttl: 90, mutable: true },
-  botness: {
-    challengeThreshold: 3,
-    mazeThreshold: 6,
-    weightJsRequired: 1,
-    weightGeoRisk: 2,
-    weightRateMedium: 1,
-    weightRateHigh: 2,
-    mutable: true
-  },
-  geo: { risk: '', allow: '', challenge: '', maze: '', block: '', mutable: false },
-  honeypot: { enabled: true, values: '/instaban' },
-  browserPolicy: { block: '', whitelist: '' },
-  bypassAllowlists: { network: '', path: '' },
-  challengePuzzle: { enabled: true, count: 6, mutable: true },
-  advancedConfig: { normalized: '{}' }
-});
+const CONFIG_DRAFT_DEFAULTS = configUiStateModule.CONFIG_DRAFT_DEFAULTS;
 
 function getDraft(sectionKey) {
   const fallback = CONFIG_DRAFT_DEFAULTS[sectionKey] || null;
@@ -1103,76 +811,14 @@ function isDraftDirty(sectionKey, currentValue) {
   return configDraftStore.isDirty(sectionKey, currentValue);
 }
 
-const GEO_SCORING_FIELD_IDS = ['geo-risk-list'];
-const GEO_ROUTING_FIELD_IDS = [
-  'geo-allow-list',
-  'geo-challenge-list',
-  'geo-maze-list',
-  'geo-block-list'
-];
-const GEO_FIELD_IDS = [...GEO_SCORING_FIELD_IDS, ...GEO_ROUTING_FIELD_IDS];
-
-function setGeoConfigEditable(editable) {
-  GEO_FIELD_IDS.forEach(id => {
-    const field = getById(id);
-    field.disabled = !editable;
-    if (!editable) {
-      field.blur();
-    }
-  });
-}
-
-function sanitizeGeoTextareaValue(value) {
-  return (value || '')
-    .replace(/[^a-zA-Z,]/g, '')
-    .toUpperCase();
-}
-
-function formatCountryCodes(list) {
-  if (!Array.isArray(list) || list.length === 0) return '';
-  return list.join(',');
-}
+const GEO_SCORING_FIELD_IDS = configUiStateModule.GEO_SCORING_FIELD_IDS;
+const GEO_ROUTING_FIELD_IDS = configUiStateModule.GEO_ROUTING_FIELD_IDS;
+const GEO_FIELD_IDS = configUiStateModule.GEO_FIELD_IDS;
+const sanitizeGeoTextareaValue = configUiStateModule.sanitizeGeoTextareaValue;
 
 function updateRobotsConfig(config) {
-  // Update toggles from server config
-  if (config.robots_enabled !== undefined) {
-    getById('robots-enabled-toggle').checked = config.robots_enabled;
-  }
-  const aiBlockTraining = config.ai_policy_block_training ?? config.robots_block_ai_training;
-  if (aiBlockTraining !== undefined) {
-    getById('robots-block-training-toggle').checked = aiBlockTraining;
-  }
-  const aiBlockSearch = config.ai_policy_block_search ?? config.robots_block_ai_search;
-  if (aiBlockSearch !== undefined) {
-    getById('robots-block-search-toggle').checked = aiBlockSearch;
-  }
-  const aiAllowSearch = config.ai_policy_allow_search_engines ?? config.robots_allow_search_engines;
-  if (aiAllowSearch !== undefined) {
-    // Invert: toggle ON = restrict (allow=false), toggle OFF = allow (allow=true)
-    getById('robots-allow-search-toggle').checked = !aiAllowSearch;
-  }
-  if (config.robots_crawl_delay !== undefined) {
-    getById('robots-crawl-delay').value = config.robots_crawl_delay;
-  }
-  setDraft('robots', {
-    enabled: getById('robots-enabled-toggle').checked,
-    crawlDelay: parseInt(getById('robots-crawl-delay').value) || 2
-  });
-  setDraft('aiPolicy', {
-    blockTraining: getById('robots-block-training-toggle').checked,
-    blockSearch: getById('robots-block-search-toggle').checked,
-    allowSearch: getById('robots-allow-search-toggle').checked
-  });
-
-  const robotsBtn = getById('save-robots-config');
-  robotsBtn.disabled = true;
-  robotsBtn.textContent = 'Save robots serving';
-
-  const aiBtn = getById('save-ai-policy-config');
-  if (aiBtn) {
-    aiBtn.disabled = true;
-    aiBtn.textContent = 'Save AI bot policy';
-  }
+  if (!configUiState) return;
+  configUiState.updateRobotsConfig(config);
 }
 
 // Check if robots config has changed from saved state
@@ -1421,223 +1067,34 @@ getById('preview-robots').onclick = async function() {
 
 // Update CDP detection config controls from loaded config
 function updateCdpConfig(config) {
-  const statusPatch = {};
-  if (config.cdp_detection_enabled !== undefined) {
-    getById('cdp-enabled-toggle').checked = config.cdp_detection_enabled;
-    statusPatch.cdpEnabled = config.cdp_detection_enabled === true;
-  }
-  if (config.cdp_auto_ban !== undefined) {
-    getById('cdp-auto-ban-toggle').checked = config.cdp_auto_ban;
-    statusPatch.cdpAutoBan = config.cdp_auto_ban === true;
-  }
-  if (config.cdp_detection_threshold !== undefined) {
-    getById('cdp-threshold-slider').value = config.cdp_detection_threshold;
-     getById('cdp-threshold-value').textContent = parseFloat(config.cdp_detection_threshold).toFixed(1);
-  }
-  // Store saved state for change detection
-  setDraft('cdp', {
-    enabled: getById('cdp-enabled-toggle').checked,
-    autoBan: getById('cdp-auto-ban-toggle').checked,
-    threshold: parseFloat(getById('cdp-threshold-slider').value)
-  });
-  // Reset button state
-  const btn = getById('save-cdp-config');
-  btn.disabled = true;
-  btn.textContent = 'Save CDP Settings';
-  statusPanel.update(statusPatch);
-  statusPanel.render();
+  if (!configUiState) return;
+  configUiState.updateCdpConfig(config);
 }
 
 function updateEdgeIntegrationModeConfig(config) {
-  const mode = normalizeEdgeIntegrationMode(config.edge_integration_mode);
-  const select = getById('edge-integration-mode-select');
-  if (!select) return;
-  select.value = mode;
-  setDraft('edgeMode', { mode });
-
-  const btn = getById('save-edge-integration-mode-config');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'Save Edge Integration Mode';
-  }
+  if (!configUiState) return;
+  configUiState.updateEdgeIntegrationModeConfig(config);
 }
 
 function updateRateLimitConfig(config) {
-  const rateLimit = parseInt(config.rate_limit, 10) || 80;
-  const field = getById('rate-limit-threshold');
-  field.value = rateLimit;
-  setDraft('rateLimit', { value: rateLimit });
-  statusPanel.update({ rateLimit });
-  statusPanel.render();
-
-  const btn = getById('save-rate-limit-config');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'Save Rate Limit';
-  }
+  if (!configUiState) return;
+  configUiState.updateRateLimitConfig(config);
 }
 
 function updateJsRequiredConfig(config) {
-  const enforced = parseBoolLike(config.js_required_enforced, true);
-  const toggle = getById('js-required-enforced-toggle');
-  toggle.checked = enforced;
-  setDraft('jsRequired', { enforced });
-  statusPanel.update({ jsRequiredEnforced: enforced });
-  statusPanel.render();
-
-  const btn = getById('save-js-required-config');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'Save JS Required';
-  }
+  if (!configUiState) return;
+  configUiState.updateJsRequiredConfig(config);
 }
 
 // Update PoW config controls from loaded config
 function updatePowConfig(config) {
-  const powEnabled = parseBoolLike(config.pow_enabled, true);
-  const difficulty = parseInt(config.pow_difficulty, 10);
-  const ttl = parseInt(config.pow_ttl_seconds, 10);
-
-  statusPanel.update({
-    powEnabled
-  });
-  statusPanel.render();
-
-  if (!Number.isNaN(difficulty)) {
-    getById('pow-difficulty').value = difficulty;
-  }
-  if (!Number.isNaN(ttl)) {
-    getById('pow-ttl').value = ttl;
-  }
-  getById('pow-enabled-toggle').checked = powEnabled;
-
-  setDraft('pow', {
-    enabled: getById('pow-enabled-toggle').checked,
-    difficulty: parseInt(getById('pow-difficulty').value, 10) || 15,
-    ttl: parseInt(getById('pow-ttl').value, 10) || 90
-  });
-
-  const btn = getById('save-pow-config');
-  btn.disabled = true;
-  btn.textContent = 'Save PoW Settings';
-}
-
-function updateBotnessSignalDefinitions(signalDefinitions) {
-  const scoredSignals = (signalDefinitions && Array.isArray(signalDefinitions.scored_signals))
-    ? signalDefinitions.scored_signals
-    : [];
-  const terminalSignals = (signalDefinitions && Array.isArray(signalDefinitions.terminal_signals))
-    ? signalDefinitions.terminal_signals
-    : [];
-
-  const scoredTarget = getById('botness-signal-list');
-  const terminalTarget = getById('botness-terminal-list');
-
-  scoredTarget.innerHTML = scoredSignals.length
-    ? scoredSignals.map(signal => `
-      <div class="info-row">
-        <span class="info-label">${signal.label}</span>
-        <span>${signal.weight}</span>
-      </div>
-    `).join('')
-    : '<p class="text-muted">No scored signals</p>';
-
-  terminalTarget.innerHTML = terminalSignals.length
-    ? terminalSignals.map(signal => `
-      <div class="info-row">
-        <span class="info-label">${signal.label}</span>
-        <span>${signal.action}</span>
-      </div>
-    `).join('')
-    : '<p class="text-muted">No terminal signals</p>';
+  if (!configUiState) return;
+  configUiState.updatePowConfig(config);
 }
 
 function updateChallengeConfig(config) {
-  const writable = adminConfigWriteEnabled(config);
-  const challengeEnabled = config.challenge_puzzle_enabled !== false;
-  const challengeTransformCount = parseInt(config.challenge_puzzle_transform_count, 10);
-  const challengeThreshold = parseInt(config.challenge_puzzle_risk_threshold, 10);
-  const challengeDefault = parseInt(config.challenge_puzzle_risk_threshold_default, 10);
-  const mazeThreshold = parseInt(config.botness_maze_threshold, 10);
-  const mazeDefault = parseInt(config.botness_maze_threshold_default, 10);
-  const weights = config.botness_weights || {};
-
-  if (!Number.isNaN(challengeThreshold)) {
-    getById('challenge-puzzle-threshold').value = challengeThreshold;
-  }
-  if (!Number.isNaN(mazeThreshold)) {
-    getById('maze-threshold-score').value = mazeThreshold;
-  }
-  if (!Number.isNaN(challengeTransformCount)) {
-    getById('challenge-puzzle-transform-count').value = challengeTransformCount;
-  }
-  getById('challenge-puzzle-enabled-toggle').checked = challengeEnabled;
-  getById('weight-js-required').value = parseInt(weights.js_required, 10) || 1;
-  getById('weight-geo-risk').value = parseInt(weights.geo_risk, 10) || 2;
-  getById('weight-rate-medium').value = parseInt(weights.rate_medium, 10) || 1;
-  getById('weight-rate-high').value = parseInt(weights.rate_high, 10) || 2;
-
-  getById('botness-config-status').textContent = writable ? 'EDITABLE' : 'READ ONLY';
-  getById('challenge-puzzle-default').textContent = Number.isNaN(challengeDefault) ? '--' : challengeDefault;
-  getById('maze-threshold-default').textContent = Number.isNaN(mazeDefault) ? '--' : mazeDefault;
-
-  statusPanel.update({
-    challengeEnabled,
-    challengeThreshold: Number.isNaN(challengeThreshold) ? 3 : challengeThreshold,
-    mazeThreshold: Number.isNaN(mazeThreshold) ? 6 : mazeThreshold,
-    botnessWeights: {
-      js_required: parseInt(weights.js_required, 10) || 0,
-      geo_risk: parseInt(weights.geo_risk, 10) || 0,
-      rate_medium: parseInt(weights.rate_medium, 10) || 0,
-      rate_high: parseInt(weights.rate_high, 10) || 0
-    }
-  });
-
-  const editableFields = [
-    'challenge-puzzle-threshold',
-    'maze-threshold-score',
-    'weight-js-required',
-    'weight-geo-risk',
-    'weight-rate-medium',
-    'weight-rate-high'
-  ];
-  editableFields.forEach(id => {
-    getById(id).disabled = !writable;
-  });
-
-  setDraft('botness', {
-    challengeThreshold: parseInt(getById('challenge-puzzle-threshold').value, 10) || 3,
-    mazeThreshold: parseInt(getById('maze-threshold-score').value, 10) || 6,
-    weightJsRequired: parseInt(getById('weight-js-required').value, 10) || 1,
-    weightGeoRisk: parseInt(getById('weight-geo-risk').value, 10) || 2,
-    weightRateMedium: parseInt(getById('weight-rate-medium').value, 10) || 1,
-    weightRateHigh: parseInt(getById('weight-rate-high').value, 10) || 2
-  });
-
-  updateBotnessSignalDefinitions(config.botness_signal_definitions);
-
-  const btn = getById('save-botness-config');
-  btn.disabled = true;
-  btn.textContent = 'Save Botness Settings';
-
-  setDraft('challengePuzzle', {
-    enabled: getById('challenge-puzzle-enabled-toggle').checked,
-    count: parseInt(getById('challenge-puzzle-transform-count').value, 10) || 6
-  });
-  const challengeBtn = getById('save-challenge-puzzle-config');
-  if (challengeBtn) {
-    challengeBtn.disabled = true;
-    challengeBtn.textContent = 'Save Challenge Puzzle';
-  }
-  const challengeTransformField = getById('challenge-puzzle-transform-count');
-  const challengeEnabledToggle = getById('challenge-puzzle-enabled-toggle');
-  if (challengeTransformField) {
-    challengeTransformField.disabled = !writable;
-  }
-  if (challengeEnabledToggle) {
-    challengeEnabledToggle.disabled = !writable;
-  }
-  statusPanel.render();
+  if (!configUiState) return;
+  configUiState.updateChallengeConfig(config);
 }
 
 function checkPowConfigChanged() {
@@ -1784,25 +1241,8 @@ function checkJsRequiredConfigChanged() {
 getById('js-required-enforced-toggle').addEventListener('change', checkJsRequiredConfigChanged);
 
 function setAdvancedConfigEditorFromConfig(config, preserveDirty = true) {
-  const field = getById('advanced-config-json');
-  if (!field) return;
-  const previousBaseline = getDraft('advancedConfig').normalized || '{}';
-  const template = buildAdvancedConfigTemplate(config || {});
-  const formatted = JSON.stringify(template, null, 2);
-  const currentNormalized = normalizeJsonObjectForCompare(field.value);
-  const hasUnsavedEdits = field.dataset.dirty === 'true';
-
-  setDraft('advancedConfig', { normalized: normalizeJsonObjectForCompare(formatted) || '{}' });
-
-  const shouldReplace =
-    !preserveDirty ||
-    !hasUnsavedEdits ||
-    currentNormalized === previousBaseline ||
-    !String(field.value || '').trim();
-
-  if (shouldReplace) {
-    field.value = formatted;
-  }
+  if (!configUiState) return;
+  configUiState.setAdvancedConfigEditorFromConfig(config, preserveDirty);
   checkAdvancedConfigChanged();
 }
 
@@ -2176,6 +1616,10 @@ runtimeEffects = createRuntimeEffects();
 dashboardState = dashboardStateModule.create({
   initialTab: tabLifecycleModule.DEFAULT_DASHBOARD_TAB
 });
+tabStateView = tabStateViewModule.create({
+  query,
+  getStateStore: () => dashboardState
+});
 
 adminSessionController = adminSessionModule.create({
   resolveAdminApiEndpoint,
@@ -2215,6 +1659,25 @@ tablesView = tablesViewModule.create({
       msg.className = 'message error';
     }
   }
+});
+
+configUiState = configUiStateModule.create({
+  getById,
+  setDraft,
+  getDraft,
+  statusPanel,
+  adminConfigWriteEnabled,
+  parseBoolLike,
+  normalizeEdgeIntegrationMode,
+  normalizeCountryCodesForCompare,
+  formatListTextarea,
+  normalizeListTextareaForCompare,
+  formatBrowserRulesTextarea,
+  normalizeBrowserRulesForCompare,
+  setBanDurationInputFromSeconds,
+  banDurationFields: BAN_DURATION_FIELDS,
+  buildAdvancedConfigTemplate,
+  normalizeJsonObjectForCompare
 });
 
 dashboardTabCoordinator = tabLifecycleModule.createTabLifecycleCoordinator({

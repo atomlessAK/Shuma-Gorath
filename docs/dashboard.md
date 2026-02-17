@@ -148,11 +148,14 @@ dashboard/
   assets/vendor/chart-lite-1.0.0.min.js
   modules/core/format.js
   modules/core/dom.js
+  modules/core/json-object.js
   modules/api-client.js
   modules/config-draft-store.js
   modules/config-form-utils.js
   modules/config-schema.js
   modules/config-controls.js
+  modules/tab-state-view.js
+  modules/services/admin-endpoint.js
   modules/services/runtime-effects.js
   modules/status.js
   modules/dashboard-state.js
@@ -174,8 +177,10 @@ dashboard/
 8. `modules/config-draft-store.js` provides one immutable dirty-state baseline (`get`/`set`/`isDirty`) for config panes.
 9. `modules/tables-view.js` owns bans/events/CDP table rendering and quick-unban row action wiring.
 10. Shared DOM writes are batched through a write scheduler and chart redraws are skipped when label/series data are unchanged.
-11. Runtime side effects (request adapter, clipboard copy, timers) flow through `modules/services/runtime-effects.js` so feature logic is easier to test.
-12. Active tab refresh pipeline fetches only required data for that tab.
+11. Tab-state surface rendering/transitions are encapsulated in `modules/tab-state-view.js` to keep tab UI state logic out of the main orchestrator.
+12. Runtime endpoint resolution is centralized in `modules/services/admin-endpoint.js` for deterministic same-origin behavior and local loopback override handling.
+13. Runtime side effects (request adapter, clipboard copy, timers) flow through `modules/services/runtime-effects.js` so feature logic is easier to test.
+14. Active tab refresh pipeline fetches only required data for that tab.
 
 ## 🐙 Local Asset Provenance
 

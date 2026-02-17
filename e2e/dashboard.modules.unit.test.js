@@ -559,6 +559,129 @@ test('config form utils preserve legacy textarea parsing semantics', { concurren
   });
 });
 
+test('json object helpers build templates and normalize JSON compare values', { concurrency: false }, async () => {
+  await withBrowserGlobals({}, async () => {
+    const objectUtils = await importBrowserModule('dashboard/modules/core/json-object.js');
+    assert.ok(objectUtils);
+
+    const source = {
+      maze_enabled: true,
+      provider_backends: { challenge_engine: 'internal', fingerprint_signal: 'external' },
+      nested: { deep: { value: 7 } }
+    };
+    const template = objectUtils.buildTemplateFromPaths(source, [
+      'maze_enabled',
+      'provider_backends.challenge_engine',
+      'nested.deep.value'
+    ]);
+    assert.deepEqual(toPlain(template), {
+      maze_enabled: true,
+      provider_backends: { challenge_engine: 'internal' },
+      nested: { deep: { value: 7 } }
+    });
+
+    assert.equal(objectUtils.normalizeJsonObjectForCompare('{\"a\":1}'), '{\"a\":1}');
+    assert.equal(objectUtils.normalizeJsonObjectForCompare('[1,2]'), null);
+    assert.equal(objectUtils.normalizeJsonObjectForCompare('{bad json'), null);
+  });
+});
+
+test('admin endpoint resolver applies loopback override only for local hostnames', { concurrency: false }, async () => {
+  await withBrowserGlobals({
+    window: {
+      location: {
+        origin: 'http://127.0.0.1:3000',
+        protocol: 'http:',
+        host: '127.0.0.1:3000',
+        hostname: '127.0.0.1',
+        search: '?api_endpoint=http://127.0.0.1:4000/admin'
+      }
+    }
+  }, async () => {
+    const endpointModule = await importBrowserModule('dashboard/modules/services/admin-endpoint.js');
+    assert.ok(endpointModule);
+
+    const resolve = endpointModule.createAdminEndpointResolver({ window });
+    const first = resolve();
+    const second = resolve();
+    assert.equal(first.endpoint, 'http://127.0.0.1:4000/admin');
+    assert.equal(first, second);
+  });
+
+  await withBrowserGlobals({
+    window: {
+      location: {
+        origin: 'https://example.com',
+        protocol: 'https:',
+        host: 'example.com',
+        hostname: 'example.com',
+        search: '?api_endpoint=http://127.0.0.1:4000/admin'
+      }
+    }
+  }, async () => {
+    const endpointModule = await importBrowserModule('dashboard/modules/services/admin-endpoint.js');
+    const resolve = endpointModule.createAdminEndpointResolver({ window });
+    assert.equal(resolve().endpoint, 'https://example.com');
+  });
+});
+
+test('tab state view updates element state and dashboard-state hooks', { concurrency: false }, async () => {
+  const stateEl = {
+    hidden: true,
+    textContent: '',
+    className: 'tab-state'
+  };
+  const calls = [];
+  const stateStore = {
+    setTabLoading: (...args) => calls.push(['setTabLoading', ...args]),
+    clearTabError: (...args) => calls.push(['clearTabError', ...args]),
+    setTabError: (...args) => calls.push(['setTabError', ...args]),
+    setTabEmpty: (...args) => calls.push(['setTabEmpty', ...args]),
+    markTabUpdated: (...args) => calls.push(['markTabUpdated', ...args])
+  };
+
+  await withBrowserGlobals({}, async () => {
+    const tabStateModule = await importBrowserModule('dashboard/modules/tab-state-view.js');
+    const view = tabStateModule.create({
+      query: (selector) => (selector === '[data-tab-state="monitoring"]' ? stateEl : null),
+      getStateStore: () => stateStore
+    });
+
+    view.showLoading('monitoring', 'Loading monitoring...');
+    assert.equal(stateEl.hidden, false);
+    assert.equal(stateEl.className, 'tab-state tab-state--loading');
+    assert.equal(stateEl.textContent, 'Loading monitoring...');
+
+    view.showError('monitoring', 'failed');
+    assert.equal(stateEl.className, 'tab-state tab-state--error');
+    assert.equal(stateEl.textContent, 'failed');
+
+    view.showEmpty('monitoring', 'no data');
+    assert.equal(stateEl.className, 'tab-state tab-state--empty');
+    assert.equal(stateEl.textContent, 'no data');
+
+    view.clear('monitoring');
+    assert.equal(stateEl.hidden, true);
+    assert.equal(stateEl.className, 'tab-state');
+    assert.equal(stateEl.textContent, '');
+  });
+
+  const callNames = calls.map((entry) => entry[0]);
+  assert.deepEqual(callNames, [
+    'setTabLoading',
+    'clearTabError',
+    'setTabError',
+    'setTabEmpty',
+    'setTabEmpty',
+    'clearTabError',
+    'markTabUpdated',
+    'setTabLoading',
+    'setTabEmpty',
+    'clearTabError',
+    'markTabUpdated'
+  ]);
+});
+
 test('config controls flattens grouped bind options and preserves explicit overrides', { concurrency: false }, async () => {
   const mockDocument = {
     getElementById: () => null,
@@ -771,6 +894,17 @@ test('dashboard ESM guardrails forbid legacy global registry and class syntax', 
       `class declaration found in ${filePath}`
     );
   });
+});
+
+test('dashboard main wires config UI state through module factory', () => {
+  const dashboardPath = path.resolve(__dirname, '..', 'dashboard', 'dashboard.js');
+  const source = fs.readFileSync(dashboardPath, 'utf8');
+
+  assert.equal(
+    source.includes('configUiState = configUiStateModule.create('),
+    true,
+    'dashboard.js must initialize configUiState from config-ui-state module'
+  );
 });
 
 test('dashboard module graph is layered (core -> services -> features -> main) with no cycles', () => {
