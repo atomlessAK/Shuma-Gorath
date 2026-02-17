@@ -1224,6 +1224,33 @@ function updateCdpTotals(cdpData) {
   }
 }
 
+function normalizeOffenderBucketLabel(rawLabel) {
+  const label = String(rawLabel || '').trim();
+  if (!label) return 'untrusted/unknown';
+  if (label.toLowerCase() === 'unknown') return 'untrusted/unknown';
+  if (/^h\d+$/i.test(label)) return 'untrusted/unknown';
+  return label;
+}
+
+function formatUnitLabel(count, singular, plural) {
+  return count === 1 ? singular : plural;
+}
+
+function setTopOffenderCard(valueElement, labelElement, rawLabel, rawCount, singularUnit, pluralUnit) {
+  if (!valueElement || !labelElement) return;
+  const label = String(rawLabel || '').trim();
+  const count = Number(rawCount || 0);
+  if (!label || !Number.isFinite(count) || count <= 0) {
+    valueElement.textContent = 'None';
+    labelElement.textContent = 'Top Offender';
+    return;
+  }
+  const normalizedLabel = normalizeOffenderBucketLabel(label);
+  const unit = formatUnitLabel(count, singularUnit, pluralUnit);
+  valueElement.textContent = normalizedLabel;
+  labelElement.textContent = `Top Offender (${count.toLocaleString()} ${unit})`;
+}
+
 // Update maze stats section
 function updateMazeStats(data) {
   document.getElementById('maze-total-hits').textContent = 
@@ -1232,25 +1259,22 @@ function updateMazeStats(data) {
     data.unique_crawlers?.toLocaleString() || '0';
   document.getElementById('maze-auto-bans').textContent = 
     data.maze_auto_bans?.toLocaleString() || '0';
-  
-  // Update crawler list
-  const crawlerList = document.getElementById('maze-crawler-list');
-  const crawlers = data.top_crawlers || [];
-  
-  if (crawlers.length === 0) {
-    crawlerList.innerHTML = '<p class="no-data">No crawlers in maze yet</p>';
-    return;
+
+  const topOffender = document.getElementById('maze-top-offender');
+  const topOffenderLabel = document.getElementById('maze-top-offender-label');
+  if (topOffender) {
+    const topCrawler = Array.isArray(data.top_crawlers) && data.top_crawlers.length
+      ? data.top_crawlers[0]
+      : null;
+    setTopOffenderCard(
+      topOffender,
+      topOffenderLabel,
+      topCrawler?.ip,
+      topCrawler?.hits,
+      'page',
+      'pages'
+    );
   }
-  
-  crawlerList.innerHTML = crawlers.map(crawler => {
-    const isHigh = crawler.hits >= 30;
-    return `
-      <div class="crawler-item panel panel-border">
-        <span class="crawler-ip">${crawler.ip}</span>
-        <span class="crawler-hits ${isHigh ? 'high' : ''}">${crawler.hits} pages</span>
-      </div>
-    `;
-  }).join('');
 }
 
 function formatMetricLabel(key, fallbackMap) {
@@ -1375,17 +1399,41 @@ function updateMonitoringSummary(data) {
 
   const honeypotTotal = document.getElementById('honeypot-total-hits');
   const honeypotUnique = document.getElementById('honeypot-unique-crawlers');
+  const honeypotTopOffender = document.getElementById('honeypot-top-offender');
+  const honeypotTopOffenderLabel = document.getElementById('honeypot-top-offender-label');
   if (honeypotTotal) honeypotTotal.textContent = Number(honeypot.total_hits || 0).toLocaleString();
   if (honeypotUnique) honeypotUnique.textContent = Number(honeypot.unique_crawlers || 0).toLocaleString();
-  renderCountList('honeypot-top-crawlers', honeypot.top_crawlers, 'No honeypot crawler data yet', 'hits');
+  const topHoneypotCrawler = Array.isArray(honeypot.top_crawlers) && honeypot.top_crawlers.length
+    ? honeypot.top_crawlers[0]
+    : null;
+  setTopOffenderCard(
+    honeypotTopOffender,
+    honeypotTopOffenderLabel,
+    topHoneypotCrawler?.label,
+    topHoneypotCrawler?.count,
+    'hit',
+    'hits'
+  );
   renderCountList('honeypot-top-paths', honeypot.top_paths, 'No honeypot path data yet', 'hits');
 
   const challengeTotal = document.getElementById('challenge-failures-total');
   const challengeUnique = document.getElementById('challenge-failures-unique');
+  const challengeTopOffender = document.getElementById('challenge-top-offender');
+  const challengeTopOffenderLabel = document.getElementById('challenge-top-offender-label');
   if (challengeTotal) challengeTotal.textContent = Number(challenge.total_failures || 0).toLocaleString();
   if (challengeUnique) challengeUnique.textContent = Number(challenge.unique_offenders || 0).toLocaleString();
+  const topChallengeOffender = Array.isArray(challenge.top_offenders) && challenge.top_offenders.length
+    ? challenge.top_offenders[0]
+    : null;
+  setTopOffenderCard(
+    challengeTopOffender,
+    challengeTopOffenderLabel,
+    topChallengeOffender?.label,
+    topChallengeOffender?.count,
+    'hit',
+    'hits'
+  );
   renderReasonTable('challenge-failure-reasons', challenge.reasons, CHALLENGE_REASON_LABELS);
-  renderCountList('challenge-top-offenders', challenge.top_offenders, 'No challenge failures yet', 'hits');
   challengeFailuresTrendChart = updateMonitoringTrendChart(
     challengeFailuresTrendChart,
     'challengeFailuresTrendChart',
@@ -1396,10 +1444,22 @@ function updateMonitoringSummary(data) {
 
   const powTotal = document.getElementById('pow-failures-total');
   const powUnique = document.getElementById('pow-failures-unique');
+  const powTopOffender = document.getElementById('pow-top-offender');
+  const powTopOffenderLabel = document.getElementById('pow-top-offender-label');
   if (powTotal) powTotal.textContent = Number(pow.total_failures || 0).toLocaleString();
   if (powUnique) powUnique.textContent = Number(pow.unique_offenders || 0).toLocaleString();
+  const topPowOffender = Array.isArray(pow.top_offenders) && pow.top_offenders.length
+    ? pow.top_offenders[0]
+    : null;
+  setTopOffenderCard(
+    powTopOffender,
+    powTopOffenderLabel,
+    topPowOffender?.label,
+    topPowOffender?.count,
+    'hit',
+    'hits'
+  );
   renderReasonTable('pow-failure-reasons', pow.reasons, POW_REASON_LABELS);
-  renderCountList('pow-top-offenders', pow.top_offenders, 'No PoW failures yet', 'hits');
   powFailuresTrendChart = updateMonitoringTrendChart(
     powFailuresTrendChart,
     'powFailuresTrendChart',
@@ -1410,10 +1470,22 @@ function updateMonitoringSummary(data) {
 
   const rateTotal = document.getElementById('rate-violations-total');
   const rateUnique = document.getElementById('rate-violations-unique');
+  const rateTopOffender = document.getElementById('rate-top-offender');
+  const rateTopOffenderLabel = document.getElementById('rate-top-offender-label');
   if (rateTotal) rateTotal.textContent = Number(rate.total_violations || 0).toLocaleString();
   if (rateUnique) rateUnique.textContent = Number(rate.unique_offenders || 0).toLocaleString();
+  const topRateOffender = Array.isArray(rate.top_offenders) && rate.top_offenders.length
+    ? rate.top_offenders[0]
+    : null;
+  setTopOffenderCard(
+    rateTopOffender,
+    rateTopOffenderLabel,
+    topRateOffender?.label,
+    topRateOffender?.count,
+    'hit',
+    'hits'
+  );
   renderOutcomeList('rate-outcomes-list', rate.outcomes);
-  renderCountList('rate-top-offenders', rate.top_offenders, 'No rate-limit violations yet', 'hits');
 
   const geoTotal = document.getElementById('geo-violations-total');
   const geoActionMix = document.getElementById('geo-action-mix');
@@ -1429,40 +1501,128 @@ function updateMonitoringSummary(data) {
 
 function updatePrometheusHelper(prometheusData) {
   const example = document.getElementById('monitoring-prometheus-example');
+  const curlButton = document.getElementById('monitoring-prometheus-copy-curl');
+  const outputSnippet = document.getElementById('monitoring-prometheus-output');
+  const statsSnippet = document.getElementById('monitoring-prometheus-stats');
+  const windowedSnippet = document.getElementById('monitoring-prometheus-windowed');
+  const summaryStatsSnippet = document.getElementById('monitoring-prometheus-summary-stats');
+  const observabilityLink = document.getElementById('monitoring-prometheus-observability-link');
+  const apiLink = document.getElementById('monitoring-prometheus-api-link');
   const note = document.getElementById('monitoring-prometheus-note');
   const endpoint = prometheusData && typeof prometheusData.endpoint === 'string'
     ? prometheusData.endpoint
     : '/metrics';
-  const examples = Array.isArray(prometheusData?.examples) ? prometheusData.examples : [];
+  const exampleJs = typeof prometheusData?.example_js === 'string'
+    ? prometheusData.example_js
+    : '';
+  const exampleOutput = typeof prometheusData?.example_output === 'string'
+    ? prometheusData.example_output
+    : '';
+  const exampleStats = typeof prometheusData?.example_stats === 'string'
+    ? prometheusData.example_stats
+    : '';
+  const exampleWindowed = typeof prometheusData?.example_windowed === 'string'
+    ? prometheusData.example_windowed
+    : '';
+  const exampleSummaryStats = typeof prometheusData?.example_summary_stats === 'string'
+    ? prometheusData.example_summary_stats
+    : '';
+  const docs = prometheusData && typeof prometheusData.docs === 'object'
+    ? prometheusData.docs
+    : {};
+  const legacyExamples = Array.isArray(prometheusData?.examples) ? prometheusData.examples : [];
   const notes = Array.isArray(prometheusData?.notes) ? prometheusData.notes : [];
   if (example) {
-    example.textContent = examples[1] || `curl -s http://127.0.0.1:3000${endpoint} | rg '^bot_defence_'`;
+    example.textContent = exampleJs || legacyExamples[0] || `const metricsText = await fetch('${endpoint}').then(r => r.text());`;
+  }
+  if (curlButton) {
+    const origin = window.location.origin || 'http://127.0.0.1:3000';
+    curlButton.dataset.copyText = `curl -sS '${origin}${endpoint}'`;
+  }
+  if (outputSnippet) {
+    outputSnippet.textContent = exampleOutput || legacyExamples[1] || `# TYPE bot_defence_requests_total counter
+bot_defence_requests_total{path="main"} 128
+# TYPE bot_defence_blocks_total counter
+bot_defence_blocks_total 9
+# TYPE bot_defence_bans_total counter
+bot_defence_bans_total{reason="honeypot"} 3
+# TYPE bot_defence_active_bans gauge
+bot_defence_active_bans 2`;
+  }
+  if (statsSnippet) {
+    statsSnippet.textContent = exampleStats || `const lines = metricsText.split('\\n');
+const metricValue = (prefix) => {
+  const line = lines.find((entry) => entry.startsWith(prefix));
+  return line ? Number(line.slice(prefix.length).trim()) : null;
+};
+const stats = {
+  requestsMain: metricValue('bot_defence_requests_total{path="main"} '),
+  honeypotBans: metricValue('bot_defence_bans_total{reason="honeypot"} '),
+  blocksTotal: metricValue('bot_defence_blocks_total '),
+  activeBans: metricValue('bot_defence_active_bans ')
+};`;
+  }
+  if (windowedSnippet) {
+    windowedSnippet.textContent = exampleWindowed || `const apiKey = 'YOUR_ADMIN_API_KEY';
+const params = new URLSearchParams({ hours: '24', limit: '10' });
+const monitoring = await fetch(\`/admin/monitoring?\${params}\`, {
+  headers: { Authorization: \`Bearer \${apiKey}\` }
+}).then(r => r.json());`;
+  }
+  if (summaryStatsSnippet) {
+    summaryStatsSnippet.textContent = exampleSummaryStats || `const stats = {
+  honeypotHits: monitoring.summary.honeypot.total_hits,
+  challengeFailures: monitoring.summary.challenge.total_failures,
+  powFailures: monitoring.summary.pow.total_failures,
+  rateViolations: monitoring.summary.rate.total_violations,
+  geoViolations: monitoring.summary.geo.total_violations
+};`;
+  }
+  if (observabilityLink && typeof docs.observability === 'string' && docs.observability) {
+    observabilityLink.href = docs.observability;
+  }
+  if (apiLink && typeof docs.api === 'string' && docs.api) {
+    apiLink.href = docs.api;
   }
   if (note) {
-    note.textContent = notes[0] || `Prometheus scrape endpoint: ${endpoint}`;
+    note.textContent = notes.length
+      ? notes.join(' ')
+      : `/metrics has no query arguments (full payload only). For bounded reads, use /admin/monitoring with hours=<1-720> and limit=<1-50>, then read summary.* fields.`;
   }
 }
 
 function bindPrometheusCopyButton() {
   const button = document.getElementById('monitoring-prometheus-copy');
+  const curlButton = document.getElementById('monitoring-prometheus-copy-curl');
   const example = document.getElementById('monitoring-prometheus-example');
-  if (!button || !example) return;
-  button.addEventListener('click', async () => {
-    const text = String(example.textContent || '').trim();
+  const copyWithFeedback = async (targetButton, text, resetText) => {
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
-      button.textContent = 'Copied';
+      targetButton.textContent = 'Copied';
       window.setTimeout(() => {
-        button.textContent = 'Copy Example Command';
+        targetButton.textContent = resetText;
       }, 1200);
     } catch (_err) {
-      button.textContent = 'Copy Failed';
+      targetButton.textContent = 'Copy Failed';
       window.setTimeout(() => {
-        button.textContent = 'Copy Example Command';
+        targetButton.textContent = resetText;
       }, 1500);
     }
-  });
+  };
+  if (button && example) {
+    button.addEventListener('click', async () => {
+      const text = String(example.textContent || '').trim();
+      await copyWithFeedback(button, text, 'Copy JS Example');
+    });
+  }
+  if (curlButton) {
+    curlButton.addEventListener('click', async () => {
+      const fallback = `curl -sS '${window.location.origin || 'http://127.0.0.1:3000'}/metrics'`;
+      const text = String(curlButton.dataset.copyText || fallback).trim();
+      await copyWithFeedback(curlButton, text, 'Copy Curl Example');
+    });
+  }
 }
 
 // Update maze config controls from loaded config
@@ -2656,11 +2816,31 @@ async function refreshMonitoringTab(reason = 'manual') {
   const powTotal = document.getElementById('pow-failures-total');
   const rateTotal = document.getElementById('rate-violations-total');
   const geoTotal = document.getElementById('geo-violations-total');
+  const mazeTopOffender = document.getElementById('maze-top-offender');
+  const mazeTopOffenderLabel = document.getElementById('maze-top-offender-label');
+  const honeypotTopOffender = document.getElementById('honeypot-top-offender');
+  const honeypotTopOffenderLabel = document.getElementById('honeypot-top-offender-label');
+  const challengeTopOffender = document.getElementById('challenge-top-offender');
+  const challengeTopOffenderLabel = document.getElementById('challenge-top-offender-label');
+  const powTopOffender = document.getElementById('pow-top-offender');
+  const powTopOffenderLabel = document.getElementById('pow-top-offender-label');
+  const rateTopOffender = document.getElementById('rate-top-offender');
+  const rateTopOffenderLabel = document.getElementById('rate-top-offender-label');
   if (honeypotTotal) honeypotTotal.textContent = '...';
   if (challengeTotal) challengeTotal.textContent = '...';
   if (powTotal) powTotal.textContent = '...';
   if (rateTotal) rateTotal.textContent = '...';
   if (geoTotal) geoTotal.textContent = '...';
+  if (mazeTopOffender) mazeTopOffender.textContent = '...';
+  if (honeypotTopOffender) honeypotTopOffender.textContent = '...';
+  if (challengeTopOffender) challengeTopOffender.textContent = '...';
+  if (powTopOffender) powTopOffender.textContent = '...';
+  if (rateTopOffender) rateTopOffender.textContent = '...';
+  if (mazeTopOffenderLabel) mazeTopOffenderLabel.textContent = 'Top Offender';
+  if (honeypotTopOffenderLabel) honeypotTopOffenderLabel.textContent = 'Top Offender';
+  if (challengeTopOffenderLabel) challengeTopOffenderLabel.textContent = 'Top Offender';
+  if (powTopOffenderLabel) powTopOffenderLabel.textContent = 'Top Offender';
+  if (rateTopOffenderLabel) rateTopOffenderLabel.textContent = 'Top Offender';
 
   const [analytics, events, bansData, mazeData, cdpData, cdpEventsData, monitoringData] = await Promise.all([
     dashboardApiClient.getAnalytics(),

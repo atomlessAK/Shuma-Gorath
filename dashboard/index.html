@@ -142,63 +142,57 @@
     </div>
 
     <!-- Maze Activity Section -->
-    <div class="section maze-section panel panel-border pad-md">
+    <div class="section events">
       <h2>Maze</h2>
       <p class="section-desc text-muted">Crawlers trapped in infinite fake pages</p>
-      <div class="maze-stats">
-        <div class="maze-stat panel panel-border pad-md">
+      <div class="stats-cards stats-cards--compact">
+        <div class="card panel panel-border pad-md">
           <h3 class="caps-label">Total Hits</h3>
           <span class="stat-value" id="maze-total-hits">-</span>
         </div>
-        <div class="maze-stat panel panel-border pad-md">
+        <div class="card panel panel-border pad-md">
           <h3 class="caps-label">Unique Crawlers</h3>
           <span class="stat-value" id="maze-unique-crawlers">-</span>
         </div>
-        <div class="maze-stat panel panel-border pad-md">
+        <div class="card panel panel-border pad-md">
           <h3 class="caps-label">Auto-Banned</h3>
           <span class="stat-value" id="maze-auto-bans">-</span>
         </div>
-      </div>
-      <div class="maze-crawlers panel panel-border pad-md">
-        <h3>Top Crawlers in Maze</h3>
-        <div class="crawler-list" id="maze-crawler-list">
-          <p class="no-data">No crawlers in maze yet</p>
+        <div class="card panel panel-border pad-md">
+          <h3 class="caps-label" id="maze-top-offender-label">Top Offender</h3>
+          <span class="stat-value" id="maze-top-offender">-</span>
         </div>
       </div>
     </div>
 
-    <div class="section maze-section panel panel-border pad-md">
+    <div class="section events">
       <h2>Honeypot Hits</h2>
       <p class="section-desc text-muted">Structured honeypot telemetry (hits, offender buckets, and trap paths).</p>
-      <div class="maze-stats">
-        <div class="maze-stat panel panel-border pad-md">
+      <div class="stats-cards stats-cards--compact">
+        <div class="card panel panel-border pad-md">
           <h3 class="caps-label">Total Hits</h3>
           <span class="stat-value" id="honeypot-total-hits">-</span>
         </div>
-        <div class="maze-stat panel panel-border pad-md">
+        <div class="card panel panel-border pad-md">
           <h3 class="caps-label">Unique Crawlers</h3>
           <span class="stat-value" id="honeypot-unique-crawlers">-</span>
         </div>
-      </div>
-      <div class="charts-row monitoring-split">
-        <div class="panel panel-border pad-md">
-          <h3>Top Crawlers in Honeypot</h3>
-          <div id="honeypot-top-crawlers" class="crawler-list">
-            <p class="no-data">No honeypot crawler data yet</p>
-          </div>
+        <div class="card panel panel-border pad-md">
+          <h3 class="caps-label" id="honeypot-top-offender-label">Top Offender</h3>
+          <span class="stat-value" id="honeypot-top-offender">-</span>
         </div>
-        <div class="panel panel-border pad-md">
-          <h3>Top Honeypot Paths</h3>
-          <div id="honeypot-top-paths" class="crawler-list">
-            <p class="no-data">No honeypot path data yet</p>
-          </div>
+      </div>
+      <div class="panel panel-border pad-md">
+        <h3>Top Honeypot Paths</h3>
+        <div id="honeypot-top-paths" class="crawler-list">
+          <p class="no-data">No honeypot path data yet</p>
         </div>
       </div>
     </div>
 
     <div class="section events">
       <h2>Challenge Failures</h2>
-      <p class="section-desc text-muted">Challenge submit failures by reason class with trend and top offender buckets.</p>
+      <p class="section-desc text-muted">Challenge submit failures by reason class with trend and top offender.</p>
       <div class="stats-cards stats-cards--compact">
         <div class="card panel panel-border pad-md">
           <h3 class="caps-label">Total Failures</h3>
@@ -208,37 +202,32 @@
           <h3 class="caps-label">Unique Offenders</h3>
           <div class="stat-value" id="challenge-failures-unique">-</div>
         </div>
+        <div class="card panel panel-border pad-md">
+          <h3 class="caps-label" id="challenge-top-offender-label">Top Offender</h3>
+          <div class="stat-value" id="challenge-top-offender">-</div>
+        </div>
       </div>
       <div class="chart-container panel-soft panel-border pad-md">
         <canvas id="challengeFailuresTrendChart"></canvas>
       </div>
-      <div class="charts-row monitoring-split">
-        <div class="panel panel-border pad-md">
-          <h3>Reason Breakdown</h3>
-          <div class="table-wrapper">
-            <table class="panel panel-border">
-              <thead>
-                <tr>
-                  <th class="caps-label">Reason</th>
-                  <th class="caps-label">Count</th>
-                </tr>
-              </thead>
-              <tbody id="challenge-failure-reasons"></tbody>
-            </table>
-          </div>
-        </div>
-        <div class="panel panel-border pad-md">
-          <h3>Top Offender Buckets</h3>
-          <div id="challenge-top-offenders" class="crawler-list">
-            <p class="no-data">No challenge failures yet</p>
-          </div>
+      <div class="panel panel-border pad-md">
+        <div class="table-wrapper">
+          <table class="panel panel-border">
+            <thead>
+              <tr>
+                <th class="caps-label">Reason</th>
+                <th class="caps-label">Count</th>
+              </tr>
+            </thead>
+            <tbody id="challenge-failure-reasons"></tbody>
+          </table>
         </div>
       </div>
     </div>
 
     <div class="section events">
       <h2>PoW Failures</h2>
-      <p class="section-desc text-muted">PoW verification failures by reason class with trend and top offender buckets.</p>
+      <p class="section-desc text-muted">PoW verification failures by reason class with trend and top offender.</p>
       <div class="stats-cards stats-cards--compact">
         <div class="card panel panel-border pad-md">
           <h3 class="caps-label">Total Failures</h3>
@@ -248,37 +237,32 @@
           <h3 class="caps-label">Unique Offenders</h3>
           <div class="stat-value" id="pow-failures-unique">-</div>
         </div>
+        <div class="card panel panel-border pad-md">
+          <h3 class="caps-label" id="pow-top-offender-label">Top Offender</h3>
+          <div class="stat-value" id="pow-top-offender">-</div>
+        </div>
       </div>
       <div class="chart-container panel-soft panel-border pad-md">
         <canvas id="powFailuresTrendChart"></canvas>
       </div>
-      <div class="charts-row monitoring-split">
-        <div class="panel panel-border pad-md">
-          <h3>Reason Breakdown</h3>
-          <div class="table-wrapper">
-            <table class="panel panel-border">
-              <thead>
-                <tr>
-                  <th class="caps-label">Reason</th>
-                  <th class="caps-label">Count</th>
-                </tr>
-              </thead>
-              <tbody id="pow-failure-reasons"></tbody>
-            </table>
-          </div>
-        </div>
-        <div class="panel panel-border pad-md">
-          <h3>Top Offender Buckets</h3>
-          <div id="pow-top-offenders" class="crawler-list">
-            <p class="no-data">No PoW failures yet</p>
-          </div>
+      <div class="panel panel-border pad-md">
+        <div class="table-wrapper">
+          <table class="panel panel-border">
+            <thead>
+              <tr>
+                <th class="caps-label">Reason</th>
+                <th class="caps-label">Count</th>
+              </tr>
+            </thead>
+            <tbody id="pow-failure-reasons"></tbody>
+          </table>
         </div>
       </div>
     </div>
 
     <div class="section events">
       <h2>Rate Limiting Violations</h2>
-      <p class="section-desc text-muted">Rate-limit offender buckets and enforcement outcomes.</p>
+      <p class="section-desc text-muted">Rate-limit outcomes and top offender bucket.</p>
       <div class="stats-cards stats-cards--compact">
         <div class="card panel panel-border pad-md">
           <h3 class="caps-label">Total Violations</h3>
@@ -288,18 +272,14 @@
           <h3 class="caps-label">Unique Offenders</h3>
           <div class="stat-value" id="rate-violations-unique">-</div>
         </div>
+        <div class="card panel panel-border pad-md">
+          <h3 class="caps-label" id="rate-top-offender-label">Top Offender</h3>
+          <div class="stat-value" id="rate-top-offender">-</div>
+        </div>
       </div>
-      <div class="charts-row monitoring-split">
-        <div class="panel panel-border pad-md">
-          <h3>Enforcement Outcomes</h3>
-          <ul id="rate-outcomes-list" class="metric-list"></ul>
-        </div>
-        <div class="panel panel-border pad-md">
-          <h3>Top Offender Buckets</h3>
-          <div id="rate-top-offenders" class="crawler-list">
-            <p class="no-data">No rate-limit violations yet</p>
-          </div>
-        </div>
+      <div class="panel panel-border pad-md">
+        <h3>Enforcement Outcomes</h3>
+        <ul id="rate-outcomes-list" class="metric-list"></ul>
       </div>
     </div>
 
@@ -325,11 +305,55 @@
     </div>
 
     <div class="section panel panel-border pad-md">
-      <h2>Prometheus Export</h2>
-      <p class="section-desc text-muted">Pull the same telemetry series in Prometheus text format for Grafana/Prometheus external dashboards.</p>
-      <pre id="monitoring-prometheus-example" class="prometheus-example">curl -s http://127.0.0.1:3000/metrics | rg '^bot_defence_'</pre>
-      <button id="monitoring-prometheus-copy" class="btn btn-subtle" type="button">Copy Example Command</button>
+      <h2>External Monitoring</h2>
       <p id="monitoring-prometheus-note" class="text-muted prometheus-note"></p>
+      <ul class="prometheus-facts text-muted">
+        <li><code>/metrics</code>: always returns one full prometheus text payload.</li>
+        <li><code>/admin/monitoring?hours=1-720&amp;limit=1-50</code>: bounded summary for dashboard-style reads in JSON format.</li>
+      </ul>
+      <h3 class="caps-label">1) Fetch Full Prometheus Text Payload (Javascript)</h3>
+      <pre id="monitoring-prometheus-example" class="prometheus-example prometheus-example--code">const metricsText = await fetch('/metrics').then(r => r.text());</pre>
+      <div class="prometheus-copy-actions">
+        <button id="monitoring-prometheus-copy" class="btn btn-subtle" type="button">Copy Javascript Example</button>
+        <button id="monitoring-prometheus-copy-curl" class="btn btn-subtle" type="button">Copy Curl Example</button>
+      </div>
+      <h3 class="caps-label">2) Example Prometheus Text Payload (Truncated Output)</h3>
+      <pre id="monitoring-prometheus-output" class="prometheus-example prometheus-example--output"># TYPE bot_defence_requests_total counter
+bot_defence_requests_total{path="main"} 128
+# TYPE bot_defence_blocks_total counter
+bot_defence_blocks_total 9
+# TYPE bot_defence_bans_total counter
+bot_defence_bans_total{reason="honeypot"} 3
+# TYPE bot_defence_active_bans gauge
+bot_defence_active_bans 2
+...</pre>
+      <h3 class="caps-label">3) Read Selected Metrics From Prometheus Text Payload (Javascript)</h3>
+      <pre id="monitoring-prometheus-stats" class="prometheus-example prometheus-example--code">const lines = metricsText.split('\n');
+const metricValue = (prefix) => {
+  const line = lines.find((entry) => entry.startsWith(prefix));
+  return line ? Number(line.slice(prefix.length).trim()) : null;
+};
+const stats = {
+  requestsMain: metricValue('bot_defence_requests_total{path="main"} '),
+  honeypotBans: metricValue('bot_defence_bans_total{reason="honeypot"} '),
+  blocksTotal: metricValue('bot_defence_blocks_total '),
+  activeBans: metricValue('bot_defence_active_bans ')
+};</pre>
+      <h3 class="caps-label">4) Request JSON Format Bounded Summary {<code>hours</code>/<code>limit</code>} (Javascript)</h3>
+      <pre id="monitoring-prometheus-windowed" class="prometheus-example prometheus-example--code">const apiKey = 'YOUR_ADMIN_API_KEY';
+const params = new URLSearchParams({ hours: '24', limit: '10' });
+const monitoring = await fetch(`/admin/monitoring?${params}`, {
+  headers: { Authorization: `Bearer ${apiKey}` }
+}).then(r => r.json());</pre>
+      <h3 class="caps-label">5) Read Specific Summary Stats from JSON. (Javascript)</h3>
+      <pre id="monitoring-prometheus-summary-stats" class="prometheus-example prometheus-example--code">const stats = {
+  honeypotHits: monitoring.summary.honeypot.total_hits,
+  challengeFailures: monitoring.summary.challenge.total_failures,
+  powFailures: monitoring.summary.pow.total_failures,
+  rateViolations: monitoring.summary.rate.total_violations,
+  geoViolations: monitoring.summary.geo.total_violations
+};</pre>
+      <p class="section-desc text-muted">Detailed docs: <a id="monitoring-prometheus-observability-link" href="https://github.com/atomless/Shuma-Gorath/blob/main/docs/observability.md" target="_blank" rel="noopener noreferrer">Observability</a> and <a id="monitoring-prometheus-api-link" href="https://github.com/atomless/Shuma-Gorath/blob/main/docs/api.md" target="_blank" rel="noopener noreferrer">API</a>.</p>
     </div>
     </section>
 

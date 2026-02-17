@@ -53,7 +53,7 @@ Tables:
 - PoW Failures (reason breakdown + trend)
 - Rate Limiting Violations (total, offenders, outcomes)
 - GEO Violations (actions + top countries)
-- Prometheus helper panel (copyable `/metrics` scrape examples)
+- Prometheus helper panel (explicit `/metrics` full-payload semantics, `/admin/monitoring?hours=1-720&limit=1-50` bounded-query example, sample text output, stat-extraction snippets, and copy actions for JS and curl examples with links to observability/API docs)
 - Runtime Variable Inventory tables in Status tab:
 - full runtime config snapshot (including nested keys)
 - grouped by concern for faster operator scanning

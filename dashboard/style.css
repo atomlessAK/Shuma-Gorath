@@ -998,20 +998,6 @@ input:checked + .toggle-slider:before {
    Maze Section
    =========================================== */
 
-.maze-stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 15px;
-  margin-bottom: 25px;
-}
-
-.maze-label {
-  display: block;
-  font-size: var(--text-sm);
-  opacity: 0.8;
-  margin-bottom: 8px;
-}
-
 .maze-crawlers h3 {
   font-size: var(--text-lg);
   margin-bottom: 15px;
@@ -1091,13 +1077,36 @@ input:checked + .toggle-slider:before {
   margin: 10px 0;
   padding: 12px 14px;
   background: var(--panel-soft-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 10px;
+  border: none;
+  border-radius: 0;
   overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  white-space: pre;
+  tab-size: 2;
+}
+
+.prometheus-example--code {
+  background: var(--color-50);
+}
+
+.prometheus-example--output {
+  background: var(--color-100);
+}
+
+.prometheus-facts {
+  margin: 10px 0 14px 20px;
+  display: grid;
+  gap: 6px;
 }
 
 .prometheus-note {
   margin-top: 10px;
+}
+
+.prometheus-copy-actions {
+  margin-bottom: 1rem;
 }
 
 /* ===========================================
@@ -1486,7 +1495,7 @@ input:checked + .toggle-slider:before {
     );
   }
 
-  .chart-container, .maze-section, .maze-crawlers, .maze-stat {
+  .chart-container, .maze-crawlers {
     background: var(--color-200);
     color: var(--color-800);
   }

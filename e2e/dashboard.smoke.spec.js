@@ -298,7 +298,7 @@ test("dashboard clean-state renders explicit empty placeholders", async ({ page 
   await expect(page.locator("#cdp-events tbody")).toContainText(
     "No CDP detections or auto-bans in the selected window"
   );
-  await expect(page.locator("#maze-crawler-list")).toContainText("No crawlers in maze yet");
+  await expect(page.locator("#maze-top-offender")).toHaveText("None");
 
   await openTab(page, "ip-bans");
   await expect(page.locator("#bans-table tbody")).toContainText("No active bans");
