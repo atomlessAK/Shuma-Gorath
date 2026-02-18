@@ -202,10 +202,12 @@ dashboard/
   modules/services/admin-endpoint.js
   modules/services/runtime-effects.js
   modules/status.js
+  modules/status-view.js
   modules/dashboard-state.js
   modules/monitoring-view.js
   modules/tables-view.js
   modules/tab-lifecycle.js
+  modules/feature-controllers.js
   style.css
 
 dist/
@@ -230,6 +232,11 @@ Chart runtime is vendored locally to avoid runtime CDN dependency and supply-cha
 - Version: `chart-lite-1.0.0`
 - SHA-256: `5eec3d4b98e9ddc1fb88c44e0953b8bded137779a4d930c6ab2647a431308388`
 - Policy: update only via reviewed commit; recompute SHA-256 and update this section when changed.
+
+Lit runtime is also vendored locally and mapped through `index.html` import map:
+
+- Bundle root: `dashboard/assets/vendor/lit-3.2.1/`
+- Provenance + integrity notes: `dashboard/assets/vendor/lit-3.2.1/README.md`
 
 ## 🐙 Rollback Notes
 

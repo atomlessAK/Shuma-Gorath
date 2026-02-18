@@ -19,6 +19,7 @@ import * as configDraftStoreModule from './modules/config-draft-store.js';
 import * as configFormUtilsModule from './modules/config-form-utils.js';
 import * as inputValidationModule from './modules/input-validation.js';
 import * as adminEndpointModule from './modules/services/admin-endpoint.js';
+import * as featureControllersModule from './modules/feature-controllers.js';
 import { createRuntimeEffects } from './modules/services/runtime-effects.js';
 import {
   createLegacyAutoRefreshRuntime,
@@ -207,6 +208,21 @@ function runDomWriteBatch(task) {
   });
 }
 
+function setDashboardEventController() {
+  dashboardEventAbortController = new AbortController();
+}
+
+function clearDashboardEventController() {
+  if (!dashboardEventAbortController) return;
+  dashboardEventAbortController.abort();
+  dashboardEventAbortController = null;
+}
+
+function dashboardEventOptions() {
+  if (!dashboardEventAbortController) return undefined;
+  return { signal: dashboardEventAbortController.signal };
+}
+
 const cloneJsonValue = jsonObjectModule.cloneJsonValue;
 const buildAdvancedConfigTemplate = (config) =>
   jsonObjectModule.buildTemplateFromPaths(config, ADVANCED_CONFIG_TEMPLATE_PATHS);
@@ -254,25 +270,23 @@ function setFieldError(input, message, showInline = true) {
   errorEl.classList.remove('visible');
 }
 
-const parseIntegerLoose = (id) => (inputValidation ? inputValidation.parseIntegerLoose(id) : null);
+const parseIntegerLoose = (id) => inputValidation.parseIntegerLoose(id);
 const validateIntegerFieldById = (id, showInline = false) =>
-  (inputValidation ? inputValidation.validateIntegerFieldById(id, showInline) : false);
+  inputValidation.validateIntegerFieldById(id, showInline);
 const readIntegerFieldValue = (id, messageTarget) =>
-  (inputValidation ? inputValidation.readIntegerFieldValue(id, messageTarget) : null);
+  inputValidation.readIntegerFieldValue(id, messageTarget);
 const validateIpFieldById = (id, required, label, showInline = false) =>
-  (inputValidation ? inputValidation.validateIpFieldById(id, required, label, showInline) : false);
+  inputValidation.validateIpFieldById(id, required, label, showInline);
 const readIpFieldValue = (id, required, messageTarget, label) =>
-  (inputValidation ? inputValidation.readIpFieldValue(id, required, messageTarget, label) : null);
-const setBanDurationInputFromSeconds = (durationKey, totalSeconds) => {
-  if (!inputValidation) return;
+  inputValidation.readIpFieldValue(id, required, messageTarget, label);
+const setBanDurationInputFromSeconds = (durationKey, totalSeconds) =>
   inputValidation.setBanDurationInputFromSeconds(durationKey, totalSeconds);
-};
 const readBanDurationFromInputs = (durationKey, showInline = false) =>
-  (inputValidation ? inputValidation.readBanDurationFromInputs(durationKey, showInline) : null);
+  inputValidation.readBanDurationFromInputs(durationKey, showInline);
 const readBanDurationSeconds = (durationKey) =>
-  (inputValidation ? inputValidation.readBanDurationSeconds(durationKey) : null);
+  inputValidation.readBanDurationSeconds(durationKey);
 const readManualBanDurationSeconds = (showInline = false) =>
-  (inputValidation ? inputValidation.readManualBanDurationSeconds(showInline) : null);
+  inputValidation.readManualBanDurationSeconds(showInline);
 
 function hasValidApiContext() {
   return adminSessionController ? adminSessionController.hasValidApiContext() : false;
@@ -391,6 +405,7 @@ function initInputValidation() {
   inputValidation.bindIpFieldValidation('ban-ip', true, 'Ban IP');
   inputValidation.bindIpFieldValidation('unban-ip', true, 'Unban IP');
   refreshCoreActionButtonsState();
+  refreshAllDirtySections();
 }
 
 function envVar(name) {
@@ -1033,7 +1048,7 @@ async function refreshSharedConfig(reason = 'manual', options = {}) {
     updateConfigModeUi(config, { configSnapshot: config });
     CONFIG_UI_REFRESH_METHODS.forEach((methodName) => invokeConfigUiState(methodName, config));
     invokeConfigUiState('setAdvancedConfigEditorFromConfig', config, true);
-    checkAdvancedConfigChanged();
+    refreshAllDirtySections();
   });
   return config;
 }
@@ -1198,6 +1213,7 @@ async function refreshDashboardForTab(tab, reason = 'manual', options = {}) {
     await handler(reason, options);
     if (dashboardState) dashboardState.markTabUpdated(activeTab);
     refreshCoreActionButtonsState();
+    refreshDirtySections(DIRTY_SECTIONS_BY_TAB[activeTab] || []);
     updateLastUpdatedTimestamp();
   } catch (error) {
     if (error && error.name === 'AbortError') {
@@ -1212,6 +1228,21 @@ async function refreshDashboardForTab(tab, reason = 'manual', options = {}) {
       msg.className = 'message error';
     }
   }
+}
+
+function createDashboardFeatureControllers() {
+  return featureControllersModule.createDashboardFeatureControllers({
+    notifyTabMounted: (tab) => {
+      document.body.dataset.activeDashboardTab = tab;
+      if (dashboardState) {
+        dashboardState.setActiveTab(tab);
+      }
+      refreshCoreActionButtonsState();
+    },
+    notifyTabUnmounted: () => {},
+    refreshTab: (tab, reason) => refreshDashboardForTab(tab, reason),
+    hasValidApiContext
+  });
 }
 
 function refreshActiveTab(reason = 'manual') {

@@ -535,6 +535,22 @@ test('dashboard state invalidation scopes are explicit and bounded', { concurren
   });
 });
 
+test('dashboard state exports action creators and selectors', { concurrency: false }, async () => {
+  await withBrowserGlobals({}, async () => {
+    const stateApi = await importBrowserModule('dashboard/modules/dashboard-state.js');
+    const initial = stateApi.createInitialState('monitoring');
+    const next = stateApi.reduceState(initial, stateApi.actions.setActiveTab('status'));
+    assert.equal(stateApi.selectors.activeTab(initial), 'monitoring');
+    assert.equal(stateApi.selectors.activeTab(next), 'status');
+    const withSession = stateApi.reduceState(next, stateApi.actions.setSession({
+      authenticated: true,
+      csrfToken: 'csrf-123'
+    }));
+    assert.equal(stateApi.selectors.session(withSession).authenticated, true);
+    assert.equal(stateApi.selectors.session(withSession).csrfToken, 'csrf-123');
+  });
+});
+
 test('tab lifecycle normalizes unknown tabs to monitoring default', { concurrency: false }, async () => {
   await withBrowserGlobals({}, async () => {
     const lifecycle = await importBrowserModule('dashboard/modules/tab-lifecycle.js');
@@ -1532,6 +1548,70 @@ test('config draft store tracks section snapshots and dirty checks', { concurren
   });
 });
 
+test('config ui state preserves in-progress maze edits during background config refresh', { concurrency: false }, async () => {
+  const elements = {
+    'maze-enabled-toggle': createMockElement({ checked: true }),
+    'maze-auto-ban-toggle': createMockElement({ checked: false }),
+    'maze-threshold': createMockElement({ value: '51' }),
+    'save-maze-config': createMockElement({ disabled: false, dataset: { saving: 'false' } })
+  };
+  const drafts = {
+    maze: { enabled: true, autoBan: false, threshold: 51 }
+  };
+  const statusPatches = [];
+
+  const mockDocument = {
+    activeElement: elements['maze-threshold'],
+    getElementById: (id) => elements[id] || null,
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    createElement: () => ({ innerHTML: '', classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } } })
+  };
+
+  await withBrowserGlobals({ document: mockDocument }, async () => {
+    const configUiStateModule = await importBrowserModule('dashboard/modules/config-ui-state.js');
+    const api = configUiStateModule.create({
+      getById: (id) => elements[id] || null,
+      setDraft: (section, value) => {
+        drafts[section] = JSON.parse(JSON.stringify(value));
+      },
+      getDraft: (section) => drafts[section] || {},
+      statusPanel: {
+        applyPatch: (patch) => statusPatches.push(patch)
+      }
+    });
+
+    api.updateMazeConfig({
+      maze_enabled: false,
+      maze_auto_ban: true,
+      maze_auto_ban_threshold: 25
+    });
+
+    assert.equal(elements['maze-threshold'].value, '51');
+    assert.equal(elements['maze-enabled-toggle'].checked, true);
+    assert.equal(elements['maze-auto-ban-toggle'].checked, false);
+    assert.equal(elements['save-maze-config'].disabled, false);
+    assert.deepEqual(drafts.maze, { enabled: true, autoBan: false, threshold: 51 });
+    assert.equal(statusPatches.length, 0);
+
+    elements['save-maze-config'].disabled = true;
+    mockDocument.activeElement = null;
+
+    api.updateMazeConfig({
+      maze_enabled: false,
+      maze_auto_ban: true,
+      maze_auto_ban_threshold: 25
+    });
+
+    assert.equal(elements['maze-threshold'].value, 25);
+    assert.equal(elements['maze-enabled-toggle'].checked, false);
+    assert.equal(elements['maze-auto-ban-toggle'].checked, true);
+    assert.equal(elements['save-maze-config'].disabled, true);
+    assert.deepEqual(drafts.maze, { enabled: false, autoBan: true, threshold: 25 });
+    assert.deepEqual(statusPatches.pop(), { mazeEnabled: false, mazeAutoBan: true });
+  });
+});
+
 test('core dom cache re-resolves disconnected and previously-missing nodes', { concurrency: false }, async () => {
   let byIdLookupCount = 0;
   const firstNode = { id: 'node', isConnected: true };
@@ -1699,6 +1779,52 @@ test('input validation module enforces integer, duration, and IP rules', { concu
   assert.equal(errors.length > 0, true);
 });
 
+test('input validation reports interacting field id to onFieldInteraction callback', { concurrency: false }, async () => {
+  const listeners = {};
+  const makeInput = (id, value = '') => ({
+    id,
+    value,
+    dataset: {},
+    setCustomValidity: () => {},
+    checkValidity: () => true,
+    reportValidity: () => {},
+    focus: () => {},
+    addEventListener: (event, handler) => {
+      listeners[`${id}:${event}`] = handler;
+    }
+  });
+
+  const elements = {
+    'pow-difficulty': makeInput('pow-difficulty', '15'),
+    'ban-ip': makeInput('ban-ip', '203.0.113.10')
+  };
+  const interactions = [];
+
+  await withBrowserGlobals({}, async () => {
+    const validation = await importBrowserModule('dashboard/modules/input-validation.js');
+    const api = validation.create({
+      getById: (id) => elements[id] || null,
+      setFieldError: () => {},
+      integerFieldRules: {
+        'pow-difficulty': { min: 12, max: 20, fallback: 15, label: 'PoW difficulty' }
+      },
+      banDurationBoundsSeconds: { min: 60, max: 31536000 },
+      banDurationFields: {},
+      manualBanDurationField: null,
+      onFieldInteraction: (fieldId) => interactions.push(fieldId)
+    });
+    api.bindIntegerFieldValidation('pow-difficulty');
+    api.bindIpFieldValidation('ban-ip', true, 'Ban IP');
+  });
+
+  listeners['pow-difficulty:input']();
+  listeners['pow-difficulty:blur']();
+  listeners['ban-ip:input']();
+  listeners['ban-ip:blur']();
+
+  assert.deepEqual(interactions, ['pow-difficulty', 'pow-difficulty', 'ban-ip', 'ban-ip']);
+});
+
 test('json object helpers build templates and normalize JSON compare values', { concurrency: false }, async () => {
   await withBrowserGlobals({}, async () => {
     const objectUtils = await importBrowserModule('dashboard/modules/core/json-object.js');
@@ -1825,13 +1951,40 @@ test('tab state view updates element state and dashboard-state hooks', { concurr
 test('runtime effects request resolves window fetch at call time', { concurrency: false }, async () => {
   let initialFetchCalls = 0;
   let wrappedFetchCalls = 0;
+  let replacedUrl = '';
+  const hashListeners = [];
   const mockWindow = {
     fetch: async () => {
       initialFetchCalls += 1;
       return { ok: true };
     },
     setTimeout,
-    clearTimeout
+    clearTimeout,
+    requestAnimationFrame: (task) => {
+      task();
+      return 9;
+    },
+    cancelAnimationFrame: () => {},
+    location: {
+      pathname: '/dashboard/index.html',
+      search: '',
+      hash: '#monitoring'
+    },
+    history: {
+      replaceState: (_state, _title, url) => {
+        replacedUrl = String(url || '');
+      }
+    },
+    addEventListener: (eventName, handler) => {
+      if (eventName === 'hashchange') {
+        hashListeners.push(handler);
+      }
+    },
+    removeEventListener: (eventName, handler) => {
+      if (eventName !== 'hashchange') return;
+      const idx = hashListeners.indexOf(handler);
+      if (idx >= 0) hashListeners.splice(idx, 1);
+    }
   };
 
   await withBrowserGlobals({
@@ -1854,6 +2007,16 @@ test('runtime effects request resolves window fetch at call time', { concurrency
     await effects.request('/admin/config', { method: 'POST' });
     assert.equal(initialFetchCalls, 0);
     assert.equal(wrappedFetchCalls, 1);
+
+    assert.equal(effects.readHash(), '#monitoring');
+    effects.setHash('status');
+    assert.equal(mockWindow.location.hash, '#status');
+    effects.replaceHash('config');
+    assert.equal(replacedUrl.endsWith('#config'), true);
+    const offHashChange = effects.onHashChange(() => {});
+    assert.equal(hashListeners.length, 1);
+    offHashChange();
+    assert.equal(hashListeners.length, 0);
   });
 });
 
@@ -1944,6 +2107,131 @@ test('config controls accepts domainApi without legacy grouped callback bags', {
     assert.equal(typeof normalized.setMazeSavedState, 'function');
     assert.equal(typeof normalized.checkMazeConfigChanged, 'function');
   });
+});
+
+test('config controls registry save pipeline persists maze settings through generic handler', { concurrency: false }, async () => {
+  const saveButton = createMockElement({ disabled: false, dataset: { saving: 'false' } });
+  const adminMsg = createMockElement({ className: '' });
+  const mazeEnabledToggle = createMockElement({ checked: true });
+  const mazeAutoBanToggle = createMockElement({ checked: false });
+  const mazeThreshold = createMockElement({ value: '77' });
+  const savedStates = [];
+  const checks = [];
+  const patches = [];
+
+  const elements = {
+    'save-maze-config': saveButton,
+    'admin-msg': adminMsg,
+    'maze-enabled-toggle': mazeEnabledToggle,
+    'maze-auto-ban-toggle': mazeAutoBanToggle,
+    'maze-threshold': mazeThreshold
+  };
+
+  await withBrowserGlobals({
+    document: {
+      getElementById: (id) => elements[id] || null,
+      querySelector: () => null,
+      querySelectorAll: () => []
+    }
+  }, async () => {
+    const controls = await importBrowserModule('dashboard/modules/config-controls.js');
+    controls.bind({
+      context: {
+        statusPanel: {
+          applyPatch: () => {}
+        },
+        apiClient: {
+          updateConfig: async (patch) => {
+            patches.push(patch);
+            return { config: patch };
+          }
+        },
+        auth: {
+          getAdminContext: () => ({ endpoint: 'http://example.test', apikey: 'abc' })
+        },
+        readers: {
+          readIntegerFieldValue: (id) => Number.parseInt(elements[id].value, 10)
+        },
+        checks: {
+          checkMazeConfigChanged: () => checks.push('maze')
+        },
+        draft: {
+          get: () => ({}),
+          set: (_, value) => savedStates.push(value)
+        },
+        effects: {
+          setTimer: (task) => {
+            task();
+            return 1;
+          }
+        }
+      }
+    });
+  });
+
+  assert.equal(typeof saveButton.onclick, 'function');
+  await saveButton.onclick();
+  assert.deepEqual(patches, [
+    {
+      maze_enabled: true,
+      maze_auto_ban: false,
+      maze_auto_ban_threshold: 77
+    }
+  ]);
+  assert.deepEqual(savedStates.pop(), { enabled: true, autoBan: false, threshold: 77 });
+  assert.deepEqual(checks, ['maze']);
+  assert.equal(saveButton.textContent, 'Save Maze Settings');
+  assert.equal(saveButton.dataset.saving, 'false');
+});
+
+test('config ui state declarative bindings hydrate robots controls and reset save buttons', { concurrency: false }, async () => {
+  const elements = {
+    'robots-enabled-toggle': createMockElement({ checked: false }),
+    'robots-block-training-toggle': createMockElement({ checked: false }),
+    'robots-block-search-toggle': createMockElement({ checked: false }),
+    'robots-allow-search-toggle': createMockElement({ checked: false }),
+    'robots-crawl-delay': createMockElement({ value: '0' }),
+    'save-robots-config': createMockElement({ disabled: false, dataset: { saving: 'true' } }),
+    'save-ai-policy-config': createMockElement({ disabled: false, dataset: { saving: 'true' } })
+  };
+  const drafts = {};
+
+  await withBrowserGlobals({
+    document: {
+      getElementById: (id) => elements[id] || null,
+      querySelector: () => null,
+      querySelectorAll: () => []
+    }
+  }, async () => {
+    const module = await importBrowserModule('dashboard/modules/config-ui-state.js');
+    const api = module.create({
+      getById: (id) => elements[id] || null,
+      setDraft: (section, value) => {
+        drafts[section] = JSON.parse(JSON.stringify(value));
+      },
+      getDraft: () => ({})
+    });
+
+    api.updateRobotsConfig({
+      robots_enabled: true,
+      robots_crawl_delay: 3,
+      ai_policy_block_training: true,
+      ai_policy_block_search: false,
+      ai_policy_allow_search_engines: false
+    });
+  });
+
+  assert.equal(elements['robots-enabled-toggle'].checked, true);
+  assert.equal(elements['robots-crawl-delay'].value, 3);
+  assert.equal(elements['robots-block-training-toggle'].checked, true);
+  assert.equal(elements['robots-block-search-toggle'].checked, false);
+  assert.equal(elements['robots-allow-search-toggle'].checked, true);
+  assert.deepEqual(drafts.robots, { enabled: true, crawlDelay: 3 });
+  assert.deepEqual(drafts.aiPolicy, { blockTraining: true, blockSearch: false, allowSearch: true });
+  assert.equal(elements['save-robots-config'].disabled, true);
+  assert.equal(elements['save-robots-config'].dataset.saving, 'false');
+  assert.equal(elements['save-ai-policy-config'].disabled, true);
+  assert.equal(elements['save-ai-policy-config'].dataset.saving, 'false');
 });
 
 test('tables view wires quick-unban callback and detail toggle handlers', { concurrency: false }, async () => {
@@ -2653,6 +2941,14 @@ test('legacy config dirty runtime computes dirty state through capability contra
   assert.equal(dirtyCalls.some((entry) => entry.buttonId === 'save-ai-policy-config' && entry.changed), true);
   assert.equal(nodes['save-robots-config'].textContent, 'Save robots serving');
   assert.equal(nodes['save-ai-policy-config'].textContent, 'Save AI bot policy');
+});
+
+test('dashboard main exports explicit lifecycle entrypoints', () => {
+  const dashboardPath = path.resolve(__dirname, '..', 'dashboard', 'dashboard.js');
+  const source = fs.readFileSync(dashboardPath, 'utf8');
+
+  assert.match(source, /export function mountDashboard\(\)/);
+  assert.match(source, /export function unmountDashboard\(\)/);
 });
 
 test('dashboard module graph is layered (core -> services -> features -> main) with no cycles', () => {

@@ -75,6 +75,10 @@
   --text-6xl: 5rem;
 }
 
+shuma-dashboard-app {
+  display: block;
+}
+
 /* ===========================================
    Shared Utility Classes
    =========================================== */
