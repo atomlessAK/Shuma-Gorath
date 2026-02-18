@@ -167,19 +167,6 @@ Implementation rule: when internal feature work touches provider-managed capabil
 - [ ] MON-TEL-7 Add tests for telemetry correctness and dashboard rendering states (empty/loading/error/data) for each new monitoring section, including cardinality guardrails and retention-window behavior.
 - [ ] MON-TEL-7.a Extend dashboard automated tests to assert new monitoring cards/tables/charts across empty/loading/error/data states, not just adapter contracts.
 
-### P1 Dashboard SvelteKit Excellence Round 5 (State Convergence + Functionalization)
-- [ ] DSH-SVLT-EX22 Codify and enforce the pre-launch policy stance: no backward DOM-ID compatibility layer, no multi-instance runtime guarantees for now, and prioritize behavior/outcome contracts over legacy structural test contracts.
-- [ ] DSH-SVLT-EX23 Break up `dashboard/src/lib/runtime/dashboard-native-runtime.js` into focused runtime modules (session, refresh, config wiring, DOM binding lifecycle) and reduce coordinator hotspot size materially.
-- [ ] DSH-SVLT-EX24 Converge on one dashboard state source of truth by removing duplicate runtime snapshot/session/status state paths and routing tab/session/snapshot updates through a single store contract.
-- [ ] DSH-SVLT-EX25 Remove dead/unsafe native runtime event-controller leftovers (including undeclared `dashboardEventAbortController` helpers) and add regression guardrails preventing undeclared runtime globals.
-- [ ] DSH-SVLT-EX26 Move primary Monitoring rendering from imperative ID-driven DOM mutation/string HTML paths to Svelte reactive component state + declarative templates.
-- [ ] DSH-SVLT-EX27 Replace Ban table full rebuild + per-refresh rebinding with stable row patching and delegated action handling to reduce DOM/listener churn.
-- [ ] DSH-SVLT-EX28 Refactor chart orchestration to instance-scoped runtime services owned by mount lifecycle (no module-level chart singletons), while retaining the shared chart runtime loader adapter.
-- [ ] DSH-SVLT-EX29 Standardize dashboard static asset resolution on SvelteKit base-aware paths and remove hard-coded absolute asset references from route/component templates.
-- [ ] DSH-SVLT-EX30 Remove superseded/unused dashboard controller abstractions (for example unused feature-controller wrapper paths) and add dead-code guard checks to module tests.
-- [ ] DSH-SVLT-EX31 Add architecture/perf gates for the refactor: coordinator LOC budget, duplicate-state path regression checks, and remount/listener leak checks across decomposed runtime modules.
-- [ ] DSH-SVLT-EX32 Publish an ADR that locks the current dashboard runtime policy (single-instance pre-launch, no backward DOM-ID compatibility shims, no bridge flag matrix) and align implementation/tests to that scope.
-
 ## Recurring Quality Gates
 - [ ] Keep unit, integration, e2e, and CI flows passing; clean up defunct tests quickly.
 - [ ] Identify and prioritize missing tests for new defence stages before implementation.

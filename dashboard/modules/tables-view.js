@@ -12,10 +12,9 @@ export const create = (options = {}) => {
     : async () => {};
   const domCache = domModule.createCache({ document });
   const query = domCache.query;
-  const queryAll = domCache.queryAll;
   const byId = domCache.byId;
-  const EVENT_ROW_RENDER_LIMIT = 100;
-  const CDP_ROW_RENDER_LIMIT = 500;
+  const expandedBanDetails = new Set();
+  const delegatedBanBodies = new WeakSet();
 
   const canPatchTableRows = (tbody) => (
     Boolean(tbody) &&
@@ -31,53 +30,6 @@ export const create = (options = {}) => {
     return Array.from(tbody.children);
   };
 
-  const patchTableRows = (tbody, rows) => {
-    if (!tbody) return;
-    if (!canPatchTableRows(tbody)) {
-      const fallbackHtml = rows
-        .map((row) => `<tr data-row-key="${escapeHtml(row.key)}">${row.html}</tr>`)
-        .join('');
-      domModule.setHtml(tbody, fallbackHtml);
-      return;
-    }
-
-    const existingRows = tableRows(tbody);
-    for (let index = 0; index < rows.length; index += 1) {
-      const nextRow = rows[index];
-      const currentRow = existingRows[index];
-      if (currentRow) {
-        const currentKey = String(currentRow?.dataset?.rowKey || '');
-        if (currentKey === nextRow.key) {
-          if (currentRow.innerHTML !== nextRow.html) {
-            domModule.setHtml(currentRow, nextRow.html);
-          }
-          continue;
-        }
-
-        const replacement = document.createElement('tr');
-        replacement.dataset.rowKey = nextRow.key;
-        domModule.setHtml(replacement, nextRow.html);
-        tbody.replaceChild(replacement, currentRow);
-        existingRows[index] = replacement;
-        continue;
-      }
-
-      const appended = document.createElement('tr');
-      appended.dataset.rowKey = nextRow.key;
-      domModule.setHtml(appended, nextRow.html);
-      tbody.appendChild(appended);
-      existingRows.push(appended);
-    }
-
-    const nextCount = rows.length;
-    while (tableRows(tbody).length > nextCount) {
-      const rowList = tableRows(tbody);
-      const tail = rowList[rowList.length - 1];
-      if (!tail) break;
-      tbody.removeChild(tail);
-    }
-  };
-
   const buildStableKey = (parts, duplicates) => {
     const base = parts.map((part) => String(part || '')).join('|');
     const count = duplicates.get(base) || 0;
@@ -85,12 +37,62 @@ export const create = (options = {}) => {
     return count === 0 ? base : `${base}#${count}`;
   };
 
+  const ensureBanTableActionDelegation = (tbody) => {
+    if (!tbody || delegatedBanBodies.has(tbody)) return;
+    if (typeof tbody.addEventListener !== 'function') return;
+
+    tbody.addEventListener('click', async (event) => {
+      const target = event.target;
+      const button = target && typeof target.closest === 'function'
+        ? target.closest('button')
+        : null;
+      const withinTbody = typeof tbody.contains === 'function' ? tbody.contains(button) : true;
+      if (!button || !withinTbody) return;
+
+      if (button.classList.contains('ban-details-toggle')) {
+        const detailId = String(button.dataset.target || '').trim();
+        if (!detailId) return;
+        const detailRow = byId(detailId);
+        if (!detailRow || !detailRow.classList) return;
+
+        detailRow.classList.toggle('hidden');
+        const isHidden = detailRow.classList.contains('hidden');
+        if (isHidden) {
+          expandedBanDetails.delete(detailId);
+        } else {
+          expandedBanDetails.add(detailId);
+        }
+        button.textContent = isHidden ? 'Details' : 'Hide';
+        return;
+      }
+
+      if (button.classList.contains('unban-quick')) {
+        const ip = String(button.dataset.ip || '').trim();
+        if (!ip) return;
+        const previousText = button.textContent;
+        button.disabled = true;
+        try {
+          await onQuickUnban(ip);
+        } finally {
+          button.disabled = false;
+          button.textContent = previousText || 'Unban';
+        }
+      }
+    });
+
+    delegatedBanBodies.add(tbody);
+    if (tbody.dataset && typeof tbody.dataset === 'object') {
+      tbody.dataset.banDelegationBound = 'true';
+    }
+  };
+
   const updateBansTable = (bans) => {
     const tbody = query('#bans-table tbody');
     if (!tbody) return;
-    domModule.setHtml(tbody, '');
+    ensureBanTableActionDelegation(tbody);
 
     if (!Array.isArray(bans) || bans.length === 0) {
+      expandedBanDetails.clear();
       domModule.setHtml(
         tbody,
         '<tr><td colspan="6" style="text-align: center; color: #6b7280;">No active bans</td></tr>'
@@ -98,8 +100,10 @@ export const create = (options = {}) => {
       return;
     }
 
+    const duplicates = new Map();
+    const rows = [];
+
     for (const ban of bans) {
-      const tr = document.createElement('tr');
       const now = Math.floor(Date.now() / 1000);
       const isExpired = Number(ban.expires || 0) < now;
       const bannedAt = ban.banned_at ? new Date(ban.banned_at * 1000).toLocaleString() : '-';
@@ -112,31 +116,32 @@ export const create = (options = {}) => {
       const signalBadges = signals.length
         ? signals.map((signal) => `<span class="ban-signal-badge">${escapeHtml(signal)}</span>`).join('')
         : '<span class="text-muted">none</span>';
-      const detailsId = `ban-detail-${String(ban.ip || 'unknown').replace(/[^a-zA-Z0-9]/g, '-')}`;
+      const baseKey = buildStableKey(
+        [ban.ip, ban.reason, ban.banned_at, ban.expires],
+        duplicates
+      );
+      const detailsId = `ban-detail-${baseKey.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+      const detailExpanded = expandedBanDetails.has(detailsId);
 
-      tr.innerHTML = `
+      const summaryHtml = `
       <td><code>${safeIp}</code></td>
       <td>${safeReason}</td>
       <td>${bannedAt}</td>
       <td class="${isExpired ? 'expired' : ''}">${isExpired ? 'Expired' : expiresAt}</td>
       <td>${signalBadges}</td>
       <td class="ban-action-cell">
-        <button class="ban-details-toggle" data-target="${detailsId}">Details</button>
+        <button class="ban-details-toggle" data-target="${detailsId}">${detailExpanded ? 'Hide' : 'Details'}</button>
         <button class="unban-quick" data-ip="${ban.ip}">Unban</button>
       </td>
     `;
-      tbody.appendChild(tr);
 
-      const detailRow = document.createElement('tr');
-      detailRow.id = detailsId;
-      detailRow.className = 'ban-detail-row hidden';
       const score =
         ban.fingerprint && typeof ban.fingerprint.score === 'number' ? ban.fingerprint.score : null;
       const summary = ban.fingerprint && ban.fingerprint.summary
         ? ban.fingerprint.summary
         : 'No additional fingerprint details.';
       const safeSummary = escapeHtml(summary);
-      detailRow.innerHTML = `
+      const detailHtml = `
       <td colspan="6">
         <div class="ban-detail-content">
           <div><strong>Score:</strong> ${score === null ? 'n/a' : score}</div>
@@ -144,145 +149,100 @@ export const create = (options = {}) => {
         </div>
       </td>
     `;
-      tbody.appendChild(detailRow);
+      rows.push({
+        key: `summary:${baseKey}`,
+        html: summaryHtml,
+        attrs: { className: 'ban-summary-row', id: '' }
+      });
+      rows.push({
+        key: `detail:${baseKey}`,
+        html: detailHtml,
+        attrs: {
+          className: `ban-detail-row${detailExpanded ? '' : ' hidden'}`,
+          id: detailsId
+        }
+      });
     }
 
-    queryAll('.ban-details-toggle').forEach((btn) => {
-      btn.onclick = () => {
-        const target = byId(btn.dataset.target);
-        if (!target) return;
-        target.classList.toggle('hidden');
-        btn.textContent = target.classList.contains('hidden') ? 'Details' : 'Hide';
-      };
+    const nextDetailIds = new Set(
+      rows
+        .filter((row) => row.attrs && row.attrs.id)
+        .map((row) => row.attrs.id)
+    );
+    Array.from(expandedBanDetails).forEach((detailId) => {
+      if (!nextDetailIds.has(detailId)) {
+        expandedBanDetails.delete(detailId);
+      }
     });
 
-    queryAll('.unban-quick').forEach((btn) => {
-      btn.onclick = async () => {
-        const ip = btn.dataset.ip || '';
-        await onQuickUnban(ip);
-      };
-    });
-  };
+    const decoratedRows = rows.map((row) => ({
+      key: row.key,
+      html: row.html,
+      attrs: row.attrs || null
+    }));
 
-  const updateEventsTable = (events) => {
-    const tbody = query('#events tbody');
-    if (!tbody) return;
-    const rows = Array.isArray(events) ? events.slice(0, EVENT_ROW_RENDER_LIMIT) : [];
-    if (rows.length === 0) {
-      domModule.setHtml(
-        tbody,
-        '<tr><td colspan="6" style="text-align: center; color: #6b7280;">No recent events</td></tr>'
-      );
+    if (!canPatchTableRows(tbody)) {
+      const fallbackHtml = decoratedRows
+        .map((row) => {
+          const classAttr = row.attrs && row.attrs.className ? ` class=\"${escapeHtml(row.attrs.className)}\"` : '';
+          const idAttr = row.attrs && row.attrs.id ? ` id=\"${escapeHtml(row.attrs.id)}\"` : '';
+          return `<tr data-row-key=\"${escapeHtml(row.key)}\"${classAttr}${idAttr}>${row.html}</tr>`;
+        })
+        .join('');
+      domModule.setHtml(tbody, fallbackHtml);
       return;
     }
 
-    const duplicates = new Map();
-    const eventRows = rows.map((ev) => {
-      const eventClass = String(ev.event || '').toLowerCase().replace(/[^a-z_]/g, '');
-      const safeEvent = escapeHtml(ev.event || '-');
-      const safeIp = escapeHtml(ev.ip || '-');
-      const safeReason = escapeHtml(ev.reason || '-');
-      const safeOutcome = escapeHtml(ev.outcome || '-');
-      const safeAdmin = escapeHtml(ev.admin || '-');
-      const html = `
-      <td>${new Date(ev.ts * 1000).toLocaleString()}</td>
-      <td><span class="badge ${eventClass}">${safeEvent}</span></td>
-      <td><code>${safeIp}</code></td>
-      <td>${safeReason}</td>
-      <td>${safeOutcome}</td>
-      <td>${safeAdmin}</td>
-    `;
-      const key = buildStableKey(
-        [ev.ts, ev.event, ev.ip, ev.reason, ev.outcome, ev.admin],
-        duplicates
-      );
-      return { key, html };
-    });
+    const existingRows = tableRows(tbody);
+    for (let index = 0; index < decoratedRows.length; index += 1) {
+      const nextRow = decoratedRows[index];
+      const currentRow = existingRows[index];
+      if (currentRow) {
+        const currentKey = String(currentRow?.dataset?.rowKey || '');
+        if (currentKey === nextRow.key) {
+          if (currentRow.innerHTML !== nextRow.html) {
+            domModule.setHtml(currentRow, nextRow.html);
+          }
+          if (nextRow.attrs) {
+            currentRow.className = nextRow.attrs.className || '';
+            currentRow.id = nextRow.attrs.id || '';
+          }
+          continue;
+        }
 
-    patchTableRows(tbody, eventRows);
-  };
+        const replacement = document.createElement('tr');
+        replacement.dataset.rowKey = nextRow.key;
+        if (nextRow.attrs) {
+          replacement.className = nextRow.attrs.className || '';
+          replacement.id = nextRow.attrs.id || '';
+        }
+        domModule.setHtml(replacement, nextRow.html);
+        tbody.replaceChild(replacement, currentRow);
+        existingRows[index] = replacement;
+        continue;
+      }
 
-  const extractCdpField = (text, key) => {
-    const match = new RegExp(`${key}=([^\\s]+)`, 'i').exec(text || '');
-    return match ? match[1] : '-';
-  };
-
-  const updateCdpEventsTable = (events) => {
-    const tbody = query('#cdp-events tbody');
-    if (!tbody) return;
-
-    const cdpEvents = Array.isArray(events) ? events.slice(0, CDP_ROW_RENDER_LIMIT) : [];
-    if (cdpEvents.length === 0) {
-      domModule.setHtml(
-        tbody,
-        '<tr><td colspan="6" style="text-align: center; color: #6b7280;">No CDP detections or auto-bans in the selected window</td></tr>'
-      );
-      return;
+      const appended = document.createElement('tr');
+      appended.dataset.rowKey = nextRow.key;
+      if (nextRow.attrs) {
+        appended.className = nextRow.attrs.className || '';
+        appended.id = nextRow.attrs.id || '';
+      }
+      domModule.setHtml(appended, nextRow.html);
+      tbody.appendChild(appended);
+      existingRows.push(appended);
     }
 
-    const duplicates = new Map();
-    const cdpRows = cdpEvents.map((ev) => {
-      const reason = ev.reason || '';
-      const reasonLower = reason.toLowerCase();
-      const outcome = ev.outcome || '-';
-      const isBan = reasonLower === 'cdp_automation';
-      const tierSource = isBan ? outcome : reason;
-      const tier = extractCdpField(tierSource, 'tier').toUpperCase();
-      const score = extractCdpField(tierSource, 'score');
-      const details = isBan
-        ? `Auto-ban: ${outcome}`
-        : (outcome.toLowerCase().startsWith('checks:') ? outcome.replace(/^checks:/i, 'Checks: ') : outcome);
-
-      const safeIp = escapeHtml(ev.ip || '-');
-      const safeTier = escapeHtml(tier);
-      const safeScore = escapeHtml(score);
-      const safeDetails = escapeHtml(details);
-      const html = `
-      <td>${new Date(ev.ts * 1000).toLocaleString()}</td>
-      <td><code>${safeIp}</code></td>
-      <td><span class="badge ${isBan ? 'ban' : 'challenge'}">${isBan ? 'BAN' : 'DETECTION'}</span></td>
-      <td>${safeTier}</td>
-      <td>${safeScore}</td>
-      <td>${safeDetails}</td>
-    `;
-      const key = buildStableKey(
-        [ev.ts, ev.ip, ev.reason, ev.outcome, ev.admin],
-        duplicates
-      );
-      return { key, html };
-    });
-
-    patchTableRows(tbody, cdpRows);
-  };
-
-  const updateCdpTotals = (cdpData) => {
-    const detections = cdpData?.stats?.total_detections ?? 0;
-    const autoBans = cdpData?.stats?.auto_bans ?? 0;
-    const fingerprintEvents =
-      (cdpData?.fingerprint_stats?.ua_client_hint_mismatch ?? 0) +
-      (cdpData?.fingerprint_stats?.ua_transport_mismatch ?? 0) +
-      (cdpData?.fingerprint_stats?.temporal_transition ?? 0);
-    const fingerprintFlowViolations = cdpData?.fingerprint_stats?.flow_violation ?? 0;
-
-    domModule.setText(byId('cdp-total-detections'), format.formatNumber(detections, '0'));
-    domModule.setText(byId('cdp-total-auto-bans'), format.formatNumber(autoBans, '0'));
-    domModule.setText(byId('cdp-fp-events'), format.formatNumber(fingerprintEvents, '0'));
-    domModule.setText(byId('cdp-fp-flow-violations'), format.formatNumber(fingerprintFlowViolations, '0'));
-  };
-
-  const showMonitoringLoadingState = () => {
-    domModule.setText(byId('cdp-total-detections'), '...');
-    domModule.setText(byId('cdp-total-auto-bans'), '...');
-    domModule.setText(byId('cdp-fp-events'), '...');
-    domModule.setText(byId('cdp-fp-flow-violations'), '...');
+    const nextCount = decoratedRows.length;
+    while (tableRows(tbody).length > nextCount) {
+      const rowList = tableRows(tbody);
+      const tail = rowList[rowList.length - 1];
+      if (!tail) break;
+      tbody.removeChild(tail);
+    }
   };
 
   return {
-    showMonitoringLoadingState,
-    updateBansTable,
-    updateEventsTable,
-    updateCdpEventsTable,
-    updateCdpTotals,
-    _extractCdpField: extractCdpField
+    updateBansTable
   };
 };

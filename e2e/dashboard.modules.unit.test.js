@@ -15,6 +15,15 @@ const DASHBOARD_NATIVE_RUNTIME_PATH = path.resolve(
   'runtime',
   'dashboard-native-runtime.js'
 );
+const DASHBOARD_REFRESH_RUNTIME_PATH = path.resolve(
+  __dirname,
+  '..',
+  'dashboard',
+  'src',
+  'lib',
+  'runtime',
+  'dashboard-runtime-refresh.js'
+);
 
 function loadClassicBrowserScript(relativePath, overrides = {}) {
   const absolutePath = path.resolve(__dirname, '..', relativePath);
@@ -1399,160 +1408,47 @@ test('svelte runtime effects provide login redirect and tab focus adapters', { c
   });
 });
 
-test('monitoring view consumes prometheus helper payload as single-source contract', { concurrency: false }, async () => {
-  const elements = {
-    'monitoring-prometheus-example': createMockElement(),
-    'monitoring-prometheus-copy-curl': createMockElement(),
-    'monitoring-prometheus-facts': createMockElement(),
-    'monitoring-prometheus-output': createMockElement(),
-    'monitoring-prometheus-stats': createMockElement(),
-    'monitoring-prometheus-windowed': createMockElement(),
-    'monitoring-prometheus-summary-stats': createMockElement(),
-    'monitoring-prometheus-observability-link': createMockElement(),
-    'monitoring-prometheus-api-link': createMockElement()
-  };
+test('monitoring view model consumes prometheus helper payload as single-source contract', { concurrency: false }, async () => {
+  await withBrowserGlobals({}, async () => {
+    const monitoringModelModule = await importBrowserModule(
+      'dashboard/src/lib/components/dashboard/monitoring-view-model.js'
+    );
 
-  await withBrowserGlobals({
-    location: { origin: 'https://example.test' },
-    document: {
-      getElementById: (id) => elements[id] || null,
-      querySelector: () => null,
-      querySelectorAll: () => []
-    }
-  }, async () => {
-    const monitoringViewModule = await importBrowserModule('dashboard/modules/monitoring-view.js');
-    const monitoringView = monitoringViewModule.create();
-    monitoringView.updatePrometheusHelper({
-      endpoint: '/metrics',
-      notes: [
-        '/metrics returns one full payload.',
-        'Use /admin/monitoring for bounded summary.'
-      ],
-      example_js: "const metricsText = await fetch('/metrics').then(r => r.text());",
-      example_output: '# TYPE bot_defence_requests_total counter',
-      example_stats: 'const stats = { requestsMain: 1 };',
-      example_windowed: 'const monitoring = await fetch(`/admin/monitoring?hours=24&limit=10`).then(r => r.json());',
-      example_summary_stats: 'const stats = { honeypotHits: monitoring.summary.honeypot.total_hits };',
-      docs: {
-        observability: 'https://example.test/observability',
-        api: 'https://example.test/api'
-      }
-    });
-  });
-
-  assert.equal(elements['monitoring-prometheus-example'].textContent.includes("fetch('/metrics')"), true);
-  assert.equal(
-    elements['monitoring-prometheus-copy-curl'].dataset.copyText,
-    "curl -sS 'https://example.test/metrics'"
-  );
-  assert.equal(
-    elements['monitoring-prometheus-facts'].innerHTML.includes('/admin/monitoring for bounded summary.'),
-    true
-  );
-  assert.equal(elements['monitoring-prometheus-observability-link'].href, 'https://example.test/observability');
-  assert.equal(elements['monitoring-prometheus-api-link'].href, 'https://example.test/api');
-});
-
-test('monitoring view teardown removes copy listeners safely', { concurrency: false }, async () => {
-  const makeButton = () => {
-    const listeners = new Map();
-    let addCount = 0;
-    let removeCount = 0;
-    return {
-      textContent: '',
-      dataset: {},
-      get addCount() {
-        return addCount;
-      },
-      get removeCount() {
-        return removeCount;
-      },
-      addEventListener: (name, handler) => {
-        listeners.set(name, handler);
-        addCount += 1;
-      },
-      removeEventListener: (name, handler) => {
-        if (listeners.get(name) === handler) {
-          listeners.delete(name);
+    const helper = monitoringModelModule.derivePrometheusHelperViewModel(
+      {
+        endpoint: '/metrics',
+        notes: [
+          '/metrics returns one full payload.',
+          'Use /admin/monitoring for bounded summary.'
+        ],
+        example_js: "const metricsText = await fetch('/metrics').then(r => r.text());",
+        example_output: '# TYPE bot_defence_requests_total counter',
+        example_stats: 'const stats = { requestsMain: 1 };',
+        example_windowed: 'const monitoring = await fetch(`/admin/monitoring?hours=24&limit=10`).then(r => r.json());',
+        example_summary_stats: 'const stats = { honeypotHits: monitoring.summary.honeypot.total_hits };',
+        docs: {
+          observability: 'https://example.test/observability',
+          api: 'https://example.test/api'
         }
-        removeCount += 1;
-      }
-    };
-  };
-  const copyButton = makeButton();
-  const copyCurlButton = makeButton();
-  const elements = {
-    'monitoring-prometheus-example': { textContent: 'const metricsText = ...' },
-    'monitoring-prometheus-copy': copyButton,
-    'monitoring-prometheus-copy-curl': copyCurlButton,
-    'monitoring-prometheus-facts': createMockElement(),
-    'monitoring-prometheus-output': createMockElement(),
-    'monitoring-prometheus-stats': createMockElement(),
-    'monitoring-prometheus-windowed': createMockElement(),
-    'monitoring-prometheus-summary-stats': createMockElement(),
-    'monitoring-prometheus-observability-link': createMockElement(),
-    'monitoring-prometheus-api-link': createMockElement()
-  };
+      },
+      'https://example.test'
+    );
 
-  await withBrowserGlobals({
-    document: {
-      getElementById: (id) => elements[id] || null,
-      querySelector: () => null,
-      querySelectorAll: () => []
-    }
-  }, async () => {
-    const monitoringViewModule = await importBrowserModule('dashboard/modules/monitoring-view.js');
-    const monitoringView = monitoringViewModule.create({
-      effects: {
-        copyText: async () => {},
-        setTimer: (task) => task()
-      }
-    });
-    monitoringView.bindPrometheusCopyButtons();
-    monitoringView.destroy();
+    assert.equal(helper.exampleJs.includes("fetch('/metrics')"), true);
+    assert.equal(helper.copyCurlText, "curl -sS 'https://example.test/metrics'");
+    assert.equal(helper.facts.includes('Use /admin/monitoring for bounded summary.'), true);
+    assert.equal(helper.observabilityLink, 'https://example.test/observability');
+    assert.equal(helper.apiLink, 'https://example.test/api');
   });
-
-  assert.equal(copyButton.removeCount >= 1, true);
-  assert.equal(copyCurlButton.removeCount >= 1, true);
 });
 
-test('monitoring view normalizes hashed offender labels in top offender cards', { concurrency: false }, async () => {
-  const elements = {
-    'honeypot-total-hits': createMockElement(),
-    'honeypot-unique-crawlers': createMockElement(),
-    'honeypot-top-offender': createMockElement(),
-    'honeypot-top-offender-label': createMockElement(),
-    'honeypot-top-paths': createMockElement(),
-    'challenge-failures-total': createMockElement(),
-    'challenge-failures-unique': createMockElement(),
-    'challenge-top-offender': createMockElement(),
-    'challenge-top-offender-label': createMockElement(),
-    'challenge-failure-reasons': createMockElement(),
-    'pow-failures-total': createMockElement(),
-    'pow-failures-unique': createMockElement(),
-    'pow-top-offender': createMockElement(),
-    'pow-top-offender-label': createMockElement(),
-    'pow-failure-reasons': createMockElement(),
-    'rate-violations-total': createMockElement(),
-    'rate-violations-unique': createMockElement(),
-    'rate-top-offender': createMockElement(),
-    'rate-top-offender-label': createMockElement(),
-    'rate-outcomes-list': createMockElement(),
-    'geo-violations-total': createMockElement(),
-    'geo-action-mix': createMockElement(),
-    'geo-top-countries': createMockElement()
-  };
+test('monitoring view model normalizes hashed offender labels in top offender cards', { concurrency: false }, async () => {
+  await withBrowserGlobals({}, async () => {
+    const monitoringModelModule = await importBrowserModule(
+      'dashboard/src/lib/components/dashboard/monitoring-view-model.js'
+    );
 
-  await withBrowserGlobals({
-    document: {
-      getElementById: (id) => elements[id] || null,
-      querySelector: () => null,
-      querySelectorAll: () => []
-    }
-  }, async () => {
-    const monitoringViewModule = await importBrowserModule('dashboard/modules/monitoring-view.js');
-    const monitoringView = monitoringViewModule.create();
-    monitoringView.updateMonitoringSummary({
+    const summary = monitoringModelModule.deriveMonitoringSummaryViewModel({
       honeypot: {
         total_hits: 43,
         unique_crawlers: 1,
@@ -1564,56 +1460,29 @@ test('monitoring view normalizes hashed offender labels in top offender cards', 
       rate: { total_violations: 0, unique_offenders: 0, top_offenders: [], outcomes: {} },
       geo: { total_violations: 0, actions: {}, top_countries: [] }
     });
-  });
 
-  assert.equal(elements['honeypot-top-offender'].textContent, 'untrusted/unknown');
-  assert.equal(elements['honeypot-top-offender-label'].textContent, 'Top Offender (43 hits)');
+    assert.equal(summary.honeypot.topOffender.value, 'untrusted/unknown');
+    assert.equal(summary.honeypot.topOffender.label, 'Top Offender (43 hits)');
+  });
 });
 
-test('monitoring view loading state hydrates placeholders consistently', { concurrency: false }, async () => {
-  const ids = [
-    'maze-total-hits',
-    'maze-unique-crawlers',
-    'maze-auto-bans',
-    'maze-top-offender',
-    'maze-top-offender-label',
-    'honeypot-total-hits',
-    'honeypot-unique-crawlers',
-    'honeypot-top-offender',
-    'honeypot-top-offender-label',
-    'challenge-failures-total',
-    'challenge-failures-unique',
-    'challenge-top-offender',
-    'challenge-top-offender-label',
-    'pow-failures-total',
-    'pow-failures-unique',
-    'pow-top-offender',
-    'pow-top-offender-label',
-    'rate-violations-total',
-    'rate-violations-unique',
-    'rate-top-offender',
-    'rate-top-offender-label',
-    'geo-violations-total'
-  ];
-  const elements = Object.fromEntries(ids.map((id) => [id, createMockElement()]));
+test('monitoring view model loading fallbacks remain explicit and stable', { concurrency: false }, async () => {
+  await withBrowserGlobals({}, async () => {
+    const monitoringModelModule = await importBrowserModule(
+      'dashboard/src/lib/components/dashboard/monitoring-view-model.js'
+    );
 
-  await withBrowserGlobals({
-    document: {
-      getElementById: (id) => elements[id] || null,
-      querySelector: () => null,
-      querySelectorAll: () => []
-    }
-  }, async () => {
-    const monitoringViewModule = await importBrowserModule('dashboard/modules/monitoring-view.js');
-    const monitoringView = monitoringViewModule.create();
-    monitoringView.showLoadingState();
+    const maze = monitoringModelModule.deriveMazeStatsViewModel({});
+    const summary = monitoringModelModule.deriveMonitoringSummaryViewModel({});
+    const helper = monitoringModelModule.derivePrometheusHelperViewModel({}, '');
+
+    assert.equal(maze.totalHits, '0');
+    assert.equal(maze.topOffender.value, 'None');
+    assert.equal(summary.honeypot.totalHits, '0');
+    assert.equal(summary.rate.topOffender.label, 'Top Offender');
+    assert.equal(helper.facts.length >= 1, true);
+    assert.equal(helper.exampleJs.includes('Example unavailable'), true);
   });
-
-  assert.equal(elements['maze-total-hits'].textContent, '...');
-  assert.equal(elements['maze-top-offender'].textContent, '...');
-  assert.equal(elements['maze-top-offender-label'].textContent, 'Top Offender');
-  assert.equal(elements['rate-top-offender'].textContent, '...');
-  assert.equal(elements['rate-top-offender-label'].textContent, 'Top Offender');
 });
 
 test('config schema centralizes advanced and status-writable path inventories', { concurrency: false }, async () => {
@@ -1992,61 +1861,17 @@ test('admin endpoint resolver applies loopback override only for local hostnames
   });
 });
 
-test('tab state view updates element state and dashboard-state hooks', { concurrency: false }, async () => {
-  const stateEl = {
-    hidden: true,
-    textContent: '',
-    className: 'tab-state'
-  };
-  const calls = [];
-  const stateStore = {
-    setTabLoading: (...args) => calls.push(['setTabLoading', ...args]),
-    clearTabError: (...args) => calls.push(['clearTabError', ...args]),
-    setTabError: (...args) => calls.push(['setTabError', ...args]),
-    setTabEmpty: (...args) => calls.push(['setTabEmpty', ...args]),
-    markTabUpdated: (...args) => calls.push(['markTabUpdated', ...args])
-  };
+test('tab state message component is declarative and store-driven', () => {
+  const source = fs.readFileSync(
+    path.resolve(__dirname, '..', 'dashboard', 'src', 'lib', 'components', 'dashboard', 'primitives', 'TabStateMessage.svelte'),
+    'utf8'
+  );
 
-  await withBrowserGlobals({}, async () => {
-    const tabStateModule = await importBrowserModule('dashboard/modules/tab-state-view.js');
-    const view = tabStateModule.create({
-      query: (selector) => (selector === '[data-tab-state="monitoring"]' ? stateEl : null),
-      getStateStore: () => stateStore
-    });
-
-    view.showLoading('monitoring', 'Loading monitoring...');
-    assert.equal(stateEl.hidden, false);
-    assert.equal(stateEl.className, 'tab-state tab-state--loading');
-    assert.equal(stateEl.textContent, 'Loading monitoring...');
-
-    view.showError('monitoring', 'failed');
-    assert.equal(stateEl.className, 'tab-state tab-state--error');
-    assert.equal(stateEl.textContent, 'failed');
-
-    view.showEmpty('monitoring', 'no data');
-    assert.equal(stateEl.className, 'tab-state tab-state--empty');
-    assert.equal(stateEl.textContent, 'no data');
-
-    view.clear('monitoring');
-    assert.equal(stateEl.hidden, true);
-    assert.equal(stateEl.className, 'tab-state');
-    assert.equal(stateEl.textContent, '');
-  });
-
-  const callNames = calls.map((entry) => entry[0]);
-  assert.deepEqual(callNames, [
-    'setTabLoading',
-    'clearTabError',
-    'setTabError',
-    'setTabEmpty',
-    'setTabEmpty',
-    'clearTabError',
-    'markTabUpdated',
-    'setTabLoading',
-    'setTabEmpty',
-    'clearTabError',
-    'markTabUpdated'
-  ]);
+  assert.match(source, /export let status/);
+  assert.match(source, /stateKind = loading \? 'loading'/);
+  assert.equal(source.includes('hidden={!stateKind}'), true);
+  assert.equal(source.includes('document.getElementById'), false);
+  assert.equal(source.includes('querySelector'), false);
 });
 
 test('runtime effects request resolves window fetch at call time', { concurrency: false }, async () => {
@@ -2336,38 +2161,69 @@ test('config ui state declarative bindings hydrate robots controls and reset sav
 });
 
 test('tables view wires quick-unban callback and detail toggle handlers', { concurrency: false }, async () => {
-  const bansTbody = {
-    innerHTML: '',
-    rows: [],
-    appendChild(node) {
-      this.rows.push(node);
-    }
-  };
-  const detailRow = {
-    classList: {
-      _hidden: true,
+  const createRow = () => {
+    const row = {
+      innerHTML: '',
+      dataset: {},
+      id: '',
+      className: '',
+      parentNode: null
+    };
+    row.classList = {
       toggle(name) {
-        if (name === 'hidden') this._hidden = !this._hidden;
+        const tokens = row.className ? row.className.split(/\s+/).filter(Boolean) : [];
+        const has = tokens.includes(name);
+        row.className = has ? tokens.filter((token) => token !== name).join(' ') : [...tokens, name].join(' ');
       },
       contains(name) {
-        return name === 'hidden' ? this._hidden : false;
+        const tokens = row.className ? row.className.split(/\s+/).filter(Boolean) : [];
+        return tokens.includes(name);
       }
+    };
+    return row;
+  };
+
+  const bansTbody = {
+    innerHTML: '',
+    dataset: {},
+    children: [],
+    addEventListener(_event, handler) {
+      this.onClick = handler;
+    },
+    appendChild(node) {
+      node.parentNode = this;
+      this.children.push(node);
+    },
+    replaceChild(next, prev) {
+      next.parentNode = this;
+      const index = this.children.indexOf(prev);
+      if (index >= 0) this.children[index] = next;
+    },
+    removeChild(node) {
+      this.children = this.children.filter((entry) => entry !== node);
     }
   };
-  const detailsBtn = { dataset: { target: 'ban-detail-2030011310' }, textContent: 'Details' };
-  const quickUnbanBtn = { dataset: { ip: '203.0.113.10' } };
+
+  const detailsBtn = {
+    classList: { contains: (name) => name === 'ban-details-toggle' },
+    dataset: { target: '' },
+    textContent: 'Details',
+    disabled: false
+  };
+  const quickUnbanBtn = {
+    classList: { contains: (name) => name === 'unban-quick' },
+    dataset: { ip: '203.0.113.10' },
+    textContent: 'Unban',
+    disabled: false
+  };
   const unbanned = [];
 
   await withBrowserGlobals({
     document: {
       querySelector: (selector) => (selector === '#bans-table tbody' ? bansTbody : null),
-      querySelectorAll: (selector) => {
-        if (selector === '.ban-details-toggle') return [detailsBtn];
-        if (selector === '.unban-quick') return [quickUnbanBtn];
-        return [];
-      },
-      createElement: () => ({ innerHTML: '', id: '', className: '' }),
-      getElementById: (id) => (id === 'ban-detail-2030011310' ? detailRow : null)
+      querySelectorAll: () => [],
+      createElement: () => createRow(),
+      getElementById: (id) => bansTbody.children.find((entry) => entry.id === id) || null
     }
   }, async () => {
     const tablesModule = await importBrowserModule('dashboard/modules/tables-view.js');
@@ -2387,28 +2243,33 @@ test('tables view wires quick-unban callback and detail toggle handlers', { conc
     ]);
   });
 
-  assert.equal(typeof detailsBtn.onclick, 'function');
-  assert.equal(typeof quickUnbanBtn.onclick, 'function');
+  assert.equal(typeof bansTbody.onClick, 'function');
+  const detailRow = bansTbody.children.find((entry) => String(entry.className || '').includes('ban-detail-row'));
+  assert.ok(detailRow);
+  detailsBtn.dataset.target = detailRow.id;
 
-  detailsBtn.onclick();
+  await bansTbody.onClick({
+    target: {
+      closest: () => detailsBtn
+    }
+  });
   assert.equal(detailRow.classList.contains('hidden'), false);
   assert.equal(detailsBtn.textContent, 'Hide');
 
-  await quickUnbanBtn.onclick();
+  await bansTbody.onClick({
+    target: {
+      closest: () => quickUnbanBtn
+    }
+  });
   assert.deepEqual(unbanned, ['203.0.113.10']);
 });
 
-test('tables view renders empty-state rows for bans and events', { concurrency: false }, async () => {
+test('tables view renders empty-state rows for bans', { concurrency: false }, async () => {
   const bansTbody = { innerHTML: '', appendChild: () => {} };
-  const eventsTbody = { innerHTML: '', appendChild: () => {} };
 
   await withBrowserGlobals({
     document: {
-      querySelector: (selector) => {
-        if (selector === '#bans-table tbody') return bansTbody;
-        if (selector === '#events tbody') return eventsTbody;
-        return null;
-      },
+      querySelector: (selector) => (selector === '#bans-table tbody' ? bansTbody : null),
       querySelectorAll: () => [],
       createElement: () => ({ innerHTML: '' }),
       getElementById: () => null
@@ -2417,14 +2278,12 @@ test('tables view renders empty-state rows for bans and events', { concurrency: 
     const tablesModule = await importBrowserModule('dashboard/modules/tables-view.js');
     const tables = tablesModule.create();
     tables.updateBansTable([]);
-    tables.updateEventsTable([]);
   });
 
   assert.equal(bansTbody.innerHTML.includes('No active bans'), true);
-  assert.equal(eventsTbody.innerHTML.includes('No recent events'), true);
 });
 
-test('tables view patches monitoring rows in place to reduce refresh churn', { concurrency: false }, async () => {
+test('tables view patches ban rows in place to reduce refresh churn', { concurrency: false }, async () => {
   const createTableBody = () => ({
     innerHTML: '',
     children: [],
@@ -2453,137 +2312,44 @@ test('tables view patches monitoring rows in place to reduce refresh churn', { c
     }
   });
 
-  const eventsTbody = createTableBody();
-  const cdpTbody = createTableBody();
+  const bansTbody = createTableBody();
 
   await withBrowserGlobals({
     document: {
-      querySelector: (selector) => {
-        if (selector === '#events tbody') return eventsTbody;
-        if (selector === '#cdp-events tbody') return cdpTbody;
-        return null;
-      },
+      querySelector: (selector) => (selector === '#bans-table tbody' ? bansTbody : null),
       querySelectorAll: () => [],
-      createElement: () => ({ innerHTML: '', dataset: {} }),
-      getElementById: () => null
+      createElement: () => ({ innerHTML: '', dataset: {}, className: '', id: '' }),
+      getElementById: (id) => bansTbody.children.find((entry) => entry.id === id) || null
     }
   }, async () => {
     const tablesModule = await importBrowserModule('dashboard/modules/tables-view.js');
     const tables = tablesModule.create();
 
-    const firstEvent = {
-      ts: 1700000000,
-      event: 'Ban',
+    const firstBan = {
       ip: '203.0.113.10',
-      reason: 'test',
-      outcome: 'blocked',
-      admin: 'ops'
+      reason: 'manual_ban',
+      banned_at: 1700000000,
+      expires: 1900000000,
+      fingerprint: { signals: ['ua_transport_mismatch'], score: 5, summary: 'first ban' }
     };
-    const secondEvent = {
-      ts: 1700001000,
-      event: 'Challenge',
+    const secondBan = {
       ip: '203.0.113.11',
-      reason: 'risk',
-      outcome: 'served',
-      admin: 'ops'
+      reason: 'manual_ban',
+      banned_at: 1700000100,
+      expires: 1900000100,
+      fingerprint: { signals: ['ua_client_hint_mismatch'], score: 4, summary: 'second ban' }
     };
-    tables.updateEventsTable([firstEvent, secondEvent]);
-    const firstEventRowRef = eventsTbody.children[0];
+    tables.updateBansTable([firstBan, secondBan]);
+    const firstSummaryRowRef = bansTbody.children[0];
+    const firstDetailRowRef = bansTbody.children[1];
 
-    tables.updateEventsTable([firstEvent]);
-    assert.equal(eventsTbody.children.length, 1);
-    assert.equal(eventsTbody.children[0], firstEventRowRef);
-    assert.equal(eventsTbody.replaceCount, 0);
-    assert.equal(eventsTbody.removeCount, 1);
-
-    const firstCdpEvent = {
-      ts: 1700002000,
-      ip: '198.51.100.20',
-      reason: 'cdp_detected:tier=medium score=75',
-      outcome: 'checks:webdriver',
-      admin: 'ops'
-    };
-    const secondCdpEvent = {
-      ts: 1700003000,
-      ip: '198.51.100.21',
-      reason: 'cdp_automation',
-      outcome: 'tier=strong score=99',
-      admin: 'ops'
-    };
-    tables.updateCdpEventsTable([firstCdpEvent, secondCdpEvent]);
-    const firstCdpRowRef = cdpTbody.children[0];
-
-    tables.updateCdpEventsTable([firstCdpEvent]);
-    assert.equal(cdpTbody.children.length, 1);
-    assert.equal(cdpTbody.children[0], firstCdpRowRef);
-    assert.equal(cdpTbody.replaceCount, 0);
-    assert.equal(cdpTbody.removeCount, 1);
+    tables.updateBansTable([firstBan]);
+    assert.equal(bansTbody.children.length, 2);
+    assert.equal(bansTbody.children[0], firstSummaryRowRef);
+    assert.equal(bansTbody.children[1], firstDetailRowRef);
+    assert.equal(bansTbody.replaceCount, 0);
+    assert.equal(bansTbody.removeCount > 0, true);
   });
-});
-
-test('tables view updates CDP totals and parses tier/score fields', { concurrency: false }, async () => {
-  const els = {
-    'cdp-total-detections': createMockElement(),
-    'cdp-total-auto-bans': createMockElement(),
-    'cdp-fp-events': createMockElement(),
-    'cdp-fp-flow-violations': createMockElement()
-  };
-
-  await withBrowserGlobals({
-    document: {
-      querySelector: () => null,
-      querySelectorAll: () => [],
-      createElement: () => ({ innerHTML: '' }),
-      getElementById: (id) => els[id] || null
-    }
-  }, async () => {
-    const tablesModule = await importBrowserModule('dashboard/modules/tables-view.js');
-    const tables = tablesModule.create();
-    tables.updateCdpTotals({
-      stats: { total_detections: 12, auto_bans: 3 },
-      fingerprint_stats: {
-        ua_client_hint_mismatch: 5,
-        ua_transport_mismatch: 4,
-        temporal_transition: 2,
-        flow_violation: 6
-      }
-    });
-
-    assert.equal(tables._extractCdpField('tier=strong score=98', 'tier'), 'strong');
-    assert.equal(tables._extractCdpField('tier=strong score=98', 'score'), '98');
-  });
-
-  assert.equal(els['cdp-total-detections'].textContent, '12');
-  assert.equal(els['cdp-total-auto-bans'].textContent, '3');
-  assert.equal(els['cdp-fp-events'].textContent, '11');
-  assert.equal(els['cdp-fp-flow-violations'].textContent, '6');
-});
-
-test('tables view monitoring loading state sets CDP placeholders', { concurrency: false }, async () => {
-  const els = {
-    'cdp-total-detections': createMockElement(),
-    'cdp-total-auto-bans': createMockElement(),
-    'cdp-fp-events': createMockElement(),
-    'cdp-fp-flow-violations': createMockElement()
-  };
-
-  await withBrowserGlobals({
-    document: {
-      querySelector: () => null,
-      querySelectorAll: () => [],
-      createElement: () => ({ innerHTML: '' }),
-      getElementById: (id) => els[id] || null
-    }
-  }, async () => {
-    const tablesModule = await importBrowserModule('dashboard/modules/tables-view.js');
-    const tables = tablesModule.create();
-    tables.showMonitoringLoadingState();
-  });
-
-  assert.equal(els['cdp-total-detections'].textContent, '...');
-  assert.equal(els['cdp-total-auto-bans'].textContent, '...');
-  assert.equal(els['cdp-fp-events'].textContent, '...');
-  assert.equal(els['cdp-fp-flow-violations'].textContent, '...');
 });
 
 test('dashboard ESM guardrails forbid legacy global registry and class syntax', () => {
@@ -2677,6 +2443,23 @@ test('svelte route guardrails forbid shell injection and bridge-era imports', ()
   assert.match(mainSource, /chartRuntimeSrc/);
   assert.equal(mainSource.includes('dashboard_runtime'), false);
   assert.equal(mainSource.includes("import('../../../dashboard.js')"), false);
+});
+
+test('svelte dashboard routes use base-aware path helpers for assets and login redirects', () => {
+  const dashboardRoot = path.resolve(__dirname, '..', 'dashboard');
+  const mainRoutePath = path.join(dashboardRoot, 'src', 'routes', '+page.svelte');
+  const loginRoutePath = path.join(dashboardRoot, 'src', 'routes', 'login.html', '+page.svelte');
+  const effectsPath = path.join(dashboardRoot, 'src', 'lib', 'runtime', 'dashboard-effects.js');
+  const mainSource = fs.readFileSync(mainRoutePath, 'utf8');
+  const loginSource = fs.readFileSync(loginRoutePath, 'utf8');
+  const effectsSource = fs.readFileSync(effectsPath, 'utf8');
+
+  assert.match(mainSource, /resolveDashboardAssetPath/);
+  assert.equal(mainSource.includes('src="/assets/'), false);
+  assert.match(loginSource, /dashboardIndexPath/);
+  assert.match(loginSource, /normalizeDashboardBasePath/);
+  assert.equal(loginSource.includes("'/dashboard/index.html'"), false);
+  assert.match(effectsSource, /buildDashboardLoginPath/);
 });
 
 test('svelte dashboard actions route login redirect and focus through effects adapters', () => {
@@ -2809,15 +2592,33 @@ test('dashboard native runtime delegates config dirty-check orchestration to run
   assert.equal(source.includes('DIRTY_CHECK_REGISTRY'), false);
 });
 
-test('monitoring auto-refresh uses consolidated monitoring summary reads to bound poll fan-out', () => {
+test('dashboard native runtime delegates refresh and tab-state orchestration to runtime helpers', () => {
   const source = fs.readFileSync(DASHBOARD_NATIVE_RUNTIME_PATH, 'utf8');
+
+  assert.match(source, /createDashboardRefreshRuntime/);
+  assert.match(source, /createDashboardTabStateRuntime/);
+  assert.match(source, /dashboardRefreshRuntime = createDashboardRefreshRuntime\(/);
+  assert.match(source, /tabStateRuntime = createDashboardTabStateRuntime\(/);
+  assert.equal(source.includes('async function refreshMonitoringTab('), false);
+  assert.equal(source.includes('async function refreshIpBansTab('), false);
+});
+
+test('dashboard native runtime requires injected store contract (no fallback runtime store)', () => {
+  const source = fs.readFileSync(DASHBOARD_NATIVE_RUNTIME_PATH, 'utf8');
+
+  assert.match(source, /mountDashboardApp requires an injected dashboard store contract/);
+  assert.equal(source.includes('dashboardStateModule.create('), false);
+});
+
+test('monitoring auto-refresh uses consolidated monitoring summary reads to bound poll fan-out', () => {
+  const source = fs.readFileSync(DASHBOARD_REFRESH_RUNTIME_PATH, 'utf8');
   const refreshMatch = source.match(
-    /async function refreshMonitoringTab\([\s\S]*?\n}\n\nasync function refreshIpBansTab/
+    /async function refreshMonitoringTab\([\s\S]*?\n\s*}\n\s*\n\s*async function refreshIpBansTab/
   );
   assert.ok(refreshMatch, 'refreshMonitoringTab source block should exist');
   const refreshSource = refreshMatch[0];
 
-  assert.match(refreshSource, /if \(isAutoRefresh\) \{/);
+  assert.match(refreshSource, /if \(!isAutoRefresh\) \{/);
   assert.match(
     refreshSource,
     /const monitoringData = await dashboardApiClient\.getMonitoring\(\{ hours: 24, limit: 10 \}, requestOptions\);/
@@ -2825,6 +2626,7 @@ test('monitoring auto-refresh uses consolidated monitoring summary reads to boun
   assert.match(refreshSource, /const monitoringDetails = monitoringData && typeof monitoringData === 'object'/);
   assert.match(refreshSource, /const analyticsResponse = monitoringDetails\.analytics \|\| \{\};/);
   assert.match(refreshSource, /dashboardState\.setSnapshot\('monitoring', monitoringData\)/);
+  assert.match(refreshSource, /if \(!isAutoRefresh\) \{\s*dashboardState\.setSnapshot\('analytics', analytics\);/m);
   assert.equal(refreshSource.includes('Promise.all(['), false);
   assert.equal(refreshSource.includes('dashboardApiClient.getAnalytics('), false);
   assert.equal(refreshSource.includes('dashboardApiClient.getEvents('), false);
@@ -3044,6 +2846,81 @@ test('dashboard module graph is layered (core -> services -> features -> runtime
   assert.deepEqual(rankErrors, [], `layering violations:\n${rankErrors.join('\n')}`);
   const cycles = detectCycles(adjacency);
   assert.equal(cycles.length, 0, `module import cycles found:\n${JSON.stringify(cycles, null, 2)}`);
+});
+
+test('dashboard modules are reachable from route/runtime entry graph (no dead wrappers)', () => {
+  const dashboardRoot = path.resolve(__dirname, '..', 'dashboard');
+  const moduleRoot = path.join(dashboardRoot, 'modules');
+  const moduleFiles = listJsFilesRecursively(moduleRoot);
+
+  const routeAndRuntimeEntries = [
+    path.join(dashboardRoot, 'src/routes/+page.svelte'),
+    path.join(dashboardRoot, 'src/routes/login.html/+page.svelte'),
+    ...listJsFilesRecursively(path.join(dashboardRoot, 'src/lib/runtime'))
+  ];
+  const queue = routeAndRuntimeEntries.filter((absolutePath) => fs.existsSync(absolutePath));
+  const visited = new Set();
+
+  const resolveRelativeImport = (fromPath, specifier) => {
+    const base = path.resolve(path.dirname(fromPath), specifier);
+    const candidates = [base, `${base}.js`, `${base}.svelte`, path.join(base, 'index.js')];
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate;
+    }
+    return null;
+  };
+
+  while (queue.length > 0) {
+    const current = queue.pop();
+    if (visited.has(current)) continue;
+    visited.add(current);
+    const source = fs.readFileSync(current, 'utf8');
+    const imports = parseRelativeImports(source);
+    imports.forEach((specifier) => {
+      const resolved = resolveRelativeImport(current, specifier);
+      if (resolved && !visited.has(resolved)) {
+        queue.push(resolved);
+      }
+    });
+  }
+
+  const unreachableModules = moduleFiles
+    .filter((absolutePath) => !visited.has(absolutePath))
+    .map((absolutePath) => path.relative(dashboardRoot, absolutePath).split(path.sep).join('/'));
+  assert.deepEqual(
+    unreachableModules,
+    [],
+    `unreachable dashboard modules found:\n${unreachableModules.join('\n')}`
+  );
+});
+
+test('dashboard native runtime enforces no legacy global controller leftovers', () => {
+  const source = fs.readFileSync(DASHBOARD_NATIVE_RUNTIME_PATH, 'utf8');
+  assert.equal(source.includes('dashboardEventAbortController'), false);
+  assert.equal(source.includes('window.dashboardEventAbortController'), false);
+});
+
+test('dashboard native runtime coordinator stays within LOC budget', () => {
+  const source = fs.readFileSync(DASHBOARD_NATIVE_RUNTIME_PATH, 'utf8');
+  const loc = source.split('\n').length;
+  assert.equal(loc <= 1600, true, `dashboard-native-runtime.js LOC budget exceeded: ${loc} > 1600`);
+});
+
+test('dashboard store authority remains single-source (route-owned)', () => {
+  const dashboardRoot = path.resolve(__dirname, '..', 'dashboard');
+  const routePath = path.join(dashboardRoot, 'src', 'routes', '+page.svelte');
+  const runtimeFiles = listJsFilesRecursively(path.join(dashboardRoot, 'src', 'lib', 'runtime'));
+  const routeSource = fs.readFileSync(routePath, 'utf8');
+
+  assert.match(routeSource, /createDashboardStore/);
+  runtimeFiles.forEach((filePath) => {
+    const source = fs.readFileSync(filePath, 'utf8');
+    assert.equal(
+      source.includes('createDashboardStore'),
+      false,
+      `runtime module must not create a second dashboard store authority: ${filePath}`
+    );
+  });
 });
 
 test('dashboard state reducer transitions are immutable', { concurrency: false }, async () => {

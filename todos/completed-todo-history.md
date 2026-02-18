@@ -337,9 +337,9 @@ Moved from active TODO files on 2026-02-14.
 
 #### P3 Dashboard Architecture Modernization (Tabbed SPA, Frameworkless-First)
 ##### Baseline and decision gate
-- [x] DSH-R1 Baseline current dashboard architecture and runtime costs (JS/CSS bytes, startup time, memory, polling cadence, bundle provenance, current e2e coverage) and publish a short decision memo in `docs/plans/`. (`docs/plans/2026-02-15-dashboard-architecture-modernization.md`)
-- [x] DSH-R2 Evaluate two implementation tracks against Shuma constraints: (A) frameworkless modular SPA + JSDoc typing, (B) ultra-light framework (Lit) with equivalent tab shell; include explicit tradeoffs for maintenance, DX, runtime weight, and migration risk. (`docs/plans/2026-02-15-dashboard-architecture-modernization.md`)
-- [x] DSH-R3 Define framework-adoption gate criteria (for example: unresolved lifecycle complexity, repeated DOM/state bugs, unacceptable change lead time after frameworkless refactor); default to no framework unless gate is tripped. (`docs/plans/2026-02-15-dashboard-architecture-modernization.md`)
+- [x] DSH-R1 Baseline current dashboard architecture and runtime costs (JS/CSS bytes, startup time, memory, polling cadence, bundle provenance, current e2e coverage) and publish a short decision memo in `docs/plans/`.
+- [x] DSH-R2 Evaluate two implementation tracks against Shuma constraints: (A) frameworkless modular SPA + JSDoc typing, (B) ultra-light framework (Lit) with equivalent tab shell; include explicit tradeoffs for maintenance, DX, runtime weight, and migration risk.
+- [x] DSH-R3 Define framework-adoption gate criteria (for example: unresolved lifecycle complexity, repeated DOM/state bugs, unacceptable change lead time after frameworkless refactor); default to no framework unless gate is tripped.
 
 ##### Tabbed SPA shell and structure (frameworkless path)
 - [x] DSH-1 Implement tabbed SPA shell in `dashboard/index.html` + `dashboard/dashboard.js` with canonical tabs: `Monitoring`, `IP Bans`, `Status`, `Config`, `Tuning`.
@@ -375,7 +375,7 @@ Moved from active TODO files on 2026-02-14.
 - [x] DSH-ARCH-6 Remove uncached hot-path `getElementById` usage from `dashboard.js` and `config-controls.js` by routing lookups through shared DOM cache helpers.
 
 #### P3 Dashboard Native ESM + Functional JS Modernization (No Build Step)
-- [x] DSH-ESM-1 Hard cutover selected for pre-launch: migrate dashboard JS to native ESM without dual global-script wiring; decision recorded in `docs/plans/2026-02-17-dashboard-native-esm-hard-cutover.md`.
+- [x] DSH-ESM-1 Hard cutover selected for pre-launch: migrate dashboard JS to native ESM without dual global-script wiring; decision captured during the native ESM cutover tranche.
 - [x] DSH-ESM-2 Freeze behavior contracts to preserve during refactor: tab routing/hash behavior, API payload expectations, status/config control semantics, and monitoring render states. (`docs/plans/2026-02-17-dashboard-esm-behavior-contracts.md`)
 - [x] DSH-ESM-3 Add/expand regression coverage before migration for all dashboard tabs (`loading`/`empty`/`error`/`data`) and critical config dirty-state/save flows. (`e2e/dashboard.smoke.spec.js`, `e2e/dashboard.modules.unit.test.js`)
 - [x] DSH-ESM-4 Introduce a single native module entrypoint (`<script type="module">`) and convert dashboard boot from global-init order to explicit imports.
@@ -522,3 +522,20 @@ Moved from active TODO files on 2026-02-14.
   - DNS troubleshooting outcome in Codex runtime: resolved (`curl -I https://api.github.com` returned `HTTP/2 200`; `gh api rate_limit` succeeded).
 - [x] HND-SVLT-4 Merge to `main` after CI is green; then continue Round 4 items (`DSH-SVLT-EX18..EX22`) on a fresh `codex/*` branch.
   - Completed on 2026-02-18: work merged into `main`; Round 4 implementation and canonical verification (`make verify`, `make test`, `make build`) completed cleanly from `main`.
+
+## Additional completions (2026-02-18, section-preserving archive)
+
+### todos/todo.md
+
+#### P1 Dashboard SvelteKit Excellence Round 5 (State Convergence + Functionalization)
+- [x] DSH-SVLT-EX22 Codify and enforce the pre-launch policy stance: no backward DOM-ID compatibility layer, no multi-instance runtime guarantees for now, and prioritize behavior/outcome contracts over legacy structural test contracts.
+- [x] DSH-SVLT-EX23 Break up `dashboard/src/lib/runtime/dashboard-native-runtime.js` into focused runtime modules (session, refresh, config wiring, DOM binding lifecycle) and reduce coordinator hotspot size materially.
+- [x] DSH-SVLT-EX24 Converge on one dashboard state source of truth by removing duplicate runtime snapshot/session/status state paths and routing tab/session/snapshot updates through a single store contract.
+- [x] DSH-SVLT-EX25 Remove dead/unsafe native runtime event-controller leftovers (including undeclared `dashboardEventAbortController` helpers) and add regression guardrails preventing undeclared runtime globals.
+- [x] DSH-SVLT-EX26 Move primary Monitoring rendering from imperative ID-driven DOM mutation/string HTML paths to Svelte reactive component state + declarative templates.
+- [x] DSH-SVLT-EX27 Replace Ban table full rebuild + per-refresh rebinding with stable row patching and delegated action handling to reduce DOM/listener churn.
+- [x] DSH-SVLT-EX28 Refactor chart orchestration to instance-scoped runtime services owned by mount lifecycle (no module-level chart singletons), while retaining the shared chart runtime loader adapter.
+- [x] DSH-SVLT-EX29 Standardize dashboard static asset resolution on SvelteKit base-aware paths and remove hard-coded absolute asset references from route/component templates.
+- [x] DSH-SVLT-EX30 Remove superseded/unused dashboard controller abstractions (for example unused feature-controller wrapper paths) and add dead-code guard checks to module tests.
+- [x] DSH-SVLT-EX31 Add architecture/perf gates for the refactor: coordinator LOC budget, duplicate-state path regression checks, and remount/listener leak checks across decomposed runtime modules.
+- [x] DSH-SVLT-EX32 Publish an ADR that locks the current dashboard runtime policy (single-instance pre-launch, no backward DOM-ID compatibility shims, no bridge flag matrix) and align implementation/tests to that scope.

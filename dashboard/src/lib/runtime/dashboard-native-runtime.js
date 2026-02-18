@@ -1,16 +1,13 @@
 // @ts-check
 
-import * as dashboardCharts from '../../../modules/charts.js';
+import { createDashboardCharts } from '../../../modules/charts.js';
 import * as statusModule from '../../../modules/status.js';
 import * as configControls from '../../../modules/config-controls.js';
 import * as adminSessionModule from '../../../modules/admin-session.js';
 import * as tabLifecycleModule from '../../../modules/tab-lifecycle.js';
 import * as dashboardApiClientModule from '../../../modules/api-client.js';
-import * as dashboardStateModule from '../../../modules/dashboard-state.js';
-import * as monitoringViewModule from '../../../modules/monitoring-view.js';
 import * as tablesViewModule from '../../../modules/tables-view.js';
 import * as configUiStateModule from '../../../modules/config-ui-state.js';
-import * as tabStateViewModule from '../../../modules/tab-state-view.js';
 import * as formatModule from '../../../modules/core/format.js';
 import * as domModule from '../../../modules/core/dom.js';
 import * as jsonObjectModule from '../../../modules/core/json-object.js';
@@ -30,6 +27,13 @@ import {
   createDashboardTabRuntime
 } from './dashboard-runtime-orchestration.js';
 import { createConfigDirtyRuntime } from './dashboard-runtime-config-dirty.js';
+import { createDashboardRefreshRuntime } from './dashboard-runtime-refresh.js';
+import { createDashboardTabStateRuntime } from './dashboard-runtime-tab-state.js';
+import {
+  buildDashboardLoginPath,
+  normalizeDashboardBasePath,
+  resolveDashboardBasePathFromLocation
+} from './dashboard-paths.js';
 
 const {
   parseCountryCodesStrict,
@@ -133,9 +137,7 @@ const ADVANCED_CONFIG_TEMPLATE_PATHS = Object.freeze(
 let adminSessionController = null;
 let dashboardApiClient = null;
 let dashboardState = null;
-let monitoringView = null;
 let tablesView = null;
-let tabStateView = null;
 let configUiState = null;
 let inputValidation = null;
 let configDraftStore = null;
@@ -144,10 +146,14 @@ let statusPanel = null;
 let configDirtyRuntime = null;
 let tabRuntime = null;
 let sessionRuntime = null;
+let dashboardChartsRuntime = null;
+let dashboardRefreshRuntime = null;
+let tabStateRuntime = null;
 let teardownControlBindings = null;
 let runtimeMounted = false;
 let runtimeMountOptions = {
   chartRuntimeSrc: '',
+  basePath: normalizeDashboardBasePath(),
   initialTab: tabLifecycleModule.DEFAULT_DASHBOARD_TAB
 };
 const domCache = domModule.createCache({ document });
@@ -157,13 +163,52 @@ const queryAll = domCache.queryAll;
 const domWriteScheduler = domModule.createWriteScheduler();
 const resolveAdminApiEndpoint = adminEndpointModule.createAdminEndpointResolver({ window });
 
+const DASHBOARD_STATE_REQUIRED_METHODS = Object.freeze([
+  'getState',
+  'setActiveTab',
+  'getActiveTab',
+  'setSession',
+  'getSession',
+  'setSnapshot',
+  'getSnapshot',
+  'setTabLoading',
+  'setTabError',
+  'clearTabError',
+  'setTabEmpty',
+  'markTabUpdated',
+  'invalidate',
+  'isTabStale',
+  'getDerivedState'
+]);
+
+function hasDashboardStateContract(candidate) {
+  if (!candidate || typeof candidate !== 'object') return false;
+  return DASHBOARD_STATE_REQUIRED_METHODS.every(
+    (methodName) => typeof candidate[methodName] === 'function'
+  );
+}
+
+function resolveDashboardStateStore(options = {}) {
+  const providedStore = options.store;
+  if (hasDashboardStateContract(providedStore)) {
+    return providedStore;
+  }
+  throw new Error(
+    'mountDashboardApp requires an injected dashboard store contract.'
+  );
+}
+
 function normalizeRuntimeMountOptions(options = {}) {
   const source = options || {};
   const chartRuntimeSrc = typeof source.chartRuntimeSrc === 'string'
     ? source.chartRuntimeSrc.trim()
     : '';
+  const basePath = normalizeDashboardBasePath(
+    source.basePath || resolveDashboardBasePathFromLocation(window.location)
+  );
   return {
     chartRuntimeSrc,
+    basePath,
     initialTab: tabLifecycleModule.normalizeTab(
       source.initialTab || tabLifecycleModule.DEFAULT_DASHBOARD_TAB
     )
@@ -257,28 +302,13 @@ function refreshMazePreviewLink() {
 }
 
 function redirectToLogin() {
-  const next = encodeURIComponent(window.location.pathname + window.location.search);
-  window.location.replace(`/dashboard/login.html?next=${next}`);
-}
-
-function showTabLoading(tab, message = 'Loading...') {
-  if (!tabStateView) return;
-  tabStateView.showLoading(tab, message);
-}
-
-function showTabError(tab, message) {
-  if (!tabStateView) return;
-  tabStateView.showError(tab, message);
-}
-
-function showTabEmpty(tab, message) {
-  if (!tabStateView) return;
-  tabStateView.showEmpty(tab, message);
-}
-
-function clearTabStateMessage(tab) {
-  if (!tabStateView) return;
-  tabStateView.clear(tab);
+  const nextPath = `${window.location.pathname}${window.location.search}${window.location.hash || ''}`;
+  window.location.replace(
+    buildDashboardLoginPath({
+      basePath: runtimeMountOptions.basePath,
+      nextPath
+    })
+  );
 }
 
 function validateGeoFieldById(id, showInline = false) {
@@ -407,39 +437,6 @@ function deriveMonitoringAnalytics(configSnapshot = {}, analyticsSnapshot = {}) 
     test_mode: parseBoolLike(config.test_mode, analytics.test_mode === true),
     fail_mode: parseBoolLike(config.kv_store_fail_open, true) ? 'open' : 'closed'
   };
-}
-
-// Update stat cards
-function updateStatCards(analytics, events, bans) {
-  getById('total-bans').textContent = analytics.ban_count || 0;
-  getById('active-bans').textContent = bans.length || 0;
-  getById('total-events').textContent = (events.recent_events || []).length;
-  const uniqueIps = typeof events.unique_ips === 'number' ? events.unique_ips : (events.top_ips || []).length;
-  getById('unique-ips').textContent = uniqueIps;
-  
-  // Update test mode banner and toggle
-  const testMode = analytics.test_mode === true;
-  const banner = getById('test-mode-banner');
-  const toggle = getById('test-mode-toggle');
-  const status = getById('test-mode-status');
-  
-  if (testMode) {
-    banner.classList.remove('hidden');
-    status.textContent = 'ENABLED (LOGGING ONLY)';
-    status.classList.add('test-mode-status--enabled');
-    status.classList.remove('test-mode-status--disabled');
-  } else {
-    banner.classList.add('hidden');
-    status.textContent = 'DISABLED (BLOCKING ACTIVE)';
-    status.classList.add('test-mode-status--disabled');
-    status.classList.remove('test-mode-status--enabled');
-  }
-  toggle.checked = testMode;
-
-  applyStatusPanelPatch({
-    testMode,
-    failMode: statusModule.normalizeFailMode(analytics.fail_mode)
-  });
 }
 
 // Update ban duration fields from config
@@ -982,16 +979,6 @@ function bindMountScopedDomEvents() {
   };
 }
 
-function updateLastUpdatedTimestamp() {
-  const ts = new Date().toISOString();
-  const label = getById('last-updated');
-  if (label) label.textContent = `updated: ${ts}`;
-}
-
-function isConfigSnapshotEmpty(config) {
-  return !config || typeof config !== 'object' || Object.keys(config).length === 0;
-}
-
 const CONFIG_UI_REFRESH_METHODS = Object.freeze([
   'updateBanDurations',
   'updateRateLimitConfig',
@@ -1008,205 +995,21 @@ const CONFIG_UI_REFRESH_METHODS = Object.freeze([
   'updateChallengeConfig'
 ]);
 
-async function refreshSharedConfig(reason = 'manual', options = {}) {
-  const requestOptions = options && options.signal ? { signal: options.signal } : {};
-  if (!dashboardApiClient) {
-    return dashboardState ? dashboardState.getSnapshot('config') : null;
-  }
-  if (dashboardState && reason === 'auto-refresh' && !dashboardState.isTabStale('config')) {
-    return dashboardState.getSnapshot('config');
-  }
-  const config = await dashboardApiClient.getConfig(requestOptions);
-  if (dashboardState) dashboardState.setSnapshot('config', config);
-  await runDomWriteBatch(() => {
-    updateConfigModeUi(config, { configSnapshot: config });
-    CONFIG_UI_REFRESH_METHODS.forEach((methodName) => invokeConfigUiState(methodName, config));
-    invokeConfigUiState('setAdvancedConfigEditorFromConfig', config, true);
-    refreshAllDirtySections();
-  });
-  return config;
-}
-
-async function refreshMonitoringTab(reason = 'manual', options = {}) {
-  if (!dashboardApiClient) return;
-  const isAutoRefresh = reason === 'auto-refresh';
-  if (!isAutoRefresh) {
-    showTabLoading('monitoring', 'Loading monitoring data...');
-    getById('total-bans').textContent = '...';
-    getById('active-bans').textContent = '...';
-    getById('total-events').textContent = '...';
-    getById('unique-ips').textContent = '...';
-    if (tablesView && typeof tablesView.showMonitoringLoadingState === 'function') {
-      tablesView.showMonitoringLoadingState();
-    }
-    if (monitoringView && typeof monitoringView.showLoadingState === 'function') {
-      monitoringView.showLoadingState();
-    }
-  }
-
-  const requestOptions = options && options.signal ? { signal: options.signal } : {};
-  const monitoringData = await dashboardApiClient.getMonitoring({ hours: 24, limit: 10 }, requestOptions);
-  if (isAutoRefresh) {
-    if (dashboardState) {
-      dashboardState.setSnapshot('monitoring', monitoringData);
-    }
-    await runDomWriteBatch(() => {
-      if (monitoringView) {
-        monitoringView.updateMonitoringSummary(monitoringData.summary || {});
-        monitoringView.updatePrometheusHelper(monitoringData.prometheus || {});
-      }
-    });
-    return;
-  }
-
-  const configSnapshot = dashboardState ? dashboardState.getSnapshot('config') : {};
-  const monitoringDetails = monitoringData && typeof monitoringData === 'object'
-    ? (monitoringData.details || {})
-    : {};
-  const analyticsResponse = monitoringDetails.analytics || {};
-  const events = monitoringDetails.events || {};
-  const bansData = monitoringDetails.bans || { bans: [] };
-  const mazeData = monitoringDetails.maze || {};
-  const cdpData = monitoringDetails.cdp || {};
-  const cdpEventsData = monitoringDetails.cdp_events || { events: [] };
-  const analytics = deriveMonitoringAnalytics(configSnapshot, analyticsResponse);
-  if (Array.isArray(bansData.bans)) {
-    analytics.ban_count = bansData.bans.length;
-  }
-
-  if (dashboardState) {
-    dashboardState.setSnapshot('analytics', analytics);
-    dashboardState.setSnapshot('events', events);
-    dashboardState.setSnapshot('bans', bansData);
-    dashboardState.setSnapshot('maze', mazeData);
-    dashboardState.setSnapshot('cdp', cdpData);
-    dashboardState.setSnapshot('cdpEvents', cdpEventsData);
-    dashboardState.setSnapshot('monitoring', monitoringData);
-  }
-
-  await runDomWriteBatch(() => {
-    updateStatCards(analytics, events, bansData.bans || []);
-    dashboardCharts.updateEventTypesChart(events.event_counts || {});
-    dashboardCharts.updateTopIpsChart(events.top_ips || []);
-    dashboardCharts.updateTimeSeriesChart();
-    if (tablesView) {
-      tablesView.updateEventsTable(events.recent_events || []);
-      tablesView.updateCdpTotals(cdpData);
-      tablesView.updateCdpEventsTable(cdpEventsData.events || []);
-    }
-    if (monitoringView) {
-      monitoringView.updateMazeStats(mazeData);
-      monitoringView.updateMonitoringSummary(monitoringData.summary || {});
-      monitoringView.updatePrometheusHelper(monitoringData.prometheus || {});
-    }
-  });
-
-  if (dashboardState && dashboardState.getDerivedState().monitoringEmpty) {
-    showTabEmpty('monitoring', 'No operational events yet. Monitoring will populate as traffic arrives.');
-  } else {
-    clearTabStateMessage('monitoring');
-  }
-}
-
-async function refreshIpBansTab(reason = 'manual', options = {}) {
-  if (!dashboardApiClient) return;
-  if (reason !== 'auto-refresh') {
-    showTabLoading('ip-bans', 'Loading ban list...');
-  }
-  const requestOptions = options && options.signal ? { signal: options.signal } : {};
-  const bansData = await dashboardApiClient.getBans(requestOptions);
-  if (dashboardState) dashboardState.setSnapshot('bans', bansData);
-  await runDomWriteBatch(() => {
-    if (tablesView) {
-      tablesView.updateBansTable(bansData.bans || []);
-    }
-  });
-  if (!Array.isArray(bansData.bans) || bansData.bans.length === 0) {
-    showTabEmpty('ip-bans', 'No active bans.');
-  } else {
-    clearTabStateMessage('ip-bans');
-  }
-}
-
-async function refreshConfigBackedTab(tab, reason = 'manual', loadingMessage, emptyMessage, options = {}) {
-  if (reason !== 'auto-refresh') {
-    showTabLoading(tab, loadingMessage);
-  }
-  const config = await refreshSharedConfig(reason, options);
-  if (isConfigSnapshotEmpty(config)) {
-    showTabEmpty(tab, emptyMessage);
-  } else {
-    clearTabStateMessage(tab);
-  }
-}
-
-const refreshStatusTab = (reason = 'manual', options = {}) =>
-  refreshConfigBackedTab(
-    'status',
-    reason,
-    'Loading status signals...',
-    'No status config snapshot available yet.',
-    options
-  );
-
-const refreshConfigTab = (reason = 'manual', options = {}) =>
-  refreshConfigBackedTab(
-    'config',
-    reason,
-    'Loading config...',
-    'No config snapshot available yet.',
-    options
-  );
-
-const refreshTuningTab = (reason = 'manual', options = {}) =>
-  refreshConfigBackedTab(
-    'tuning',
-    reason,
-    'Loading tuning values...',
-    'No tuning config snapshot available yet.',
-    options
-  );
-
-const TAB_REFRESH_HANDLERS = Object.freeze({
-  monitoring: async (reason = 'manual', options = {}) => {
-    await refreshMonitoringTab(reason, options);
-    if (reason !== 'auto-refresh') {
-      await refreshSharedConfig(reason, options);
-    }
-  },
-  'ip-bans': refreshIpBansTab,
-  status: refreshStatusTab,
-  config: refreshConfigTab,
-  tuning: refreshTuningTab
-});
-
-async function refreshDashboardForTab(tab, reason = 'manual', options = {}) {
-  const activeTab = tabLifecycleModule.normalizeTab(tab);
-  try {
-    const handler = TAB_REFRESH_HANDLERS[activeTab] || TAB_REFRESH_HANDLERS.monitoring;
-    await handler(reason, options);
-    if (dashboardState) dashboardState.markTabUpdated(activeTab);
-    refreshCoreActionButtonsState();
-    refreshDirtySections(DIRTY_SECTIONS_BY_TAB[activeTab] || []);
-    updateLastUpdatedTimestamp();
-  } catch (error) {
-    if (error && error.name === 'AbortError') {
-      return;
-    }
-    const message = error && error.message ? error.message : 'Refresh failed';
-    console.error(`Dashboard refresh error (${activeTab}):`, error);
-    showTabError(activeTab, message);
-    const msg = getById('admin-msg');
-    if (msg) {
-      msg.textContent = `Refresh failed: ${message}`;
-      msg.className = 'message error';
-    }
-  }
-}
-
 function refreshActiveTab(reason = 'manual') {
-  const activeTab = dashboardState ? dashboardState.getActiveTab() : 'monitoring';
-  return refreshDashboardForTab(activeTab, reason);
+  if (!dashboardRefreshRuntime || typeof dashboardRefreshRuntime.refreshActiveTab !== 'function') {
+    return Promise.resolve();
+  }
+  return dashboardRefreshRuntime.refreshActiveTab(reason);
+}
+
+function refreshDashboardForTab(tab, reason = 'manual', options = {}) {
+  if (
+    !dashboardRefreshRuntime ||
+    typeof dashboardRefreshRuntime.refreshDashboardForTab !== 'function'
+  ) {
+    return Promise.resolve();
+  }
+  return dashboardRefreshRuntime.refreshDashboardForTab(tab, reason, options || {});
 }
 
 export async function mountDashboardApp(options = {}) {
@@ -1223,11 +1026,9 @@ export async function mountDashboardApp(options = {}) {
   runtimeEffects = createRuntimeEffects();
   statusPanel = statusModule.create({ document });
 
-  dashboardState = dashboardStateModule.create({
-    initialTab: runtimeMountOptions.initialTab
-  });
-  tabStateView = tabStateViewModule.create({
-    query,
+  dashboardState = resolveDashboardStateStore(options);
+  dashboardState.setActiveTab(runtimeMountOptions.initialTab);
+  tabStateRuntime = createDashboardTabStateRuntime({
     getStateStore: () => dashboardState
   });
 
@@ -1262,12 +1063,6 @@ export async function mountDashboardApp(options = {}) {
     request: (input, init) => runtimeEffects.request(input, init)
   });
   const chartConstructor = getChartConstructor({ window });
-
-  monitoringView = monitoringViewModule.create({
-    escapeHtml,
-    effects: runtimeEffects,
-    chartConstructor
-  });
 
   tablesView = tablesViewModule.create({
     escapeHtml,
@@ -1336,12 +1131,31 @@ export async function mountDashboardApp(options = {}) {
     setDirtySaveButtonState
   });
 
+  dashboardRefreshRuntime = createDashboardRefreshRuntime({
+    normalizeTab: tabLifecycleModule.normalizeTab,
+    getApiClient: () => dashboardApiClient,
+    getStateStore: () => dashboardState,
+    getTablesView: () => tablesView,
+    getChartsRuntime: () => dashboardChartsRuntime,
+    getMessageNode: () => getById('admin-msg'),
+    runDomWriteBatch,
+    updateConfigModeUi,
+    invokeConfigUiState,
+    refreshAllDirtySections,
+    refreshDirtySections,
+    refreshCoreActionButtonsState,
+    tabState: tabStateRuntime,
+    deriveMonitoringAnalytics,
+    configUiRefreshMethods: CONFIG_UI_REFRESH_METHODS,
+    dirtySectionsByTab: DIRTY_SECTIONS_BY_TAB
+  });
+
   initInputValidation();
   teardownControlBindings = bindMountScopedDomEvents();
-  if (monitoringView) {
-    monitoringView.bindPrometheusCopyButtons();
+  if (!dashboardChartsRuntime) {
+    dashboardChartsRuntime = createDashboardCharts({ document, window });
   }
-  dashboardCharts.init({
+  dashboardChartsRuntime.init({
     getAdminContext,
     apiClient: dashboardApiClient,
     chartConstructor
@@ -1469,26 +1283,24 @@ export function unmountDashboardApp() {
   runtimeMounted = false;
   runtimeMountOptions = normalizeRuntimeMountOptions({});
   configDirtyRuntime = null;
+  dashboardRefreshRuntime = null;
+  tabStateRuntime = null;
   tabRuntime = null;
   sessionRuntime = null;
   if (teardownControlBindings) {
     teardownControlBindings();
     teardownControlBindings = null;
   }
-  if (monitoringView && typeof monitoringView.destroy === 'function') {
-    monitoringView.destroy();
+  if (dashboardChartsRuntime && typeof dashboardChartsRuntime.destroy === 'function') {
+    dashboardChartsRuntime.destroy();
   }
-  if (dashboardCharts && typeof dashboardCharts.destroy === 'function') {
-    dashboardCharts.destroy();
-  }
+  dashboardChartsRuntime = null;
   if (document.body && document.body.dataset) {
     delete document.body.dataset.activeDashboardTab;
   }
   dashboardApiClient = null;
   dashboardState = null;
-  monitoringView = null;
   tablesView = null;
-  tabStateView = null;
   configUiState = null;
   inputValidation = null;
   configDraftStore = null;

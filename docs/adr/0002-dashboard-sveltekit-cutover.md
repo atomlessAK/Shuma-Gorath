@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-02-18
-- Supersedes: Svelte-relevant portions of `docs/plans/2026-02-17-dashboard-lit-full-cutover.md`
+- Supersedes: prior dashboard framework-migration planning tracks (frameworkless/Lit-era plans).
 
 ## Context
 
