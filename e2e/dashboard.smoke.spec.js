@@ -436,6 +436,10 @@ test("status tab resolves fail mode without requiring monitoring bootstrap", asy
   await expect(testModeRow).toHaveCount(1);
   await expect(testModeRow).toHaveClass(/status-var-row--admin-write/);
   await expect(testModeRow.locator("td").nth(2)).not.toHaveText("");
+
+  await expect(page.locator("#runtime-fetch-latency-last")).toContainText("ms");
+  await expect(page.locator("#runtime-render-timing-last")).toContainText("ms");
+  await expect(page.locator("#runtime-polling-resume-count")).toContainText("resumes:");
 });
 
 test("ban form enforces IP validity and submit state", async ({ page }) => {
@@ -665,10 +669,10 @@ test("route remount preserves keyboard navigation, ban/unban, config save, and p
     };
   });
 
-  let eventsRequests = 0;
+  let monitoringRequests = 0;
   page.on("request", (request) => {
-    if (request.method() === "GET" && request.url().includes("/admin/events?hours=24")) {
-      eventsRequests += 1;
+    if (request.method() === "GET" && request.url().includes("/admin/monitoring?hours=24")) {
+      monitoringRequests += 1;
     }
   });
 
@@ -748,9 +752,48 @@ test("route remount preserves keyboard navigation, ban/unban, config save, and p
 
   await openTab(page, "monitoring");
   await page.waitForTimeout(120);
-  const beforePollWait = eventsRequests;
+  const beforePollWait = monitoringRequests;
   await page.waitForTimeout(260);
-  expect(eventsRequests).toBeGreaterThan(beforePollWait);
+  expect(monitoringRequests).toBeGreaterThan(beforePollWait);
+});
+
+test("repeated route remount loops keep polling request fan-out bounded", async ({ page }) => {
+  await page.addInitScript(() => {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    window.setTimeout = (handler, ms, ...args) => {
+      if (typeof ms === "number" && ms >= 30000) {
+        return nativeSetTimeout(handler, 50, ...args);
+      }
+      return nativeSetTimeout(handler, ms, ...args);
+    };
+  });
+
+  let monitoringRequests = 0;
+  page.on("request", (request) => {
+    if (request.method() === "GET" && request.url().includes("/admin/monitoring?hours=24")) {
+      monitoringRequests += 1;
+    }
+  });
+
+  const remountRequestDeltas = [];
+  const remountCycles = 4;
+  for (let cycle = 0; cycle < remountCycles; cycle += 1) {
+    await openDashboard(page);
+    await openTab(page, "monitoring");
+    const beforeWindow = monitoringRequests;
+    await page.waitForTimeout(240);
+    const delta = monitoringRequests - beforeWindow;
+    remountRequestDeltas.push(delta);
+    expect(delta).toBeGreaterThan(0);
+    // Under accelerated timer mode (>=30s -> 50ms), one remount window can include
+    // the session-restored refresh plus up to two polling cycles.
+    expect(delta).toBeLessThanOrEqual(3);
+    await page.goto("about:blank");
+  }
+
+  const maxDelta = Math.max(...remountRequestDeltas);
+  const minDelta = Math.min(...remountRequestDeltas);
+  expect(maxDelta - minDelta).toBeLessThanOrEqual(2);
 });
 
 test("dashboard tables keep sticky headers", async ({ page }) => {
