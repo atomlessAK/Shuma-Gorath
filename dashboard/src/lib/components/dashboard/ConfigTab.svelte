@@ -173,7 +173,7 @@
                   <input class="input-field" type="number" id="maze-threshold" value="50" min="5" max="500" step="1" inputmode="numeric" aria-label="Maze ban threshold in pages">
                 </div>
               </div>
-              <button id="save-maze-config" class="btn btn-submit">Save Maze Settings</button>
+              <button id="save-maze-config" class="btn btn-submit" disabled>Save Maze Settings</button>
             </div>
             <div class="control-group panel-soft pad-md config-edit-pane hidden">
               <h3>CDP (Detect Browser Automation)</h3>

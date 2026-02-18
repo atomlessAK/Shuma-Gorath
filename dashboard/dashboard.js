@@ -824,6 +824,54 @@ function checkAdvancedConfigChanged() {
   setDirtySaveButtonState('save-advanced-config', changed, apiValid, valid);
 }
 
+const DIRTY_SECTION_CHECKS = Object.freeze({
+  maze: checkMazeConfigChanged,
+  banDurations: checkBanDurationsChanged,
+  honeypot: checkHoneypotConfigChanged,
+  browserPolicy: checkBrowserPolicyConfigChanged,
+  bypassAllowlists: checkBypassAllowlistsConfigChanged,
+  challengePuzzle: checkChallengePuzzleConfigChanged,
+  pow: checkPowConfigChanged,
+  botness: checkBotnessConfigChanged,
+  geo: checkGeoConfigChanged,
+  cdp: checkCdpConfigChanged,
+  edgeMode: checkEdgeIntegrationModeChanged,
+  rateLimit: checkRateLimitConfigChanged,
+  jsRequired: checkJsRequiredConfigChanged,
+  robots: checkRobotsConfigChanged,
+  aiPolicy: checkAiPolicyConfigChanged,
+  advancedConfig: checkAdvancedConfigChanged
+});
+
+const DIRTY_SECTIONS_BY_TAB = Object.freeze({
+  monitoring: [],
+  'ip-bans': [],
+  status: [],
+  config: Object.keys(DIRTY_SECTION_CHECKS),
+  tuning: [
+    'pow',
+    'challengePuzzle',
+    'botness',
+    'cdp',
+    'edgeMode',
+    'rateLimit',
+    'jsRequired'
+  ]
+});
+
+function refreshDirtySections(sectionKeys = []) {
+  sectionKeys.forEach((sectionKey) => {
+    const handler = DIRTY_SECTION_CHECKS[sectionKey];
+    if (typeof handler === 'function') {
+      handler();
+    }
+  });
+}
+
+function refreshAllDirtySections() {
+  refreshDirtySections(DIRTY_SECTIONS_BY_TAB.config);
+}
+
 async function handleBanIpAction() {
   const msg = getById('admin-msg');
   if (!msg || !getAdminContext(msg)) return;

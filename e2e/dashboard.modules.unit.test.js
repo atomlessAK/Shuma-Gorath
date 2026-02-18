@@ -2947,8 +2947,8 @@ test('dashboard main exports explicit lifecycle entrypoints', () => {
   const dashboardPath = path.resolve(__dirname, '..', 'dashboard', 'dashboard.js');
   const source = fs.readFileSync(dashboardPath, 'utf8');
 
-  assert.match(source, /export function mountDashboard\(\)/);
-  assert.match(source, /export function unmountDashboard\(\)/);
+  assert.match(source, /export function mountDashboardApp\(options = \{\}\)/);
+  assert.match(source, /export function unmountDashboardApp\(\)/);
 });
 
 test('dashboard module graph is layered (core -> services -> features -> main) with no cycles', () => {

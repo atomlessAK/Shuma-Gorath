@@ -197,11 +197,13 @@ Implementation rule: when internal feature work touches provider-managed capabil
   - DNS troubleshooting outcome in Codex runtime: resolved (`curl -I https://api.github.com` returned `HTTP/2 200`; `gh api rate_limit` succeeded).
   - Current blocker moved to merge/readiness state: PR currently reports `mergeStateStatus=DIRTY` and no GitHub Actions checks have reported yet for branch `codex/dashboard-sveltekit-port`.
 - [ ] HND-SVLT-4 Merge to `main` after CI is green; then continue Round 4 items (`DSH-SVLT-EX18..EX22`) on a fresh `codex/*` branch.
+  - In progress on 2026-02-18: branch merged `origin/main` locally and resolved immediate dashboard regressions (`refreshAllDirtySections` restore, tab lifecycle duplicate destroy removal, dirty-state default for maze save button, export guardrail update).
+  - Remaining before merge: complete clean `make test` run including dashboard Playwright smoke, push latest fixes to PR `#1`, and confirm GitHub Actions status is green.
 
 #### Next Session Pickup Point (SvelteKit)
-- Start in `/Users/jamestindall/Projects/Shuma-Gorath/.worktrees/dashboard-sveltekit` on branch `codex/dashboard-sveltekit-port` at commit `86b42bf`.
-- First objective: complete `HND-SVLT-3` by confirming/opening/updating the PR and collecting CI status.
-- Second objective: complete `HND-SVLT-4` merge to `main` once CI is green.
+- Start in `/Users/jamestindall/Projects/Shuma-Gorath/.worktrees/dashboard-sveltekit` on branch `codex/dashboard-sveltekit-port` at merge-forward commit `f76bb6c` plus local unstaged fixes.
+- First objective: complete `HND-SVLT-4` by finishing clean `make test` (including dashboard Playwright smoke) and pushing current regression fixes to PR `https://github.com/atomless/Shuma-Gorath/pull/1`.
+- Second objective: confirm PR `#1` mergeability/checks are green, then merge to `main`.
 - After merge: create a fresh `codex/*` branch and begin Round 4 tasks at `DSH-SVLT-EX18`.
 
 ## Recurring Quality Gates

@@ -230,14 +230,6 @@ export const createTabLifecycleCoordinator = (options = {}) => {
     syncFromHash();
   };
 
-  const destroy = () => {
-    if (!initialized) return;
-    controllers[activeTab].unmount({ tab: activeTab, nextTab: null, reason: 'destroy' });
-    unbindFns.forEach((unbind) => unbind());
-    unbindFns = [];
-    initialized = false;
-  };
-
   const refreshActive = async (context = {}) => controllers[activeTab].refresh({
     tab: activeTab,
     reason: context.reason || 'manual'
