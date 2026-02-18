@@ -758,6 +758,10 @@ test("route remount preserves keyboard navigation, ban/unban, config save, and p
 });
 
 test("repeated route remount loops keep polling request fan-out bounded", async ({ page }) => {
+  const acceleratedPollingIntervalMs = 50;
+  const remountObservationWindowMs = 240;
+  const maxExpectedRequestsInWindow = Math.ceil(remountObservationWindowMs / acceleratedPollingIntervalMs);
+
   await page.addInitScript(() => {
     const nativeSetTimeout = window.setTimeout.bind(window);
     window.setTimeout = (handler, ms, ...args) => {
@@ -781,13 +785,13 @@ test("repeated route remount loops keep polling request fan-out bounded", async 
     await openDashboard(page);
     await openTab(page, "monitoring");
     const beforeWindow = monitoringRequests;
-    await page.waitForTimeout(240);
+    await page.waitForTimeout(remountObservationWindowMs);
     const delta = monitoringRequests - beforeWindow;
     remountRequestDeltas.push(delta);
     expect(delta).toBeGreaterThan(0);
-    // Under accelerated timer mode (>=30s -> 50ms), one remount window can include
-    // the session-restored refresh plus up to two polling cycles.
-    expect(delta).toBeLessThanOrEqual(3);
+    // Under accelerated timer mode (>=30s -> 50ms), a 240ms sample can include
+    // up to five polling requests without indicating fan-out duplication.
+    expect(delta).toBeLessThanOrEqual(maxExpectedRequestsInWindow);
     await page.goto("about:blank");
   }
 
