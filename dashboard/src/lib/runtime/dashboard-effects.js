@@ -1,6 +1,16 @@
+import {
+  buildDashboardLoginPath,
+  dashboardIndexPath,
+  normalizeDashboardBasePath,
+  resolveDashboardBasePathFromLocation
+} from './dashboard-paths.js';
+
 export function createDashboardEffects(options = {}) {
   const win = options.window || window;
   const doc = options.document || document;
+  const configuredBasePath = normalizeDashboardBasePath(
+    options.basePath || resolveDashboardBasePathFromLocation(win.location)
+  );
 
   const request =
     typeof options.request === 'function'
@@ -64,18 +74,22 @@ export function createDashboardEffects(options = {}) {
   const isPageVisible = () => doc.visibilityState !== 'hidden';
 
   const redirect = (path) => {
-    win.location.replace(String(path || '/dashboard/login.html'));
+    win.location.replace(String(path || buildDashboardLoginPath({ basePath: configuredBasePath })));
   };
 
   const buildLoginRedirectPath =
     typeof options.buildLoginRedirectPath === 'function'
       ? options.buildLoginRedirectPath
       : () => {
-          const pathname = String((win.location && win.location.pathname) || '/dashboard/index.html');
+          const pathname = String(
+            (win.location && win.location.pathname) || dashboardIndexPath(configuredBasePath)
+          );
           const search = String((win.location && win.location.search) || '');
           const hash = String((win.location && win.location.hash) || '');
-          const next = encodeURIComponent(`${pathname}${search}${hash}`);
-          return `/dashboard/login.html?next=${next}`;
+          return buildDashboardLoginPath({
+            basePath: configuredBasePath,
+            nextPath: `${pathname}${search}${hash}`
+          });
         };
 
   const focusTab =

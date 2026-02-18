@@ -34,7 +34,7 @@ export function createDashboardTabRuntime(options = {}) {
   }
 
   async function refreshTab(tab, reason = 'manual', runtimeOptions = {}) {
-    const normalized = setActiveTab(tab, reason);
+    const normalized = normalizeTab(tab);
     return refreshDashboardForTab(normalized, reason, runtimeOptions || {});
   }
 

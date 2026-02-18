@@ -88,7 +88,7 @@ Deployment policy note: `SHUMA_KV_STORE_FAIL_OPEN` is a critical choice (fail-op
 
 ```
 src/        # Core bot defence logic (Spin component)
-dashboard/  # SvelteKit dashboard source + legacy runtime bridge modules
+dashboard/  # SvelteKit dashboard source + runtime modules
 dist/       # Build artifacts (wasm + generated dashboard static output)
 scripts/    # Build helpers (Makefile used by default)
 ```

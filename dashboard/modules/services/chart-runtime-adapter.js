@@ -6,10 +6,21 @@ let loadPromise = null;
 let refCount = 0;
 let adapterOwnedScript = null;
 let adapterOwnedGlobal = false;
+let runtimeScriptSrc = DEFAULT_CHART_RUNTIME_SRC;
 
-const normalizeRuntimeSrc = (value) => {
+const resolveDashboardBasePath = (win) => {
+  const pathname = String(win && win.location && win.location.pathname ? win.location.pathname : '').trim();
+  if (!pathname) return '/dashboard';
+  const markerIndex = pathname.indexOf('/dashboard');
+  if (markerIndex === -1) return '/dashboard';
+  const candidate = pathname.slice(0, markerIndex + '/dashboard'.length);
+  return candidate.endsWith('/') ? candidate.slice(0, -1) : candidate;
+};
+
+const normalizeRuntimeSrc = (value, win) => {
   const source = String(value || '').trim();
-  return source || DEFAULT_CHART_RUNTIME_SRC;
+  if (source) return source;
+  return `${resolveDashboardBasePath(win)}/assets/vendor/chart-lite-1.0.0.min.js`;
 };
 
 const chartConstructorFrom = (win) =>
@@ -96,10 +107,11 @@ const loadRuntimeScript = (doc, win, src) =>
 export async function acquireChartRuntime(options = {}) {
   const doc = options.document || (typeof document !== 'undefined' ? document : null);
   const win = options.window || (typeof window !== 'undefined' ? window : null);
-  const src = normalizeRuntimeSrc(options.src);
+  const src = normalizeRuntimeSrc(options.src, win);
   if (!doc || !win) {
     throw new Error('Chart runtime requires browser window/document context.');
   }
+  runtimeScriptSrc = src;
 
   if (!loadPromise) {
     loadPromise = loadRuntimeScript(doc, win, src);
@@ -145,7 +157,7 @@ export function releaseChartRuntime(options = {}) {
   adapterOwnedGlobal = false;
 
   if (doc) {
-    const orphan = findRuntimeScript(doc, DEFAULT_CHART_RUNTIME_SRC);
+    const orphan = findRuntimeScript(doc, runtimeScriptSrc);
     if (orphan && orphan.dataset) {
       delete orphan.dataset.shumaRuntimeReady;
     }

@@ -4,6 +4,7 @@
 
   export let managed = false;
   export let isActive = false;
+  export let tabStatus = null;
 </script>
 
 <section
@@ -15,7 +16,7 @@
   aria-hidden={managed ? (isActive ? 'false' : 'true') : 'true'}
   tabindex="-1"
 >
-          <TabStateMessage tab="ip-bans" />
+          <TabStateMessage tab="ip-bans" status={tabStatus} />
           <TableWrapper>
             <table id="bans-table" class="panel panel-border bans-table-admin">
               <thead>

@@ -130,12 +130,54 @@ export function createDashboardStore(options = {}) {
   const setActiveTab = (tab) => dispatch({ type: 'set-active-tab', tab: normalizeTab(tab) });
   const setSession = (session = {}) => dispatch({ type: 'set-session', session });
   const setSnapshot = (key, value) => dispatch({ type: 'set-snapshot', key, value });
-  const setTabLoading = (tab, loading) => dispatch({ type: 'set-tab-loading', tab, loading });
+  const setTabLoading = (tab, loading, message = undefined) => {
+    const event = { type: 'set-tab-loading', tab, loading };
+    if (message !== undefined) {
+      event.message = message;
+    }
+    return dispatch(event);
+  };
   const setTabError = (tab, message) => dispatch({ type: 'set-tab-error', tab, message });
   const clearTabError = (tab) => dispatch({ type: 'clear-tab-error', tab });
-  const setTabEmpty = (tab, empty) => dispatch({ type: 'set-tab-empty', tab, empty });
+  const setTabEmpty = (tab, empty, message = 'No data.') =>
+    dispatch({ type: 'set-tab-empty', tab, empty, message });
   const markTabUpdated = (tab) => dispatch({ type: 'mark-tab-updated', tab });
   const invalidate = (scope = 'all') => dispatch({ type: 'invalidate', scope });
+  const getActiveTab = () => normalizeTab(getState().activeTab);
+  const getSession = () => {
+    const current = getState().session || {};
+    return {
+      authenticated: current.authenticated === true,
+      csrfToken: String(current.csrfToken || '')
+    };
+  };
+  const getSnapshot = (key) => {
+    const current = getState();
+    if (!current || !current.snapshots || !Object.prototype.hasOwnProperty.call(current.snapshots, key)) {
+      return null;
+    }
+    return current.snapshots[key];
+  };
+  const isTabStale = (tab) => {
+    const key = normalizeTab(tab);
+    const current = getState();
+    return Boolean(current?.stale?.[key]);
+  };
+  const getDerivedState = () => {
+    const current = getState();
+    const events = current?.snapshots?.events || {};
+    const bans = current?.snapshots?.bans || {};
+    const maze = current?.snapshots?.maze || {};
+    const monitoringEmpty =
+      (Array.isArray(events.recent_events) ? events.recent_events.length : 0) === 0 &&
+      (Array.isArray(bans.bans) ? bans.bans.length : 0) === 0 &&
+      Number(maze.total_hits || 0) === 0;
+    return {
+      monitoringEmpty,
+      hasConfigSnapshot: Boolean(current?.snapshots?.config),
+      activeTab: getActiveTab()
+    };
+  };
 
   const reset = (tab = DEFAULT_TAB) => {
     internal.set(createInitialState(normalizeTab(tab)));
@@ -184,6 +226,7 @@ export function createDashboardStore(options = {}) {
     return {
       loading: value.loading === true,
       error: String(value.error || ''),
+      message: String(value.message || ''),
       empty: value.empty === true,
       updatedAt: String(value.updatedAt || ''),
       stale: $state.stale[key] === true
@@ -276,14 +319,19 @@ export function createDashboardStore(options = {}) {
     dispatch,
     reset,
     setActiveTab,
+    getActiveTab,
     setSession,
+    getSession,
     setSnapshot,
+    getSnapshot,
     setTabLoading,
     setTabError,
     clearTabError,
     setTabEmpty,
     markTabUpdated,
     invalidate,
+    isTabStale,
+    getDerivedState,
     setDraftBaseline,
     setDraft,
     getDraft,

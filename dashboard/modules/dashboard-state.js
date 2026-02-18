@@ -17,6 +17,7 @@ const SNAPSHOT_KEYS = Object.freeze([
 const TAB_STATUS_DEFAULT = Object.freeze({
   loading: false,
   error: '',
+  message: '',
   empty: false,
   updatedAt: ''
 });
@@ -121,6 +122,10 @@ export const reduceState = (prevState, event = {}) => {
     case 'set-tab-loading': {
       const tab = normalizeTab(event.tab);
       const loading = event.loading === true;
+      const hasExplicitMessage = Object.prototype.hasOwnProperty.call(event, 'message');
+      const message = loading
+        ? String(event.message || 'Loading...')
+        : (hasExplicitMessage ? String(event.message || '') : prev.tabStatus[tab].message);
       return {
         ...prev,
         tabStatus: {
@@ -128,7 +133,8 @@ export const reduceState = (prevState, event = {}) => {
           [tab]: {
             ...prev.tabStatus[tab],
             loading,
-            error: loading ? '' : prev.tabStatus[tab].error
+            error: loading ? '' : prev.tabStatus[tab].error,
+            message
           }
         }
       };
@@ -142,6 +148,7 @@ export const reduceState = (prevState, event = {}) => {
           [tab]: {
             ...prev.tabStatus[tab],
             error: String(event.message || ''),
+            message: String(event.message || ''),
             loading: false,
             updatedAt: String(event.updatedAt || timestampNow())
           }
@@ -156,7 +163,8 @@ export const reduceState = (prevState, event = {}) => {
           ...prev.tabStatus,
           [tab]: {
             ...prev.tabStatus[tab],
-            error: ''
+            error: '',
+            message: ''
           }
         }
       };
@@ -169,7 +177,8 @@ export const reduceState = (prevState, event = {}) => {
           ...prev.tabStatus,
           [tab]: {
             ...prev.tabStatus[tab],
-            empty: event.empty === true
+            empty: event.empty === true,
+            message: event.empty === true ? String(event.message || 'No data.') : ''
           }
         }
       };
@@ -187,7 +196,6 @@ export const reduceState = (prevState, event = {}) => {
           [tab]: {
             ...prev.tabStatus[tab],
             loading: false,
-            error: '',
             updatedAt: String(event.updatedAt || timestampNow())
           }
         }
@@ -235,6 +243,7 @@ export const selectors = Object.freeze({
     return {
       loading: state.tabStatus[tab].loading,
       error: state.tabStatus[tab].error,
+      message: state.tabStatus[tab].message,
       empty: state.tabStatus[tab].empty,
       updatedAt: state.tabStatus[tab].updatedAt,
       stale: state.stale[tab] === true
@@ -275,8 +284,12 @@ export const create = (options = {}) => {
     return selectors.snapshot(state, key);
   };
 
-  const setTabLoading = (tabName, loading) => {
-    apply(actions.setTabLoading(tabName, loading));
+  const setTabLoading = (tabName, loading, message = undefined) => {
+    const event = actions.setTabLoading(tabName, loading);
+    if (message !== undefined) {
+      event.message = message;
+    }
+    apply(event);
   };
 
   const setTabError = (tabName, message) => {
@@ -287,8 +300,12 @@ export const create = (options = {}) => {
     apply(actions.clearTabError(tabName));
   };
 
-  const setTabEmpty = (tabName, empty) => {
-    apply(actions.setTabEmpty(tabName, empty));
+  const setTabEmpty = (tabName, empty, message = undefined) => {
+    const event = actions.setTabEmpty(tabName, empty);
+    if (message !== undefined) {
+      event.message = message;
+    }
+    apply(event);
   };
 
   const markTabUpdated = (tabName) => {

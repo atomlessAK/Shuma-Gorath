@@ -9,6 +9,10 @@
   import { createDashboardActions } from '$lib/runtime/dashboard-actions.js';
   import { createDashboardEffects } from '$lib/runtime/dashboard-effects.js';
   import {
+    normalizeDashboardBasePath,
+    resolveDashboardAssetPath
+  } from '$lib/runtime/dashboard-paths.js';
+  import {
     getDashboardSessionState,
     logoutDashboardSession,
     mountDashboardRuntime,
@@ -23,7 +27,9 @@
     normalizeTab
   } from '$lib/state/dashboard-store.js';
 
-  const chartRuntimeSrc = `${base}/assets/vendor/chart-lite-1.0.0.min.js`;
+  const dashboardBasePath = normalizeDashboardBasePath(base);
+  const chartRuntimeSrc = resolveDashboardAssetPath(dashboardBasePath, 'assets/vendor/chart-lite-1.0.0.min.js');
+  const shumaImageSrc = resolveDashboardAssetPath(dashboardBasePath, 'assets/shuma-gorath-pencil.png');
 
   const dashboardStore = createDashboardStore({ initialTab: 'monitoring' });
 
@@ -36,13 +42,23 @@
   let runtimeError = '';
   let loggingOut = false;
 
+  $: activeTabKey = normalizeTab(dashboardState.activeTab);
+  $: tabStatus = dashboardState?.tabStatus || {};
+  $: activeTabStatus = tabStatus[activeTabKey] || {};
+  $: lastUpdatedText = activeTabStatus.updatedAt ? `updated: ${activeTabStatus.updatedAt}` : '';
+  $: snapshots = dashboardState?.snapshots || {};
+  $: analyticsSnapshot = snapshots.analytics || {};
+  $: testModeEnabled = analyticsSnapshot.test_mode === true;
+
   async function bootstrapNativeRuntime() {
     await mountDashboardRuntime({
       initialTab: normalizeTab(window.location.hash.replace(/^#/, '')),
-      chartRuntimeSrc
+      chartRuntimeSrc,
+      basePath: dashboardBasePath,
+      store: dashboardStore
     });
 
-    const effects = createDashboardEffects();
+    const effects = createDashboardEffects({ basePath: dashboardBasePath });
     dashboardActions = createDashboardActions({
       store: dashboardStore,
       effects,
@@ -108,18 +124,17 @@
     }
   }
 
-  const isTabActive = (tab) => normalizeTab(dashboardState.activeTab) === normalizeTab(tab);
 </script>
 
 <svelte:head>
   <title>Shuma-Gorath Dashboard</title>
 </svelte:head>
 
-<span id="last-updated" class="text-muted"></span>
+<span id="last-updated" class="text-muted">{lastUpdatedText}</span>
 <div class="container panel panel-border" data-dashboard-runtime-mode="native">
   <header>
     <div class="shuma-image-wrapper">
-      <img src="/assets/shuma-gorath-pencil.png" alt="Shuma-Gorath" class="shuma-gorath-img">
+      <img src={shumaImageSrc} alt="Shuma-Gorath" class="shuma-gorath-img">
     </div>
     <h1>Shuma-Gorath</h1>
     <p class="subtitle text-muted">Multi-Dimensional Bot Defence</p>
@@ -132,16 +147,18 @@
     >Logout</button>
     <nav class="dashboard-tabs" aria-label="Dashboard sections">
       {#each DASHBOARD_TABS as tab}
+        {@const tabKey = normalizeTab(tab)}
+        {@const selected = activeTabKey === tabKey}
         <a
           id={`dashboard-tab-${tab}`}
           class="dashboard-tab-link"
-          class:active={isTabActive(tab)}
+          class:active={selected}
           data-dashboard-tab-link={tab}
           href={`#${tab}`}
           role="tab"
-          aria-selected={isTabActive(tab) ? 'true' : 'false'}
+          aria-selected={selected ? 'true' : 'false'}
           aria-controls={`dashboard-panel-${tab}`}
-          tabindex={isTabActive(tab) ? 0 : -1}
+          tabindex={selected ? 0 : -1}
           on:click={(event) => onTabClick(event, tab)}
           on:keydown={(event) => onTabKeydown(event, tab)}
         >
@@ -150,21 +167,44 @@
       {/each}
     </nav>
   </header>
-  <div id="test-mode-banner" class="test-mode-banner hidden">TEST MODE ACTIVE - Logging only, no blocking</div>
+  <div id="test-mode-banner" class="test-mode-banner" class:hidden={!testModeEnabled}>
+    TEST MODE ACTIVE - Logging only, no blocking
+  </div>
 
-  <MonitoringTab managed={true} isActive={isTabActive('monitoring')} />
+  <MonitoringTab
+    managed={true}
+    isActive={activeTabKey === 'monitoring'}
+    tabStatus={tabStatus.monitoring || {}}
+    analyticsSnapshot={snapshots.analytics}
+    eventsSnapshot={snapshots.events}
+    bansSnapshot={snapshots.bans}
+    mazeSnapshot={snapshots.maze}
+    cdpSnapshot={snapshots.cdp}
+    cdpEventsSnapshot={snapshots.cdpEvents}
+    monitoringSnapshot={snapshots.monitoring}
+  />
 
   <div
     id="dashboard-admin-section"
     class="section admin-section"
-    hidden={isTabActive('monitoring')}
-    aria-hidden={isTabActive('monitoring') ? 'true' : 'false'}
+    hidden={activeTabKey === 'monitoring'}
+    aria-hidden={activeTabKey === 'monitoring' ? 'true' : 'false'}
   >
     <div class="admin-groups">
-      <IpBansTab managed={true} isActive={isTabActive('ip-bans')} />
-      <StatusTab managed={true} isActive={isTabActive('status')} runtimeTelemetry={runtimeTelemetry} />
-      <ConfigTab managed={true} isActive={isTabActive('config')} />
-      <TuningTab managed={true} isActive={isTabActive('tuning')} />
+      <IpBansTab managed={true} isActive={activeTabKey === 'ip-bans'} tabStatus={tabStatus['ip-bans'] || {}} />
+      <StatusTab
+        managed={true}
+        isActive={activeTabKey === 'status'}
+        runtimeTelemetry={runtimeTelemetry}
+        tabStatus={tabStatus.status || {}}
+      />
+      <ConfigTab
+        managed={true}
+        isActive={activeTabKey === 'config'}
+        tabStatus={tabStatus.config || {}}
+        analyticsSnapshot={snapshots.analytics}
+      />
+      <TuningTab managed={true} isActive={activeTabKey === 'tuning'} tabStatus={tabStatus.tuning || {}} />
     </div>
     <div id="admin-msg" class="message"></div>
   </div>

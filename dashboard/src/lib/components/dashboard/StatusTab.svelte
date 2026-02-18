@@ -4,6 +4,7 @@
   export let managed = false;
   export let isActive = false;
   export let runtimeTelemetry = null;
+  export let tabStatus = null;
 
   const formatMetricMs = (value) => {
     const numeric = Number(value);
@@ -30,7 +31,7 @@
   aria-hidden={managed ? (isActive ? 'false' : 'true') : 'true'}
   tabindex="-1"
 >
-  <TabStateMessage tab="status" />
+  <TabStateMessage tab="status" status={tabStatus} />
   <div class="controls-grid controls-grid--status">
     <div class="control-group panel-soft pad-md">
       <div id="status-items"></div>

@@ -1,4 +1,5 @@
 import { DASHBOARD_TABS, normalizeTab } from '../state/dashboard-store.js';
+import { buildDashboardLoginPath } from './dashboard-paths.js';
 
 export function createDashboardActions(options = {}) {
   const store = options.store;
@@ -15,6 +16,13 @@ export function createDashboardActions(options = {}) {
   let mounted = false;
   let inFlightRefresh = null;
   let pollingPaused = true;
+  const TAB_LOADING_MESSAGES = Object.freeze({
+    monitoring: 'Loading monitoring data...',
+    'ip-bans': 'Loading ban list...',
+    status: 'Loading status signals...',
+    config: 'Loading config...',
+    tuning: 'Loading tuning values...'
+  });
   const now =
     typeof effects.now === 'function'
       ? () => effects.now()
@@ -57,7 +65,7 @@ export function createDashboardActions(options = {}) {
     if (typeof effects.buildLoginRedirectPath === 'function') {
       return effects.buildLoginRedirectPath();
     }
-    return '/dashboard/login.html';
+    return buildDashboardLoginPath();
   }
 
   function isAuthenticated() {
@@ -82,8 +90,11 @@ export function createDashboardActions(options = {}) {
 
     const controller = new AbortController();
     const refreshStartedAt = now();
-    store.setTabLoading(normalized, true);
-    store.clearTabError(normalized);
+    const showLoadingState = reason !== 'auto-refresh';
+    if (showLoadingState) {
+      store.clearTabError(normalized);
+      store.setTabLoading(normalized, true, TAB_LOADING_MESSAGES[normalized] || 'Loading...');
+    }
 
     const refreshPromise = (async () => {
       try {
@@ -107,7 +118,9 @@ export function createDashboardActions(options = {}) {
         const message = error && error.message ? error.message : 'Refresh failed';
         store.setTabError(normalized, message);
       } finally {
-        store.setTabLoading(normalized, false);
+        if (showLoadingState) {
+          store.setTabLoading(normalized, false);
+        }
       }
     })();
 

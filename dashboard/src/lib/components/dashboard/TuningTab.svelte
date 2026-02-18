@@ -3,6 +3,7 @@
 
   export let managed = false;
   export let isActive = false;
+  export let tabStatus = null;
 </script>
 
 <section
@@ -14,7 +15,7 @@
   aria-hidden={managed ? (isActive ? 'false' : 'true') : 'true'}
   tabindex="-1"
 >
-          <TabStateMessage tab="tuning" />
+          <TabStateMessage tab="tuning" status={tabStatus} />
           <div class="controls-grid controls-grid--tuning">
             <div class="control-group panel-soft pad-md">
               <h3>Botness Scoring</h3>

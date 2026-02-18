@@ -1,20 +1,27 @@
 <script>
+  import { base } from '$app/paths';
   import { onMount } from 'svelte';
+  import {
+    dashboardIndexPath,
+    normalizeDashboardBasePath
+  } from '$lib/runtime/dashboard-paths.js';
 
   let apiKey = '';
   let submitting = false;
   let messageText = '';
   let messageKind = 'info';
-  let nextPath = '/dashboard/index.html';
+  const dashboardBasePath = normalizeDashboardBasePath(base);
+  const fallbackNextPath = dashboardIndexPath(dashboardBasePath);
+  let nextPath = fallbackNextPath;
 
   function safeNextPath(raw) {
-    const fallback = '/dashboard/index.html';
+    const fallback = fallbackNextPath;
     if (!raw) return fallback;
     try {
       const decoded = decodeURIComponent(raw);
       const url = new URL(decoded, window.location.origin);
       if (url.origin !== window.location.origin) return fallback;
-      if (!url.pathname.startsWith('/dashboard/')) return fallback;
+      if (!url.pathname.startsWith(`${dashboardBasePath}/`)) return fallback;
       return `${url.pathname}${url.search}${url.hash}`;
     } catch (_e) {
       return fallback;

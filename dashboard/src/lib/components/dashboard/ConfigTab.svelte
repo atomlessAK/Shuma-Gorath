@@ -3,6 +3,19 @@
 
   export let managed = false;
   export let isActive = false;
+  export let tabStatus = null;
+  export let analyticsSnapshot = null;
+
+  $: hasAnalyticsSnapshot = analyticsSnapshot && typeof analyticsSnapshot === 'object';
+  $: testModeEnabled = hasAnalyticsSnapshot ? analyticsSnapshot.test_mode === true : null;
+  $: testModeStatusText = testModeEnabled === null
+    ? 'LOADING...'
+    : (testModeEnabled ? 'ENABLED (LOGGING ONLY)' : 'DISABLED (BLOCKING ACTIVE)');
+  $: testModeStatusClass = `text-muted status-value ${
+    testModeEnabled === null
+      ? ''
+      : (testModeEnabled ? 'test-mode-status--enabled' : 'test-mode-status--disabled')
+  }`.trim();
 </script>
 
 <section
@@ -14,7 +27,7 @@
   aria-hidden={managed ? (isActive ? 'false' : 'true') : 'true'}
   tabindex="-1"
 >
-          <TabStateMessage tab="config" />
+          <TabStateMessage tab="config" status={tabStatus} />
           <p id="config-mode-subtitle" class="admin-group-subtitle text-muted">
             Admin page configuration state is <strong>LOADING</strong>.
           </p>
@@ -31,7 +44,7 @@
                   </label>
                 </div>
               </div>
-              <span id="test-mode-status" class="text-muted status-value">LOADING...</span>
+              <span id="test-mode-status" class={testModeStatusClass}>{testModeStatusText}</span>
             </div>
             <div class="control-group panel-soft pad-md config-edit-pane hidden">
               <h3>JS Required</h3>
