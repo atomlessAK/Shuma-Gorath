@@ -182,16 +182,30 @@ Implementation rule: when internal feature work touches provider-managed capabil
 - [ ] DSH-SVLT-EX22 Add native remount/refresh soak performance gate (bounded fetch/render p95 + stable polling cadence across repeated mount loops) and wire into Make/CI reporting.
 
 ### P0 Branch Handoff (dashboard-sveltekit-port -> main)
-- [ ] HND-SVLT-1 Resume from branch `codex/dashboard-sveltekit-port` at commit `979fa2f` (with `c7291e5` included immediately before it in branch history).
-- [ ] HND-SVLT-2 In an unrestricted shell, run canonical verification only through Makefile paths:
+- [x] HND-SVLT-1 Resume from branch `codex/dashboard-sveltekit-port` at commit `979fa2f` (with `c7291e5` included immediately before it in branch history).
+  - Completed on branch `codex/dashboard-sveltekit-port`; current tip is `86b42bf` (contains remount fan-out test stabilization).
+- [x] HND-SVLT-2 In an unrestricted shell, run canonical verification only through Makefile paths:
   - terminal A: `make dev`
   - terminal B: `make test`
   - required outcome: Rust unit + maze benchmark + integration + dashboard e2e all green.
+  - Completed on 2026-02-18 after commit `86b42bf`; `make test` passed end-to-end (including dashboard e2e).
 - [ ] HND-SVLT-3 If verification is green, open/update PR from `codex/dashboard-sveltekit-port` into `main` and include:
   - SvelteKit migration summary (`dashboard/legacy/*` retained only as archived fallback assets),
   - Makefile-only workflow enforcement updates (`AGENTS.md`, `CONTRIBUTING.md`, `Makefile`),
   - dashboard runtime/perf guardrails (`e2e` remount fan-out + bundle budget gate).
+  - Remaining blocker to troubleshoot: Codex runtime DNS cannot resolve `api.github.com` (`lookup api.github.com: no such host`) even though host terminal networking works (for example, `ping api.github.com` resolves successfully).
+  - Resume troubleshooting with:
+    - `curl -I https://api.github.com`
+    - `gh api rate_limit`
+    - `gh pr list --head codex/dashboard-sveltekit-port --base main`
+    - If Codex DNS remains broken, run PR/CI commands from host terminal and paste outputs back into session.
 - [ ] HND-SVLT-4 Merge to `main` after CI is green; then continue Round 4 items (`DSH-SVLT-EX18..EX22`) on a fresh `codex/*` branch.
+
+#### Next Session Pickup Point (SvelteKit)
+- Start in `/Users/jamestindall/Projects/Shuma-Gorath/.worktrees/dashboard-sveltekit` on branch `codex/dashboard-sveltekit-port` at commit `86b42bf`.
+- First objective: complete `HND-SVLT-3` by confirming/opening/updating the PR and collecting CI status.
+- Second objective: complete `HND-SVLT-4` merge to `main` once CI is green.
+- After merge: create a fresh `codex/*` branch and begin Round 4 tasks at `DSH-SVLT-EX18`.
 
 ## Recurring Quality Gates
 - [ ] Keep unit, integration, e2e, and CI flows passing; clean up defunct tests quickly.
