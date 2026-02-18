@@ -1,4 +1,4 @@
-.PHONY: dev local run run-prebuilt build prod clean test test-unit unit-test test-integration integration-test test-coverage test-dashboard test-dashboard-e2e seed-dashboard-data test-maze-benchmark spin-wait-ready deploy logs status stop help setup verify config-seed dashboard-build env-help api-key-generate gen-admin-api-key api-key-show api-key-rotate api-key-validate deploy-env-validate
+.PHONY: dev local run run-prebuilt build prod clean test test-unit unit-test test-integration integration-test test-coverage test-dashboard test-dashboard-unit test-dashboard-budgets test-dashboard-e2e seed-dashboard-data test-maze-benchmark spin-wait-ready deploy logs status stop help setup verify config-seed dashboard-build env-help api-key-generate gen-admin-api-key api-key-show api-key-rotate api-key-validate deploy-env-validate
 
 # Default target
 .DEFAULT_GOAL := help
@@ -66,6 +66,11 @@ SPIN_DEV_OVERRIDES := --env SHUMA_DEBUG_HEADERS=$(DEV_DEBUG_HEADERS) --env SHUMA
 SPIN_PROD_OVERRIDES := --env SHUMA_DEBUG_HEADERS=false --env SHUMA_ADMIN_CONFIG_WRITE_ENABLED=false
 SPIN_READY_TIMEOUT_SECONDS ?= 90
 DASHBOARD_RUNTIME_MODE ?= native
+SHUMA_DASHBOARD_BUNDLE_MAX_TOTAL_BYTES ?= 350000
+SHUMA_DASHBOARD_BUNDLE_MAX_JS_BYTES ?= 320000
+SHUMA_DASHBOARD_BUNDLE_MAX_CSS_BYTES ?= 40000
+SHUMA_DASHBOARD_BUNDLE_MAX_JS_CHUNK_BYTES ?= 150000
+SHUMA_DASHBOARD_BUNDLE_MAX_CSS_ASSET_BYTES ?= 30000
 
 #--------------------------
 # Setup (first-time)
@@ -176,7 +181,7 @@ run-prebuilt: ## Run Spin using prebuilt wasm (CI helper)
 
 build: ## Build release binary only (no server start)
 	@echo "$(CYAN)🔨 Building release binary...$(NC)"
-	@$(MAKE) --no-print-directory dashboard-build >/dev/null
+	@$(MAKE) --no-print-directory test-dashboard-budgets >/dev/null
 	@./scripts/set_crate_type.sh cdylib
 	@cargo build --target wasm32-wasip1 --release
 	@mkdir -p $(dir $(WASM_ARTIFACT))
@@ -290,6 +295,30 @@ test-dashboard: ## Dashboard testing instructions (manual)
 	@echo "2. Open: http://127.0.0.1:3000/dashboard/index.html"
 	@echo "3. Follow checklist in docs/testing.md"
 
+test-dashboard-unit: ## Run dashboard module unit tests (Node + dashboard JS contracts)
+	@echo "$(CYAN)🧪 Running dashboard module unit tests...$(NC)"
+	@if ! command -v corepack >/dev/null 2>&1; then \
+		echo "$(RED)❌ Error: corepack not found (install Node.js 18+).$(NC)"; \
+		exit 1; \
+	fi
+	@corepack enable > /dev/null 2>&1 || true
+	@if [ ! -d node_modules/.pnpm ]; then \
+		corepack pnpm install --frozen-lockfile; \
+	elif [ ! -e node_modules/svelte ]; then \
+		corepack pnpm install --offline --frozen-lockfile || corepack pnpm install --frozen-lockfile; \
+	fi
+	@corepack pnpm run test:dashboard:unit
+
+test-dashboard-budgets: ## Verify /dashboard/_app bundle size ceilings
+	@echo "$(CYAN)🧪 Checking dashboard bundle-size budgets...$(NC)"
+	@$(MAKE) --no-print-directory dashboard-build >/dev/null
+	@SHUMA_DASHBOARD_BUNDLE_MAX_TOTAL_BYTES=$(SHUMA_DASHBOARD_BUNDLE_MAX_TOTAL_BYTES) \
+	SHUMA_DASHBOARD_BUNDLE_MAX_JS_BYTES=$(SHUMA_DASHBOARD_BUNDLE_MAX_JS_BYTES) \
+	SHUMA_DASHBOARD_BUNDLE_MAX_CSS_BYTES=$(SHUMA_DASHBOARD_BUNDLE_MAX_CSS_BYTES) \
+	SHUMA_DASHBOARD_BUNDLE_MAX_JS_CHUNK_BYTES=$(SHUMA_DASHBOARD_BUNDLE_MAX_JS_CHUNK_BYTES) \
+	SHUMA_DASHBOARD_BUNDLE_MAX_CSS_ASSET_BYTES=$(SHUMA_DASHBOARD_BUNDLE_MAX_CSS_ASSET_BYTES) \
+	node scripts/tests/check_dashboard_bundle_budget.js
+
 test-dashboard-e2e: ## Run Playwright dashboard smoke tests (waits for existing server readiness)
 	@echo "$(CYAN)🧪 Running dashboard e2e smoke tests...$(NC)"
 	@if $(MAKE) --no-print-directory spin-wait-ready; then \
@@ -298,7 +327,14 @@ test-dashboard-e2e: ## Run Playwright dashboard smoke tests (waits for existing 
 			exit 1; \
 		fi; \
 		corepack enable > /dev/null 2>&1 || true; \
-		corepack pnpm install --frozen-lockfile; \
+		if [ ! -d node_modules/.pnpm ]; then \
+			corepack pnpm install --frozen-lockfile; \
+		elif [ ! -e node_modules/svelte ]; then \
+			corepack pnpm install --offline --frozen-lockfile || corepack pnpm install --frozen-lockfile; \
+		fi; \
+		$(MAKE) --no-print-directory test-dashboard-unit || exit 1; \
+		$(MAKE) --no-print-directory test-dashboard-budgets || exit 1; \
+		$(MAKE) --no-print-directory seed-dashboard-data || exit 1; \
 		corepack pnpm exec playwright install chromium; \
 		SHUMA_BASE_URL=http://127.0.0.1:3000 SHUMA_API_KEY=$(SHUMA_API_KEY) SHUMA_FORWARDED_IP_SECRET=$(SHUMA_FORWARDED_IP_SECRET) corepack pnpm run test:dashboard:e2e; \
 	else \

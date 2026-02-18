@@ -34,6 +34,8 @@ export const createTabLifecycleCoordinator = (options = {}) => {
 
   let activeTab = DEFAULT_DASHBOARD_TAB;
   let initialized = false;
+  const cleanupFns = [];
+  let hashChangeHandler = null;
 
   const applyDomState = (tabName) => {
     const tab = normalizeTab(tabName);
@@ -157,11 +159,11 @@ export const createTabLifecycleCoordinator = (options = {}) => {
 
   const bindLinkInteractions = () => {
     document.querySelectorAll(linkSelector).forEach((link) => {
-      link.addEventListener('click', (event) => {
+      const onClick = (event) => {
         event.preventDefault();
         activate(link.dataset.dashboardTabLink, 'click');
-      });
-      link.addEventListener('keydown', (event) => {
+      };
+      const onKeyDown = (event) => {
         if (event.key === 'ArrowRight') {
           event.preventDefault();
           focusByOffset(1);
@@ -175,6 +177,12 @@ export const createTabLifecycleCoordinator = (options = {}) => {
           event.preventDefault();
           activate(DASHBOARD_TABS[DASHBOARD_TABS.length - 1], 'keyboard');
         }
+      };
+      link.addEventListener('click', onClick);
+      link.addEventListener('keydown', onKeyDown);
+      cleanupFns.push(() => {
+        link.removeEventListener('click', onClick);
+        link.removeEventListener('keydown', onKeyDown);
       });
     });
   };
@@ -185,7 +193,14 @@ export const createTabLifecycleCoordinator = (options = {}) => {
       controllers[tab].init({ tab });
     });
     bindLinkInteractions();
-    window.addEventListener('hashchange', syncFromHash);
+    hashChangeHandler = () => syncFromHash();
+    window.addEventListener('hashchange', hashChangeHandler);
+    cleanupFns.push(() => {
+      if (hashChangeHandler) {
+        window.removeEventListener('hashchange', hashChangeHandler);
+      }
+      hashChangeHandler = null;
+    });
     initialized = true;
     syncFromHash();
   };
@@ -195,8 +210,21 @@ export const createTabLifecycleCoordinator = (options = {}) => {
     reason: context.reason || 'manual'
   });
 
+  const destroy = () => {
+    if (!initialized) return;
+    controllers[activeTab].unmount({ tab: activeTab, nextTab: null, reason: 'destroy' });
+    while (cleanupFns.length > 0) {
+      const cleanup = cleanupFns.pop();
+      try {
+        cleanup();
+      } catch (_e) {}
+    }
+    initialized = false;
+  };
+
   return {
     init,
+    destroy,
     activate,
     refreshActive,
     getActiveTab: () => activeTab,

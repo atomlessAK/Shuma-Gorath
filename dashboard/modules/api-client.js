@@ -311,49 +311,75 @@ export const create = (options = {}) => {
     return payload;
   };
 
-  const getAnalytics = async () => adaptAnalytics(await request('/admin/analytics'));
+  /**
+   * @param {RequestOptions} [requestOptions]
+   */
+  const getAnalytics = async (requestOptions = {}) =>
+    adaptAnalytics(await request('/admin/analytics', requestOptions));
 
   /**
    * @param {number} hours
+   * @param {RequestOptions} [requestOptions]
    */
-  const getEvents = async (hours = 24) =>
-    adaptEvents(await request(`/admin/events?hours=${encodeURIComponent(String(hours))}`));
+  const getEvents = async (hours = 24, requestOptions = {}) =>
+    adaptEvents(await request(`/admin/events?hours=${encodeURIComponent(String(hours))}`, requestOptions));
 
-  const getBans = async () => adaptBans(await request('/admin/ban'));
+  /**
+   * @param {RequestOptions} [requestOptions]
+   */
+  const getBans = async (requestOptions = {}) => adaptBans(await request('/admin/ban', requestOptions));
 
-  const getMaze = async () => adaptMaze(await request('/admin/maze'));
+  /**
+   * @param {RequestOptions} [requestOptions]
+   */
+  const getMaze = async (requestOptions = {}) => adaptMaze(await request('/admin/maze', requestOptions));
 
-  const getCdp = async () => adaptCdp(await request('/admin/cdp'));
+  /**
+   * @param {RequestOptions} [requestOptions]
+   */
+  const getCdp = async (requestOptions = {}) => adaptCdp(await request('/admin/cdp', requestOptions));
 
   /**
    * @param {{hours?: number, limit?: number}} [options]
+   * @param {RequestOptions} [requestOptions]
    */
-  const getCdpEvents = async (options = {}) => {
+  const getCdpEvents = async (options = {}, requestOptions = {}) => {
     const hours = Number.isFinite(options.hours) ? Number(options.hours) : 24;
     const limit = Number.isFinite(options.limit) ? Number(options.limit) : 500;
     return adaptCdpEvents(
       await request(
-        `/admin/cdp/events?hours=${encodeURIComponent(String(hours))}&limit=${encodeURIComponent(String(limit))}`
+        `/admin/cdp/events?hours=${encodeURIComponent(String(hours))}&limit=${encodeURIComponent(String(limit))}`,
+        requestOptions
       )
     );
   };
 
-  const getConfig = async () => adaptConfig(await request('/admin/config'));
+  /**
+   * @param {RequestOptions} [requestOptions]
+   */
+  const getConfig = async (requestOptions = {}) =>
+    adaptConfig(await request('/admin/config', requestOptions));
 
   /**
    * @param {{hours?: number, limit?: number}} [options]
+   * @param {RequestOptions} [requestOptions]
    */
-  const getMonitoring = async (options = {}) => {
+  const getMonitoring = async (options = {}, requestOptions = {}) => {
     const hours = Number.isFinite(options.hours) ? Number(options.hours) : 24;
     const limit = Number.isFinite(options.limit) ? Number(options.limit) : 10;
     return adaptMonitoring(
       await request(
-        `/admin/monitoring?hours=${encodeURIComponent(String(hours))}&limit=${encodeURIComponent(String(limit))}`
+        `/admin/monitoring?hours=${encodeURIComponent(String(hours))}&limit=${encodeURIComponent(String(limit))}`,
+        requestOptions
       )
     );
   };
 
-  const getRobotsPreview = async () => adaptRobots(await request('/admin/robots'));
+  /**
+   * @param {RequestOptions} [requestOptions]
+   */
+  const getRobotsPreview = async (requestOptions = {}) =>
+    adaptRobots(await request('/admin/robots', requestOptions));
 
   /**
    * @param {Record<string, unknown>} configPatch

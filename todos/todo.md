@@ -167,14 +167,31 @@ Implementation rule: when internal feature work touches provider-managed capabil
 - [ ] MON-TEL-7 Add tests for telemetry correctness and dashboard rendering states (empty/loading/error/data) for each new monitoring section, including cardinality guardrails and retention-window behavior.
 - [ ] MON-TEL-7.a Extend dashboard automated tests to assert new monitoring cards/tables/charts across empty/loading/error/data states, not just adapter contracts.
 
-### P1 Dashboard SvelteKit Post-Cutover Excellence
-- [x] DSH-SVLT-EX1 Remove remaining import-time DOM/event bindings in `dashboard/dashboard.js`; move all bindings to mount-scoped setup with deterministic teardown so route remounts remain safe.
-- [ ] DSH-SVLT-EX2 Continue extracting orchestration out of `dashboard/dashboard.js` into `dashboard/src/lib/runtime/*`, leaving `dashboard/modules/*` as pure domain adapters.
-- [x] DSH-SVLT-EX3 Resolve current Svelte a11y warnings in dashboard tab semantics (`tablist`/`tabpanel`) while preserving keyboard/hash contracts and smoke coverage.
-- [x] DSH-SVLT-EX4 Add `AbortController`-based request cancellation/dedupe for tab switches and polling to prevent stale render overwrites and wasted refresh work.
-- [ ] DSH-SVLT-EX5 Add explicit dashboard runtime performance telemetry (fetch latency, render timing, polling skip/resume counters) and document operator thresholds.
-- [x] DSH-SVLT-EX6 Add route-remount e2e coverage (navigate away/back) and assert that ban/unban, save flows, polling, and keyboard tab navigation still function.
-- [x] DSH-SVLT-EX7 Replace the temporary query-param legacy toggle with an explicit config-driven runtime switch and rollout/rollback docs.
+### P1 Dashboard SvelteKit Excellence Round 2 (Architecture + Performance)
+- [x] DSH-SVLT-EX8 Continue shrinking the `dashboard/dashboard.js` hotspot by extracting config-dirty orchestration and save-check wiring into `dashboard/src/lib/runtime/*` with typed capability contracts.
+- [x] DSH-SVLT-EX9 Reduce native Monitoring-tab auto-refresh fan-out by removing redundant request paths and documenting the bounded request budget per refresh cycle.
+- [x] DSH-SVLT-EX10 Upgrade runtime telemetry aggregation from unbounded lifetime averages to bounded rolling windows (for example last `N` samples + p95) with deterministic reset semantics.
+- [x] DSH-SVLT-EX11 Add repeated remount stress coverage (multiple navigate-away/back loops) that asserts no timer/listener/request duplication over time.
+- [x] DSH-SVLT-EX12 Remove remaining direct DOM/window reads from action pipelines (redirect path, focus target lookup) by routing them through effect adapters for stricter testability.
+
+### P1 Dashboard SvelteKit Excellence Round 4 (Native Decoupling + Perf Hardening)
+- [ ] DSH-SVLT-EX18 Remove `dashboard/dashboard.js` from the native runtime refresh path by moving remaining tab-refresh/session orchestration into `dashboard/src/lib/runtime/*` modules with explicit typed contracts.
+- [ ] DSH-SVLT-EX19 Implement and consume a consolidated Monitoring data contract for manual/native refresh cycles (close `MON-TEL-4` alignment) so Monitoring detail updates avoid multi-endpoint fan-out.
+- [ ] DSH-SVLT-EX20 Replace global chart runtime script dependency with a module-scoped chart adapter lifecycle (lazy import + singleton guard + teardown) to minimize global side effects.
+- [ ] DSH-SVLT-EX21 Add no-flicker Monitoring auto-refresh coverage (no placeholder reset on auto cycles, bounded table patch churn assertions) in dashboard smoke + module tests.
+- [ ] DSH-SVLT-EX22 Add native remount/refresh soak performance gate (bounded fetch/render p95 + stable polling cadence across repeated mount loops) and wire into Make/CI reporting.
+
+### P0 Branch Handoff (dashboard-sveltekit-port -> main)
+- [ ] HND-SVLT-1 Resume from branch `codex/dashboard-sveltekit-port` at commit `c7291e5` plus the pending migration batch commit from this session.
+- [ ] HND-SVLT-2 In an unrestricted shell, run canonical verification only through Makefile paths:
+  - terminal A: `make dev`
+  - terminal B: `make test`
+  - required outcome: Rust unit + maze benchmark + integration + dashboard e2e all green.
+- [ ] HND-SVLT-3 If verification is green, open/update PR from `codex/dashboard-sveltekit-port` into `main` and include:
+  - SvelteKit migration summary (`dashboard/legacy/*` retained only as archived fallback assets),
+  - Makefile-only workflow enforcement updates (`AGENTS.md`, `CONTRIBUTING.md`, `Makefile`),
+  - dashboard runtime/perf guardrails (`e2e` remount fan-out + bundle budget gate).
+- [ ] HND-SVLT-4 Merge to `main` after CI is green; then continue Round 4 items (`DSH-SVLT-EX18..EX22`) on a fresh `codex/*` branch.
 
 ## Recurring Quality Gates
 - [ ] Keep unit, integration, e2e, and CI flows passing; clean up defunct tests quickly.

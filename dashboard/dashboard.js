@@ -20,6 +20,31 @@ import * as configFormUtilsModule from './modules/config-form-utils.js';
 import * as inputValidationModule from './modules/input-validation.js';
 import * as adminEndpointModule from './modules/services/admin-endpoint.js';
 import { createRuntimeEffects } from './modules/services/runtime-effects.js';
+import {
+  createLegacyAutoRefreshRuntime,
+  createLegacyDashboardSessionRuntime,
+  createLegacyDashboardTabRuntime
+} from './src/lib/runtime/dashboard-legacy-orchestration.js';
+import { createLegacyConfigDirtyRuntime } from './src/lib/runtime/dashboard-legacy-config-dirty.js';
+import {
+  clearDashboardExternalAdapters,
+  configureDashboardExternalAdapters,
+  getDashboardActiveTab as getExternalDashboardActiveTab,
+  getDashboardSessionState as getExternalDashboardSessionState,
+  logoutDashboardSession as logoutExternalDashboardSession,
+  refreshDashboardTab as refreshExternalDashboardTab,
+  restoreDashboardSession as restoreExternalDashboardSession,
+  setDashboardActiveTab as setExternalDashboardActiveTab
+} from './src/lib/runtime/dashboard-external-adapters.js';
+
+export {
+  getExternalDashboardActiveTab as getDashboardActiveTab,
+  getExternalDashboardSessionState as getDashboardSessionState,
+  logoutExternalDashboardSession as logoutDashboardSession,
+  refreshExternalDashboardTab as refreshDashboardTab,
+  restoreExternalDashboardSession as restoreDashboardSession,
+  setExternalDashboardActiveTab as setDashboardActiveTab
+};
 
 const {
   parseCountryCodesStrict,
@@ -132,9 +157,10 @@ let inputValidation = null;
 let configDraftStore = null;
 let runtimeEffects = null;
 let statusPanel = null;
-let autoRefreshTimer = null;
-let pageVisible = true;
-let visibilityChangeListener = null;
+let legacyAutoRefreshRuntime = null;
+let legacyConfigDirtyRuntime = null;
+let legacyTabRuntime = null;
+let legacySessionRuntime = null;
 let teardownControlBindings = null;
 let runtimeMounted = false;
 let runtimeMountOptions = {
@@ -317,49 +343,11 @@ function refreshCoreActionButtonsState() {
     validateIpFieldById('unban-ip', true, 'Unban IP')
   );
 
-  if (typeof checkBanDurationsChanged === 'function') {
-    checkBanDurationsChanged();
+  if (legacyConfigDirtyRuntime && typeof legacyConfigDirtyRuntime.runCoreChecks === 'function') {
+    legacyConfigDirtyRuntime.runCoreChecks();
   }
-  if (typeof checkMazeConfigChanged === 'function') {
-    checkMazeConfigChanged();
-  }
-
-  if (typeof checkRobotsConfigChanged === 'function') {
-    checkRobotsConfigChanged();
-  }
-  if (typeof checkGeoConfigChanged === 'function') {
-    checkGeoConfigChanged();
-  }
-  if (typeof checkHoneypotConfigChanged === 'function') {
-    checkHoneypotConfigChanged();
-  }
-  if (typeof checkBrowserPolicyConfigChanged === 'function') {
-    checkBrowserPolicyConfigChanged();
-  }
-  if (typeof checkBypassAllowlistsConfigChanged === 'function') {
-    checkBypassAllowlistsConfigChanged();
-  }
-  if (typeof checkPowConfigChanged === 'function') {
-    checkPowConfigChanged();
-  }
-  if (typeof checkChallengePuzzleConfigChanged === 'function') {
-    checkChallengePuzzleConfigChanged();
-  }
-  if (typeof checkBotnessConfigChanged === 'function') {
-    checkBotnessConfigChanged();
-  }
-  if (typeof checkCdpConfigChanged === 'function') {
-    checkCdpConfigChanged();
-  }
-  if (typeof checkRateLimitConfigChanged === 'function') {
-    checkRateLimitConfigChanged();
-  }
-  if (typeof checkJsRequiredConfigChanged === 'function') {
-    checkJsRequiredConfigChanged();
-  }
-  if (typeof checkAdvancedConfigChanged === 'function') {
-    checkAdvancedConfigChanged();
-  }
+  checkGeoConfigChanged();
+  checkAdvancedConfigChanged();
 }
 
 function createDashboardTabControllers() {
@@ -470,6 +458,16 @@ function updateConfigModeUi(config, baseStatusPatch = {}) {
   });
 }
 
+function deriveMonitoringAnalytics(configSnapshot = {}, analyticsSnapshot = {}) {
+  const config = configSnapshot && typeof configSnapshot === 'object' ? configSnapshot : {};
+  const analytics = analyticsSnapshot && typeof analyticsSnapshot === 'object' ? analyticsSnapshot : {};
+  return {
+    ban_count: Number(analytics.ban_count || 0),
+    test_mode: parseBoolLike(config.test_mode, analytics.test_mode === true),
+    fail_mode: parseBoolLike(config.kv_store_fail_open, true) ? 'open' : 'closed'
+  };
+}
+
 // Update stat cards
 function updateStatCards(analytics, events, bans) {
   getById('total-bans').textContent = analytics.ban_count || 0;
@@ -550,15 +548,6 @@ const sanitizeGeoTextareaValue = configUiStateModule.sanitizeGeoTextareaValue;
 
 const updateRobotsConfig = (config) => invokeConfigUiState('updateRobotsConfig', config);
 
-// Check if robots config has changed from saved state
-function checkRobotsConfigChanged() {
-  runDirtySaveCheck(DIRTY_CHECK_REGISTRY.robots);
-}
-
-function checkAiPolicyConfigChanged() {
-  runDirtySaveCheck(DIRTY_CHECK_REGISTRY.aiPolicy);
-}
-
 function setButtonState(buttonId, apiValid, fieldsValid, changed, requireChange) {
   const btn = getById(buttonId);
   if (!btn) return;
@@ -575,252 +564,28 @@ function setValidActionButtonState(buttonId, apiValid, fieldsValid = true) {
   setButtonState(buttonId, apiValid, fieldsValid, true, false);
 }
 
-function runDirtySaveCheck(spec) {
-  if (!spec || typeof spec.compute !== 'function') return;
-  const apiValid = hasValidApiContext();
-  const result = spec.compute();
-  const fieldsValid = result && result.fieldsValid !== false;
-  const changed = Boolean(result && result.changed);
-  setDirtySaveButtonState(spec.buttonId, changed, apiValid, fieldsValid);
-  if (changed && typeof spec.onChanged === 'function') {
-    spec.onChanged();
+function runLegacyConfigDirtyCheck(methodName) {
+  if (!legacyConfigDirtyRuntime) return;
+  const handler = legacyConfigDirtyRuntime[methodName];
+  if (typeof handler === 'function') {
+    handler();
   }
 }
 
-const DIRTY_CHECK_REGISTRY = Object.freeze({
-  robots: {
-    buttonId: 'save-robots-config',
-    onChanged: () => {
-      const btn = getById('save-robots-config');
-      if (btn) btn.textContent = 'Save robots serving';
-    },
-    compute: () => {
-      const delayValid = validateIntegerFieldById('robots-crawl-delay');
-      const current = {
-        enabled: getById('robots-enabled-toggle').checked,
-        crawlDelay: parseInt(getById('robots-crawl-delay').value, 10) || 2
-      };
-      return {
-        fieldsValid: delayValid,
-        changed: delayValid && isDraftDirty('robots', current)
-      };
-    }
-  },
-  aiPolicy: {
-    buttonId: 'save-ai-policy-config',
-    onChanged: () => {
-      const btn = getById('save-ai-policy-config');
-      if (btn) btn.textContent = 'Save AI bot policy';
-    },
-    compute: () => {
-      const current = {
-        blockTraining: getById('robots-block-training-toggle').checked,
-        blockSearch: getById('robots-block-search-toggle').checked,
-        allowSearch: getById('robots-allow-search-toggle').checked
-      };
-      return {
-        fieldsValid: true,
-        changed: isDraftDirty('aiPolicy', current)
-      };
-    }
-  },
-  maze: {
-    buttonId: 'save-maze-config',
-    compute: () => {
-      const currentThreshold = parseIntegerLoose('maze-threshold');
-      const fieldsValid = validateIntegerFieldById('maze-threshold');
-      return {
-        fieldsValid,
-        changed: fieldsValid && isDraftDirty('maze', {
-          enabled: getById('maze-enabled-toggle').checked,
-          autoBan: getById('maze-auto-ban-toggle').checked,
-          threshold: currentThreshold
-        })
-      };
-    }
-  },
-  banDurations: {
-    buttonId: 'save-durations-btn',
-    compute: () => {
-      const honeypot = readBanDurationFromInputs('honeypot');
-      const rateLimit = readBanDurationFromInputs('rateLimit');
-      const browser = readBanDurationFromInputs('browser');
-      const cdp = readBanDurationFromInputs('cdp');
-      const admin = readBanDurationFromInputs('admin');
-      const fieldsValid = Boolean(honeypot && rateLimit && browser && cdp && admin);
-      const current = fieldsValid ? {
-        honeypot: honeypot.totalSeconds,
-        rateLimit: rateLimit.totalSeconds,
-        browser: browser.totalSeconds,
-        cdp: cdp.totalSeconds,
-        admin: admin.totalSeconds
-      } : getDraft('banDurations');
-      return {
-        fieldsValid,
-        changed: fieldsValid && isDraftDirty('banDurations', current)
-      };
-    }
-  },
-  honeypot: {
-    buttonId: 'save-honeypot-config',
-    compute: () => {
-      const fieldsValid = validateHoneypotPathsField();
-      const currentEnabled = getById('honeypot-enabled-toggle').checked;
-      const saved = getDraft('honeypot');
-      const current = fieldsValid
-        ? normalizeListTextareaForCompare(getById('honeypot-paths').value)
-        : saved.values;
-      return {
-        fieldsValid,
-        changed: fieldsValid && (
-          currentEnabled !== saved.enabled ||
-          current !== saved.values
-        )
-      };
-    }
-  },
-  browserPolicy: {
-    buttonId: 'save-browser-policy-config',
-    compute: () => {
-      const blockValid = validateBrowserRulesField('browser-block-rules');
-      const whitelistValid = validateBrowserRulesField('browser-whitelist-rules');
-      const fieldsValid = blockValid && whitelistValid;
-      const currentBlock = normalizeBrowserRulesForCompare(getById('browser-block-rules').value);
-      const currentWhitelist = normalizeBrowserRulesForCompare(getById('browser-whitelist-rules').value);
-      return {
-        fieldsValid,
-        changed: fieldsValid && isDraftDirty('browserPolicy', {
-          block: currentBlock,
-          whitelist: currentWhitelist
-        })
-      };
-    }
-  },
-  bypassAllowlists: {
-    buttonId: 'save-whitelist-config',
-    compute: () => {
-      const current = {
-        network: normalizeListTextareaForCompare(getById('network-whitelist').value),
-        path: normalizeListTextareaForCompare(getById('path-whitelist').value)
-      };
-      return {
-        fieldsValid: true,
-        changed: isDraftDirty('bypassAllowlists', current)
-      };
-    }
-  },
-  challengePuzzle: {
-    buttonId: 'save-challenge-puzzle-config',
-    compute: () => {
-      const fieldsValid = validateIntegerFieldById('challenge-puzzle-transform-count');
-      const toggle = getById('challenge-puzzle-enabled-toggle');
-      const current = parseIntegerLoose('challenge-puzzle-transform-count');
-      const saved = getDraft('challengePuzzle');
-      const enabledChanged = Boolean(toggle && (toggle.checked !== saved.enabled));
-      const countChanged = current !== null && current !== saved.count;
-      return {
-        fieldsValid,
-        changed: fieldsValid && (enabledChanged || countChanged)
-      };
-    }
-  },
-  pow: {
-    buttonId: 'save-pow-config',
-    compute: () => {
-      const fieldsValid =
-        validateIntegerFieldById('pow-difficulty') && validateIntegerFieldById('pow-ttl');
-      const current = {
-        enabled: getById('pow-enabled-toggle').checked,
-        difficulty: parseInt(getById('pow-difficulty').value, 10) || 15,
-        ttl: parseInt(getById('pow-ttl').value, 10) || 90
-      };
-      return {
-        fieldsValid,
-        changed: isDraftDirty('pow', current)
-      };
-    }
-  },
-  botness: {
-    buttonId: 'save-botness-config',
-    compute: () => {
-      const fieldsValid =
-        validateIntegerFieldById('challenge-puzzle-threshold') &&
-        validateIntegerFieldById('maze-threshold-score') &&
-        validateIntegerFieldById('weight-js-required') &&
-        validateIntegerFieldById('weight-geo-risk') &&
-        validateIntegerFieldById('weight-rate-medium') &&
-        validateIntegerFieldById('weight-rate-high');
-      const current = {
-        challengeThreshold: parseInt(getById('challenge-puzzle-threshold').value, 10) || 3,
-        mazeThreshold: parseInt(getById('maze-threshold-score').value, 10) || 6,
-        weightJsRequired: parseInt(getById('weight-js-required').value, 10) || 1,
-        weightGeoRisk: parseInt(getById('weight-geo-risk').value, 10) || 2,
-        weightRateMedium: parseInt(getById('weight-rate-medium').value, 10) || 1,
-        weightRateHigh: parseInt(getById('weight-rate-high').value, 10) || 2
-      };
-      return {
-        fieldsValid,
-        changed: isDraftDirty('botness', current)
-      };
-    }
-  },
-  cdp: {
-    buttonId: 'save-cdp-config',
-    compute: () => {
-      const current = {
-        enabled: getById('cdp-enabled-toggle').checked,
-        autoBan: getById('cdp-auto-ban-toggle').checked,
-        threshold: parseFloat(getById('cdp-threshold-slider').value)
-      };
-      return {
-        fieldsValid: true,
-        changed: isDraftDirty('cdp', current)
-      };
-    }
-  },
-  edgeMode: {
-    buttonId: 'save-edge-integration-mode-config',
-    compute: () => {
-      const select = getById('edge-integration-mode-select');
-      if (!select) {
-        return { fieldsValid: false, changed: false };
-      }
-      const current = normalizeEdgeIntegrationMode(select.value);
-      return {
-        fieldsValid: true,
-        changed: isDraftDirty('edgeMode', { mode: current })
-      };
-    }
-  },
-  rateLimit: {
-    buttonId: 'save-rate-limit-config',
-    compute: () => {
-      const valueValid = validateIntegerFieldById('rate-limit-threshold');
-      const current = parseIntegerLoose('rate-limit-threshold');
-      return {
-        fieldsValid: valueValid,
-        changed: current !== null && isDraftDirty('rateLimit', { value: current })
-      };
-    }
-  },
-  jsRequired: {
-    buttonId: 'save-js-required-config',
-    compute: () => {
-      const current = getById('js-required-enforced-toggle').checked;
-      return {
-        fieldsValid: true,
-        changed: isDraftDirty('jsRequired', { enforced: current })
-      };
-    }
-  }
-});
+function checkRobotsConfigChanged() {
+  runLegacyConfigDirtyCheck('checkRobots');
+}
+
+function checkAiPolicyConfigChanged() {
+  runLegacyConfigDirtyCheck('checkAiPolicy');
+}
 
 function checkMazeConfigChanged() {
-  runDirtySaveCheck(DIRTY_CHECK_REGISTRY.maze);
+  runLegacyConfigDirtyCheck('checkMaze');
 }
 
 function checkBanDurationsChanged() {
-  runDirtySaveCheck(DIRTY_CHECK_REGISTRY.banDurations);
+  runLegacyConfigDirtyCheck('checkBanDurations');
 }
 
 function validateHoneypotPathsField(showInline = false) {
@@ -837,7 +602,7 @@ function validateHoneypotPathsField(showInline = false) {
 }
 
 function checkHoneypotConfigChanged() {
-  runDirtySaveCheck(DIRTY_CHECK_REGISTRY.honeypot);
+  runLegacyConfigDirtyCheck('checkHoneypot');
 }
 
 function validateBrowserRulesField(id, showInline = false) {
@@ -854,15 +619,15 @@ function validateBrowserRulesField(id, showInline = false) {
 }
 
 function checkBrowserPolicyConfigChanged() {
-  runDirtySaveCheck(DIRTY_CHECK_REGISTRY.browserPolicy);
+  runLegacyConfigDirtyCheck('checkBrowserPolicy');
 }
 
 function checkBypassAllowlistsConfigChanged() {
-  runDirtySaveCheck(DIRTY_CHECK_REGISTRY.bypassAllowlists);
+  runLegacyConfigDirtyCheck('checkBypassAllowlists');
 }
 
 function checkChallengePuzzleConfigChanged() {
-  runDirtySaveCheck(DIRTY_CHECK_REGISTRY.challengePuzzle);
+  runLegacyConfigDirtyCheck('checkChallengePuzzle');
 }
 
 // Fetch and update robots.txt preview content
@@ -917,11 +682,11 @@ const updatePowConfig = (config) => invokeConfigUiState('updatePowConfig', confi
 const updateChallengeConfig = (config) => invokeConfigUiState('updateChallengeConfig', config);
 
 function checkPowConfigChanged() {
-  runDirtySaveCheck(DIRTY_CHECK_REGISTRY.pow);
+  runLegacyConfigDirtyCheck('checkPow');
 }
 
 function checkBotnessConfigChanged() {
-  runDirtySaveCheck(DIRTY_CHECK_REGISTRY.botness);
+  runLegacyConfigDirtyCheck('checkBotness');
 }
 
 function checkGeoConfigChanged() {
@@ -979,19 +744,19 @@ function handleGeoFieldBlur(id) {
 
 // Check if CDP config has changed from saved state
 function checkCdpConfigChanged() {
-  runDirtySaveCheck(DIRTY_CHECK_REGISTRY.cdp);
+  runLegacyConfigDirtyCheck('checkCdp');
 }
 
 function checkEdgeIntegrationModeChanged() {
-  runDirtySaveCheck(DIRTY_CHECK_REGISTRY.edgeMode);
+  runLegacyConfigDirtyCheck('checkEdgeMode');
 }
 
 function checkRateLimitConfigChanged() {
-  runDirtySaveCheck(DIRTY_CHECK_REGISTRY.rateLimit);
+  runLegacyConfigDirtyCheck('checkRateLimit');
 }
 
 function checkJsRequiredConfigChanged() {
-  runDirtySaveCheck(DIRTY_CHECK_REGISTRY.jsRequired);
+  runLegacyConfigDirtyCheck('checkJsRequired');
 }
 
 function setAdvancedConfigEditorFromConfig(config, preserveDirty = true) {
@@ -1275,23 +1040,38 @@ async function refreshSharedConfig(reason = 'manual', options = {}) {
 
 async function refreshMonitoringTab(reason = 'manual', options = {}) {
   if (!dashboardApiClient) return;
-  if (reason !== 'auto-refresh') {
+  const isAutoRefresh = reason === 'auto-refresh';
+  if (!isAutoRefresh) {
     showTabLoading('monitoring', 'Loading monitoring data...');
-  }
-
-  getById('total-bans').textContent = '...';
-  getById('active-bans').textContent = '...';
-  getById('total-events').textContent = '...';
-  getById('unique-ips').textContent = '...';
-  if (tablesView && typeof tablesView.showMonitoringLoadingState === 'function') {
-    tablesView.showMonitoringLoadingState();
-  }
-  if (monitoringView && typeof monitoringView.showLoadingState === 'function') {
-    monitoringView.showLoadingState();
+    getById('total-bans').textContent = '...';
+    getById('active-bans').textContent = '...';
+    getById('total-events').textContent = '...';
+    getById('unique-ips').textContent = '...';
+    if (tablesView && typeof tablesView.showMonitoringLoadingState === 'function') {
+      tablesView.showMonitoringLoadingState();
+    }
+    if (monitoringView && typeof monitoringView.showLoadingState === 'function') {
+      monitoringView.showLoadingState();
+    }
   }
 
   const requestOptions = options && options.signal ? { signal: options.signal } : {};
-  const [analytics, events, bansData, mazeData, cdpData, cdpEventsData, monitoringData] = await Promise.all([
+  if (isAutoRefresh) {
+    const monitoringData = await dashboardApiClient.getMonitoring({ hours: 24, limit: 10 }, requestOptions);
+    if (dashboardState) {
+      dashboardState.setSnapshot('monitoring', monitoringData);
+    }
+    await runDomWriteBatch(() => {
+      if (monitoringView) {
+        monitoringView.updateMonitoringSummary(monitoringData.summary || {});
+        monitoringView.updatePrometheusHelper(monitoringData.prometheus || {});
+      }
+    });
+    return;
+  }
+
+  const configSnapshot = dashboardState ? dashboardState.getSnapshot('config') : {};
+  const [analyticsResponse, events, bansData, mazeData, cdpData, cdpEventsData, monitoringData] = await Promise.all([
     dashboardApiClient.getAnalytics(requestOptions),
     dashboardApiClient.getEvents(24, requestOptions),
     dashboardApiClient.getBans(requestOptions),
@@ -1300,6 +1080,10 @@ async function refreshMonitoringTab(reason = 'manual', options = {}) {
     dashboardApiClient.getCdpEvents({ hours: 24, limit: 500 }, requestOptions),
     dashboardApiClient.getMonitoring({ hours: 24, limit: 10 }, requestOptions)
   ]);
+  const analytics = deriveMonitoringAnalytics(configSnapshot, analyticsResponse);
+  if (Array.isArray(bansData.bans)) {
+    analytics.ban_count = bansData.bans.length;
+  }
 
   if (dashboardState) {
     dashboardState.setSnapshot('analytics', analytics);
@@ -1438,138 +1222,10 @@ function refreshActiveTab(reason = 'manual') {
   return refreshDashboardForTab(activeTab, reason);
 }
 
-export function setDashboardActiveTab(tab, reason = 'external') {
-  const normalized = tabLifecycleModule.normalizeTab(tab);
-  if (dashboardState) {
-    dashboardState.setActiveTab(normalized);
-  }
-  document.body.dataset.activeDashboardTab = normalized;
-  refreshCoreActionButtonsState();
-  if (runtimeMountOptions.useExternalTabPipeline !== true && dashboardTabCoordinator) {
-    dashboardTabCoordinator.activate(normalized, reason);
-  }
-  return normalized;
-}
-
-export function getDashboardActiveTab() {
-  if (dashboardTabCoordinator) {
-    return dashboardTabCoordinator.getActiveTab();
-  }
-  return dashboardState ? dashboardState.getActiveTab() : tabLifecycleModule.DEFAULT_DASHBOARD_TAB;
-}
-
-export async function refreshDashboardTab(tab, reason = 'manual', options = {}) {
-  const normalized = setDashboardActiveTab(tab, reason);
-  return refreshDashboardForTab(normalized, reason, options);
-}
-
-export async function restoreDashboardSession() {
-  if (!adminSessionController) return false;
-  const authenticated = await adminSessionController.restoreAdminSession();
-  const sessionState = adminSessionController.getState();
-  if (dashboardState) {
-    dashboardState.setSession({
-      authenticated: sessionState.authenticated === true,
-      csrfToken: sessionState.csrfToken || ''
-    });
-  }
-  refreshCoreActionButtonsState();
-  return authenticated;
-}
-
-export function getDashboardSessionState() {
-  if (!adminSessionController) {
-    return { authenticated: false, csrfToken: '' };
-  }
-  const state = adminSessionController.getState();
-  return {
-    authenticated: state.authenticated === true,
-    csrfToken: state.csrfToken || ''
-  };
-}
-
-export async function logoutDashboardSession() {
-  const resolved = resolveAdminApiEndpoint();
-  const endpoint = resolved && resolved.endpoint ? resolved.endpoint : '';
-  if (!endpoint || !runtimeEffects) return;
-
-  const sessionState = getDashboardSessionState();
-  const headers = new Headers();
-  if (sessionState.csrfToken) {
-    headers.set('X-Shuma-CSRF', sessionState.csrfToken);
-  }
-
-  try {
-    await runtimeEffects.request(`${endpoint}/admin/logout`, {
-      method: 'POST',
-      headers,
-      credentials: 'same-origin'
-    });
-  } catch (_e) {}
-
-  if (adminSessionController) {
-    await adminSessionController.restoreAdminSession();
-  }
-  if (dashboardState) {
-    dashboardState.setSession({ authenticated: false, csrfToken: '' });
-  }
-  const message = getById('admin-msg');
-  if (message) {
-    message.textContent = 'Logged out';
-    message.className = 'message success';
-  }
-  refreshCoreActionButtonsState();
-}
-
-function clearAutoRefreshTimer() {
-  if (autoRefreshTimer) {
-    runtimeEffects.clearTimer(autoRefreshTimer);
-    autoRefreshTimer = null;
-  }
-}
-
-function scheduleAutoRefresh() {
-  clearAutoRefreshTimer();
-  if (!hasValidApiContext() || !pageVisible) return;
-  const activeTab = dashboardTabCoordinator
-    ? dashboardTabCoordinator.getActiveTab()
-    : (dashboardState ? dashboardState.getActiveTab() : 'monitoring');
-  const interval = TAB_REFRESH_INTERVAL_MS[activeTab] || TAB_REFRESH_INTERVAL_MS.monitoring;
-  autoRefreshTimer = runtimeEffects.setTimer(async () => {
-    autoRefreshTimer = null;
-    if (hasValidApiContext() && pageVisible) {
-      await refreshDashboardForTab(activeTab, 'auto-refresh');
-    }
-    scheduleAutoRefresh();
-  }, interval);
-}
-
-function bindVisibilityHandler() {
-  if (visibilityChangeListener) {
-    document.removeEventListener('visibilitychange', visibilityChangeListener);
-  }
-  visibilityChangeListener = () => {
-    pageVisible = document.visibilityState !== 'hidden';
-    if (pageVisible) {
-      scheduleAutoRefresh();
-    } else {
-      clearAutoRefreshTimer();
-    }
-  };
-  document.addEventListener('visibilitychange', visibilityChangeListener);
-}
-
-function unbindVisibilityHandler() {
-  if (!visibilityChangeListener) return;
-  document.removeEventListener('visibilitychange', visibilityChangeListener);
-  visibilityChangeListener = null;
-}
-
 export function mountDashboardApp(options = {}) {
   if (runtimeMounted) return;
   runtimeMounted = true;
   runtimeMountOptions = normalizeRuntimeMountOptions(options);
-  pageVisible = document.visibilityState !== 'hidden';
 
   configDraftStore = configDraftStoreModule.create(CONFIG_DRAFT_DEFAULTS);
   runtimeEffects = createRuntimeEffects();
@@ -1592,6 +1248,43 @@ export function mountDashboardApp(options = {}) {
   if (runtimeMountOptions.bindLogoutButton) {
     adminSessionController.bindLogoutButton('logout-btn', 'admin-msg');
   }
+
+  legacyTabRuntime = createLegacyDashboardTabRuntime({
+    document,
+    normalizeTab: tabLifecycleModule.normalizeTab,
+    defaultTab: tabLifecycleModule.DEFAULT_DASHBOARD_TAB,
+    getStateStore: () => dashboardState,
+    getTabCoordinator: () => dashboardTabCoordinator,
+    getRuntimeMountOptions: () => runtimeMountOptions,
+    refreshCoreActionButtonsState,
+    refreshDashboardForTab
+  });
+
+  legacySessionRuntime = createLegacyDashboardSessionRuntime({
+    getAdminSessionController: () => adminSessionController,
+    getStateStore: () => dashboardState,
+    refreshCoreActionButtonsState,
+    resolveAdminApiEndpoint,
+    getRuntimeEffects: () => runtimeEffects,
+    getMessageNode: () => getById('admin-msg')
+  });
+  configureDashboardExternalAdapters({
+    tabRuntime: legacyTabRuntime,
+    sessionRuntime: legacySessionRuntime,
+    normalizeTab: tabLifecycleModule.normalizeTab,
+    defaultTab: tabLifecycleModule.DEFAULT_DASHBOARD_TAB
+  });
+
+  legacyAutoRefreshRuntime = createLegacyAutoRefreshRuntime({
+    effects: runtimeEffects,
+    document,
+    tabRefreshIntervals: TAB_REFRESH_INTERVAL_MS,
+    defaultTab: tabLifecycleModule.DEFAULT_DASHBOARD_TAB,
+    normalizeTab: tabLifecycleModule.normalizeTab,
+    getActiveTab: () => getExternalDashboardActiveTab(),
+    hasValidApiContext,
+    refreshDashboardForTab
+  });
 
   dashboardApiClient = dashboardApiClientModule.create({
     getAdminContext,
@@ -1655,19 +1348,35 @@ export function mountDashboardApp(options = {}) {
     normalizeJsonObjectForCompare
   });
 
+  legacyConfigDirtyRuntime = createLegacyConfigDirtyRuntime({
+    getById,
+    getDraft,
+    isDraftDirty,
+    hasValidApiContext,
+    validateIntegerFieldById,
+    parseIntegerLoose,
+    readBanDurationFromInputs,
+    validateHoneypotPathsField,
+    validateBrowserRulesField,
+    normalizeListTextareaForCompare,
+    normalizeBrowserRulesForCompare,
+    normalizeEdgeIntegrationMode,
+    setDirtySaveButtonState
+  });
+
   if (!runtimeMountOptions.useExternalTabPipeline) {
     dashboardTabCoordinator = tabLifecycleModule.createTabLifecycleCoordinator({
       controllers: createDashboardTabControllers(),
       onActiveTabChange: (nextTab) => {
         if (dashboardState) dashboardState.setActiveTab(nextTab);
-        if (!runtimeMountOptions.useExternalPollingPipeline) {
-          scheduleAutoRefresh();
+        if (!runtimeMountOptions.useExternalPollingPipeline && legacyAutoRefreshRuntime) {
+          legacyAutoRefreshRuntime.schedule();
         }
       }
     });
     dashboardTabCoordinator.init();
   } else {
-    setDashboardActiveTab(runtimeMountOptions.initialTab, 'external-init');
+    setExternalDashboardActiveTab(runtimeMountOptions.initialTab, 'external-init');
   }
   initInputValidation();
   teardownControlBindings = bindMountScopedDomEvents();
@@ -1767,23 +1476,42 @@ export function mountDashboardApp(options = {}) {
         return;
       }
       refreshActiveTab('session-restored');
-      if (!runtimeMountOptions.useExternalPollingPipeline) {
-        scheduleAutoRefresh();
+      if (!runtimeMountOptions.useExternalPollingPipeline && legacyAutoRefreshRuntime) {
+        legacyAutoRefreshRuntime.schedule();
       }
     });
   }
 
-  if (!runtimeMountOptions.useExternalPollingPipeline) {
-    bindVisibilityHandler();
+  if (!runtimeMountOptions.useExternalPollingPipeline && legacyAutoRefreshRuntime) {
+    legacyAutoRefreshRuntime.bindVisibility();
   }
+}
+
+export function mountDashboardExternalRuntime(options = {}) {
+  const source = options || {};
+  mountDashboardApp({
+    useExternalTabPipeline: true,
+    useExternalPollingPipeline: true,
+    useExternalSessionPipeline: true,
+    bindLogoutButton: false,
+    initialTab: tabLifecycleModule.normalizeTab(
+      source.initialTab || tabLifecycleModule.DEFAULT_DASHBOARD_TAB
+    )
+  });
 }
 
 export function unmountDashboardApp() {
   if (!runtimeMounted) return;
   runtimeMounted = false;
   runtimeMountOptions = normalizeRuntimeMountOptions({});
-  clearAutoRefreshTimer();
-  unbindVisibilityHandler();
+  if (legacyAutoRefreshRuntime) {
+    legacyAutoRefreshRuntime.destroy();
+    legacyAutoRefreshRuntime = null;
+  }
+  legacyConfigDirtyRuntime = null;
+  legacyTabRuntime = null;
+  legacySessionRuntime = null;
+  clearDashboardExternalAdapters();
   if (teardownControlBindings) {
     teardownControlBindings();
     teardownControlBindings = null;

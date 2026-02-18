@@ -29,6 +29,9 @@ make test                  # Full suite: unit + integration + dashboard e2e (wai
 # Unit tests only (native Rust, NO Spin required)
 make test-unit             # Run all unit tests
 
+# Dashboard module unit tests only (NO Spin required)
+make test-dashboard-unit   # Run dashboard JS/module contract tests
+
 # Integration tests only (Spin environment required)
 make dev                   # In terminal 1
 make test-integration      # In terminal 2
@@ -200,7 +203,7 @@ curl -H "X-Forwarded-For: 1.2.3.4" \
 - Use `make stop` then `make dev`
 
 ### 🐙 Tests Failing
-- Use Makefile targets (`make test`, `make test-unit`, `make test-integration`, `make test-dashboard-e2e`)
+- Use Makefile targets (`make test`, `make test-unit`, `make test-dashboard-unit`, `make test-integration`, `make test-dashboard-e2e`)
 - `make test` waits for existing Spin readiness (`/health`) before running integration/dashboard suites
 - If startup is slow, increase wait timeout: `make test SPIN_READY_TIMEOUT_SECONDS=180`
 - Check logs with `make logs`

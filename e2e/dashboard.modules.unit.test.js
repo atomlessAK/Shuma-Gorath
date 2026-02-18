@@ -735,6 +735,101 @@ test('svelte dashboard store exposes centralized state/actions/selectors', { con
     store.setDraftBaseline('maze', { enabled: true, threshold: 50 });
     store.setDraft('maze', { enabled: true, threshold: 60 });
     assert.equal(store.isDraftDirty('maze'), true);
+
+    store.recordRefreshMetrics({
+      tab: 'monitoring',
+      reason: 'manual',
+      fetchLatencyMs: 123.45,
+      renderTimingMs: 12.34
+    });
+    store.recordPollingSkip('page-hidden', 'monitoring', 30000);
+    store.recordPollingResume('visibility-resume', 'monitoring', 30000);
+
+    const telemetry = store.getRuntimeTelemetry();
+    assert.equal(telemetry.refresh.lastTab, 'monitoring');
+    assert.equal(telemetry.refresh.lastReason, 'manual');
+    assert.equal(telemetry.refresh.fetchLatencyMs.last, 123.45);
+    assert.equal(telemetry.refresh.fetchLatencyMs.p95, 123.45);
+    assert.equal(telemetry.refresh.fetchLatencyMs.samples, 1);
+    assert.equal(telemetry.refresh.fetchLatencyMs.totalSamples, 1);
+    assert.equal(telemetry.refresh.renderTimingMs.last, 12.34);
+    assert.equal(telemetry.refresh.renderTimingMs.p95, 12.34);
+    assert.equal(telemetry.refresh.renderTimingMs.samples, 1);
+    assert.equal(telemetry.refresh.renderTimingMs.totalSamples, 1);
+    assert.equal(telemetry.polling.skips, 1);
+    assert.equal(telemetry.polling.resumes, 1);
+  });
+});
+
+test('svelte dashboard store uses bounded rolling telemetry windows with deterministic reset', { concurrency: false }, async () => {
+  await withBrowserGlobals({}, async () => {
+    const storeModule = await importBrowserModule('dashboard/src/lib/state/dashboard-store.js');
+    const store = storeModule.createDashboardStore({ initialTab: 'monitoring' });
+    const windowSize = storeModule.RUNTIME_TELEMETRY_ROLLING_WINDOW_SIZE;
+    const totalSamples = windowSize + 10;
+
+    for (let sample = 1; sample <= totalSamples; sample += 1) {
+      store.recordRefreshMetrics({
+        tab: 'monitoring',
+        reason: sample % 2 === 0 ? 'auto-refresh' : 'manual',
+        fetchLatencyMs: sample,
+        renderTimingMs: sample * 2
+      });
+    }
+
+    const telemetry = store.getRuntimeTelemetry();
+    const fetchLatency = telemetry.refresh.fetchLatencyMs;
+    const renderTiming = telemetry.refresh.renderTimingMs;
+    const firstWindowSample = totalSamples - windowSize + 1;
+    const expectedAvg = Number((((firstWindowSample + totalSamples) / 2).toFixed(2)));
+    const expectedP95Index = Math.ceil(windowSize * 0.95) - 1;
+    const expectedP95 = firstWindowSample + expectedP95Index;
+
+    assert.equal(fetchLatency.windowSize, windowSize);
+    assert.equal(fetchLatency.samples, windowSize);
+    assert.equal(fetchLatency.totalSamples, totalSamples);
+    assert.equal(fetchLatency.last, totalSamples);
+    assert.equal(fetchLatency.avg, expectedAvg);
+    assert.equal(fetchLatency.p95, expectedP95);
+    assert.equal(fetchLatency.max, totalSamples);
+
+    assert.equal(renderTiming.windowSize, windowSize);
+    assert.equal(renderTiming.samples, windowSize);
+    assert.equal(renderTiming.totalSamples, totalSamples);
+    assert.equal(renderTiming.last, totalSamples * 2);
+    assert.equal(renderTiming.avg, expectedAvg * 2);
+    assert.equal(renderTiming.p95, expectedP95 * 2);
+    assert.equal(renderTiming.max, totalSamples * 2);
+
+    store.setActiveTab('status');
+    store.resetRuntimeTelemetry();
+    const telemetryAfterResetOnly = store.getRuntimeTelemetry();
+    assert.equal(store.getState().activeTab, 'status');
+    assert.equal(telemetryAfterResetOnly.refresh.lastReason, 'init');
+    assert.equal(telemetryAfterResetOnly.refresh.fetchLatencyMs.samples, 0);
+    assert.equal(telemetryAfterResetOnly.refresh.fetchLatencyMs.totalSamples, 0);
+    assert.equal(telemetryAfterResetOnly.refresh.fetchLatencyMs.p95, 0);
+    assert.equal(Array.isArray(telemetryAfterResetOnly.refresh.fetchLatencyMs.window), true);
+    assert.equal(telemetryAfterResetOnly.refresh.fetchLatencyMs.window.length, 0);
+
+    store.recordRefreshMetrics({
+      tab: 'status',
+      reason: 'manual',
+      fetchLatencyMs: 42,
+      renderTimingMs: 8
+    });
+    const telemetryAfterRestart = store.getRuntimeTelemetry();
+    assert.equal(telemetryAfterRestart.refresh.fetchLatencyMs.samples, 1);
+    assert.equal(telemetryAfterRestart.refresh.fetchLatencyMs.totalSamples, 1);
+    assert.equal(telemetryAfterRestart.refresh.fetchLatencyMs.p95, 42);
+
+    store.reset('monitoring');
+    const telemetryAfterFullReset = store.getRuntimeTelemetry();
+    assert.equal(store.getState().activeTab, 'monitoring');
+    assert.equal(telemetryAfterFullReset.refresh.fetchLatencyMs.samples, 0);
+    assert.equal(telemetryAfterFullReset.refresh.fetchLatencyMs.totalSamples, 0);
+    assert.equal(telemetryAfterFullReset.refresh.fetchLatencyMs.p95, 0);
+    assert.equal(telemetryAfterFullReset.refresh.fetchLatencyMs.window.length, 0);
   });
 });
 
@@ -747,9 +842,11 @@ test('svelte dashboard actions orchestrate session bootstrap and keyboard/hash t
   const redirectCalls = [];
   const clearCalls = [];
   const setActiveCalls = [];
+  const focusCalls = [];
   const refreshCalls = [];
   let sessionState = { authenticated: true, csrfToken: 'csrf-native' };
   const timerIds = [];
+  const expectedRedirectPath = '/dashboard/login.html?next=%2Fdashboard%2Findex.html%23monitoring';
 
   await withBrowserGlobals({
     window: {
@@ -786,6 +883,7 @@ test('svelte dashboard actions orchestrate session bootstrap and keyboard/hash t
         hashWrites.push(normalized);
         window.location.hash = `#${normalized}`;
       },
+      buildLoginRedirectPath: () => expectedRedirectPath,
       onHashChange: (handler) => {
         listeners.hashchange.push(handler);
         return () => {
@@ -799,6 +897,10 @@ test('svelte dashboard actions orchestrate session bootstrap and keyboard/hash t
         };
       },
       isPageVisible: () => true,
+      focusTab: (tab) => {
+        focusCalls.push(String(tab || ''));
+        return true;
+      },
       redirect: (path) => redirectCalls.push(String(path))
     };
 
@@ -842,16 +944,199 @@ test('svelte dashboard actions orchestrate session bootstrap and keyboard/hash t
     await waitForAsyncWork();
     assert.equal(hashWrites.includes('ip-bans'), true);
     assert.equal(setActiveCalls.includes('ip-bans'), true);
+    assert.equal(focusCalls.includes('ip-bans'), true);
 
     const secondBootstrap = await actions.bootstrapSession();
     assert.equal(secondBootstrap, false);
     assert.equal(store.getState().session.authenticated, false);
     assert.equal(redirectCalls.length >= 1, true);
+    assert.equal(redirectCalls[0], expectedRedirectPath);
 
     actions.destroy();
     assert.equal(listeners.hashchange.length, 0);
     assert.equal(listeners.visibilitychange.length, 0);
     assert.equal(clearCalls.length >= 1, true);
+  });
+});
+
+test('svelte dashboard actions remount loops do not accumulate listeners or polling timers', { concurrency: false }, async () => {
+  const listeners = {
+    hashchange: new Set(),
+    visibilitychange: new Set()
+  };
+  const activeTimers = new Set();
+  let refreshCount = 0;
+  let timerSeed = 0;
+
+  await withBrowserGlobals({
+    window: {
+      location: {
+        pathname: '/dashboard/index.html',
+        search: '',
+        hash: '#monitoring'
+      }
+    },
+    document: {
+      getElementById: () => null,
+      querySelector: () => null,
+      querySelectorAll: () => []
+    }
+  }, async () => {
+    const storeModule = await importBrowserModule('dashboard/src/lib/state/dashboard-store.js');
+    const actionsModule = await importBrowserModule('dashboard/src/lib/runtime/dashboard-actions.js');
+    const store = storeModule.createDashboardStore({ initialTab: 'monitoring' });
+
+    const effects = {
+      setTimer: () => {
+        const id = `timer-${++timerSeed}`;
+        activeTimers.add(id);
+        return id;
+      },
+      clearTimer: (id) => {
+        activeTimers.delete(id);
+      },
+      requestFrame: (task) => task(),
+      readHashTab: () => String(window.location.hash || '').replace(/^#/, ''),
+      writeHashTab: (tab) => {
+        window.location.hash = `#${String(tab || '').replace(/^#/, '')}`;
+      },
+      onHashChange: (handler) => {
+        listeners.hashchange.add(handler);
+        return () => listeners.hashchange.delete(handler);
+      },
+      onVisibilityChange: (handler) => {
+        listeners.visibilitychange.add(handler);
+        return () => listeners.visibilitychange.delete(handler);
+      },
+      isPageVisible: () => true,
+      redirect: () => {}
+    };
+
+    const runtime = {
+      refreshTab: async () => {
+        refreshCount += 1;
+      },
+      setActiveTab: () => {},
+      restoreSession: async () => true,
+      getSessionState: () => ({ authenticated: true, csrfToken: 'csrf-native' }),
+      logout: async () => {}
+    };
+
+    const actions = actionsModule.createDashboardActions({
+      store,
+      effects,
+      runtime
+    });
+
+    for (let cycle = 0; cycle < 5; cycle += 1) {
+      actions.init();
+      assert.equal(listeners.hashchange.size, 1);
+      assert.equal(listeners.visibilitychange.size, 1);
+
+      const bootstrapped = await actions.bootstrapSession();
+      assert.equal(bootstrapped, true);
+      assert.equal(activeTimers.size <= 1, true);
+
+      actions.destroy();
+      assert.equal(listeners.hashchange.size, 0);
+      assert.equal(listeners.visibilitychange.size, 0);
+      assert.equal(activeTimers.size, 0);
+    }
+
+    assert.equal(refreshCount >= 5, true);
+  });
+});
+
+test('svelte dashboard actions collect refresh and polling performance telemetry', { concurrency: false }, async () => {
+  const listeners = {
+    hashchange: [],
+    visibilitychange: []
+  };
+  let visible = true;
+  let nowTick = 0;
+
+  await withBrowserGlobals({
+    window: {
+      location: {
+        pathname: '/dashboard/index.html',
+        search: '',
+        hash: '#monitoring'
+      }
+    },
+    document: {
+      getElementById: () => null,
+      querySelector: () => null,
+      querySelectorAll: () => []
+    }
+  }, async () => {
+    const storeModule = await importBrowserModule('dashboard/src/lib/state/dashboard-store.js');
+    const actionsModule = await importBrowserModule('dashboard/src/lib/runtime/dashboard-actions.js');
+    const store = storeModule.createDashboardStore({ initialTab: 'monitoring' });
+
+    const effects = {
+      setTimer: () => Symbol('timer'),
+      clearTimer: () => {},
+      now: () => {
+        nowTick += 5;
+        return nowTick;
+      },
+      requestFrame: (task) => task(),
+      readHashTab: () => String(window.location.hash || '').replace(/^#/, ''),
+      writeHashTab: (tab) => {
+        window.location.hash = `#${String(tab || '').replace(/^#/, '')}`;
+      },
+      onHashChange: (handler) => {
+        listeners.hashchange.push(handler);
+        return () => {
+          listeners.hashchange = listeners.hashchange.filter((entry) => entry !== handler);
+        };
+      },
+      onVisibilityChange: (handler) => {
+        listeners.visibilitychange.push(handler);
+        return () => {
+          listeners.visibilitychange = listeners.visibilitychange.filter((entry) => entry !== handler);
+        };
+      },
+      isPageVisible: () => visible,
+      redirect: () => {}
+    };
+
+    const runtime = {
+      refreshTab: async () => {},
+      setActiveTab: () => {},
+      restoreSession: async () => true,
+      getSessionState: () => ({ authenticated: true, csrfToken: 'csrf-native' }),
+      logout: async () => {}
+    };
+
+    const actions = actionsModule.createDashboardActions({
+      store,
+      effects,
+      runtime
+    });
+
+    actions.init();
+    await actions.bootstrapSession();
+
+    const telemetryAfterBootstrap = store.getRuntimeTelemetry();
+    assert.equal(telemetryAfterBootstrap.refresh.fetchLatencyMs.samples >= 1, true);
+    assert.equal(telemetryAfterBootstrap.refresh.renderTimingMs.samples >= 1, true);
+    assert.equal(telemetryAfterBootstrap.polling.skips >= 1, true);
+    assert.equal(telemetryAfterBootstrap.polling.resumes >= 1, true);
+
+    visible = false;
+    listeners.visibilitychange.forEach((handler) => handler());
+    const afterHidden = store.getRuntimeTelemetry();
+    assert.equal(afterHidden.polling.lastSkipReason, 'page-hidden');
+
+    const resumesBeforeVisible = afterHidden.polling.resumes;
+    visible = true;
+    listeners.visibilitychange.forEach((handler) => handler());
+    const afterVisible = store.getRuntimeTelemetry();
+    assert.equal(afterVisible.polling.resumes > resumesBeforeVisible, true);
+    assert.equal(afterVisible.polling.lastResumeReason, 'visibility-resume');
+
+    actions.destroy();
   });
 });
 
@@ -950,6 +1235,50 @@ test('svelte dashboard actions abort in-flight refresh when tab switches', { con
     actions.destroy();
     assert.equal(hashListeners.length, 0);
     assert.equal(visibilityListeners.length, 0);
+  });
+});
+
+test('svelte runtime effects provide login redirect and tab focus adapters', { concurrency: false }, async () => {
+  let focusedId = '';
+  const focusable = {
+    focus: () => {
+      focusedId = 'dashboard-tab-config';
+    }
+  };
+
+  await withBrowserGlobals({
+    window: {
+      location: {
+        pathname: '/dashboard/index.html',
+        search: '?mode=native',
+        hash: '#config',
+        replace: () => {}
+      },
+      history: { replaceState: () => {} },
+      fetch: async () => ({ ok: true }),
+      setTimeout,
+      clearTimeout,
+      requestAnimationFrame: (task) => task(),
+      addEventListener: () => {},
+      removeEventListener: () => {}
+    },
+    document: {
+      visibilityState: 'visible',
+      getElementById: (id) => (id === 'dashboard-tab-config' ? focusable : null),
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      addEventListener: () => {},
+      removeEventListener: () => {}
+    }
+  }, async () => {
+    const effectsModule = await importBrowserModule('dashboard/src/lib/runtime/dashboard-effects.js');
+    const effects = effectsModule.createDashboardEffects();
+    const expectedPath = '/dashboard/login.html?next=%2Fdashboard%2Findex.html%3Fmode%3Dnative%23config';
+
+    assert.equal(effects.buildLoginRedirectPath(), expectedPath);
+    assert.equal(effects.focusTab('config'), true);
+    assert.equal(focusedId, 'dashboard-tab-config');
+    assert.equal(effects.focusTab('status'), false);
   });
 });
 
@@ -1706,6 +2035,93 @@ test('tables view renders empty-state rows for bans and events', { concurrency: 
   assert.equal(eventsTbody.innerHTML.includes('No recent events'), true);
 });
 
+test('tables view patches monitoring rows in place to reduce refresh churn', { concurrency: false }, async () => {
+  const createTableBody = () => ({
+    innerHTML: '',
+    children: [],
+    appendChild(node) {
+      this.children.push(node);
+    },
+    replaceChild(next, prev) {
+      const index = this.children.indexOf(prev);
+      if (index >= 0) {
+        this.children[index] = next;
+        return;
+      }
+      this.children.push(next);
+    },
+    removeChild(node) {
+      const index = this.children.indexOf(node);
+      if (index >= 0) {
+        this.children.splice(index, 1);
+      }
+    }
+  });
+
+  const eventsTbody = createTableBody();
+  const cdpTbody = createTableBody();
+
+  await withBrowserGlobals({
+    document: {
+      querySelector: (selector) => {
+        if (selector === '#events tbody') return eventsTbody;
+        if (selector === '#cdp-events tbody') return cdpTbody;
+        return null;
+      },
+      querySelectorAll: () => [],
+      createElement: () => ({ innerHTML: '', dataset: {} }),
+      getElementById: () => null
+    }
+  }, async () => {
+    const tablesModule = await importBrowserModule('dashboard/modules/tables-view.js');
+    const tables = tablesModule.create();
+
+    const firstEvent = {
+      ts: 1700000000,
+      event: 'Ban',
+      ip: '203.0.113.10',
+      reason: 'test',
+      outcome: 'blocked',
+      admin: 'ops'
+    };
+    const secondEvent = {
+      ts: 1700001000,
+      event: 'Challenge',
+      ip: '203.0.113.11',
+      reason: 'risk',
+      outcome: 'served',
+      admin: 'ops'
+    };
+    tables.updateEventsTable([firstEvent, secondEvent]);
+    const firstEventRowRef = eventsTbody.children[0];
+
+    tables.updateEventsTable([firstEvent]);
+    assert.equal(eventsTbody.children.length, 1);
+    assert.equal(eventsTbody.children[0], firstEventRowRef);
+
+    const firstCdpEvent = {
+      ts: 1700002000,
+      ip: '198.51.100.20',
+      reason: 'cdp_detected:tier=medium score=75',
+      outcome: 'checks:webdriver',
+      admin: 'ops'
+    };
+    const secondCdpEvent = {
+      ts: 1700003000,
+      ip: '198.51.100.21',
+      reason: 'cdp_automation',
+      outcome: 'tier=strong score=99',
+      admin: 'ops'
+    };
+    tables.updateCdpEventsTable([firstCdpEvent, secondCdpEvent]);
+    const firstCdpRowRef = cdpTbody.children[0];
+
+    tables.updateCdpEventsTable([firstCdpEvent]);
+    assert.equal(cdpTbody.children.length, 1);
+    assert.equal(cdpTbody.children[0], firstCdpRowRef);
+  });
+});
+
 test('tables view updates CDP totals and parses tier/score fields', { concurrency: false }, async () => {
   const els = {
     'cdp-total-detections': createMockElement(),
@@ -1892,6 +2308,24 @@ test('dashboard runtime mode resolver is config-driven and defaults to native', 
   );
 });
 
+test('svelte dashboard actions route login redirect and focus through effects adapters', () => {
+  const actionsPath = path.resolve(
+    __dirname,
+    '..',
+    'dashboard',
+    'src',
+    'lib',
+    'runtime',
+    'dashboard-actions.js'
+  );
+  const source = fs.readFileSync(actionsPath, 'utf8');
+
+  assert.equal(source.includes('window.location'), false);
+  assert.equal(source.includes('document.getElementById'), false);
+  assert.match(source, /effects\.buildLoginRedirectPath/);
+  assert.match(source, /effects\.focusTab/);
+});
+
 test('svelte tab semantics avoid interactive-role warnings for tablist and tabpanel', () => {
   const dashboardRoot = path.resolve(__dirname, '..', 'dashboard');
   const mainRoutePath = path.join(dashboardRoot, 'src', 'routes', '+page.svelte');
@@ -1913,6 +2347,30 @@ test('svelte tab semantics avoid interactive-role warnings for tablist and tabpa
   });
 });
 
+test('status tab includes runtime performance telemetry cards and threshold guidance', () => {
+  const statusTabPath = path.resolve(
+    __dirname,
+    '..',
+    'dashboard',
+    'src',
+    'lib',
+    'components',
+    'dashboard',
+    'StatusTab.svelte'
+  );
+  const source = fs.readFileSync(statusTabPath, 'utf8');
+  assert.equal(source.includes('Runtime Performance Telemetry'), true);
+  assert.equal(source.includes('runtime-fetch-latency-last'), true);
+  assert.equal(source.includes('runtime-render-timing-last'), true);
+  assert.equal(source.includes('rolling p95 fetch latency'), true);
+  assert.equal(source.includes('window:'), true);
+  assert.equal(source.includes('p95:'), true);
+  assert.equal(source.includes('runtime-polling-skip-count'), true);
+  assert.equal(source.includes('runtime-polling-resume-count'), true);
+  assert.equal(source.includes('500 ms'), true);
+  assert.equal(source.includes('16 ms'), true);
+});
+
 test('dashboard runtime adapter enforces single-mount and explicit teardown hooks', () => {
   const runtimePath = path.resolve(
     __dirname,
@@ -1924,13 +2382,277 @@ test('dashboard runtime adapter enforces single-mount and explicit teardown hook
     'dashboard-runtime.js'
   );
   const source = fs.readFileSync(runtimePath, 'utf8');
-  assert.match(source, /if \(mounted\) return;/);
+  assert.match(source, /if \(mounted && mountedMode === mode\) return;/);
+  assert.match(source, /if \(mounted && mountedMode !== mode\) \{\s*unmountDashboardRuntime\(\);/m);
   assert.match(source, /if \(mountingPromise\) return mountingPromise;/);
-  assert.match(source, /module\.mountDashboardApp\(options \|\| \{\}\)/);
+  assert.match(source, /const mode = String\(source\.mode \|\| 'legacy'\)/);
+  assert.match(source, /module\.mountDashboardExternalRuntime\(mountOptions \|\| \{\}\)/);
+  assert.match(source, /module\.mountDashboardApp\(mountOptions \|\| \{\}\)/);
   assert.match(source, /runtimeModule\.unmountDashboardApp\(\)/);
+  assert.match(source, /refreshExternalDashboardTab/);
+  assert.match(source, /setExternalDashboardActiveTab/);
   assert.match(source, /restoreDashboardSession/);
   assert.match(source, /refreshDashboardTab/);
   assert.match(source, /setDashboardActiveTab/);
+});
+
+test('svelte dashboard route uses runtime mode mount contracts without legacy external flags', () => {
+  const routePath = path.resolve(
+    __dirname,
+    '..',
+    'dashboard',
+    'src',
+    'routes',
+    '+page.svelte'
+  );
+  const source = fs.readFileSync(routePath, 'utf8');
+
+  assert.match(source, /mountDashboardRuntime\(\{\s*mode: 'external'/m);
+  assert.match(source, /mountDashboardRuntime\(\{ mode: 'legacy' \}\)/);
+  assert.match(source, /<link rel="preload" href=\{chartLiteSrc\} as="script">/);
+  assert.match(source, /<script src=\{chartLiteSrc\} data-shuma-runtime-script=\{chartLiteSrc\}><\/script>/);
+  assert.equal(source.includes('function ensureScript('), false);
+  assert.equal(source.includes('document.createElement(\'script\')'), false);
+  assert.equal(source.includes('useExternalTabPipeline'), false);
+  assert.equal(source.includes('useExternalPollingPipeline'), false);
+  assert.equal(source.includes('useExternalSessionPipeline'), false);
+});
+
+test('dashboard main delegates legacy tab/session/polling orchestration to runtime module', () => {
+  const dashboardPath = path.resolve(__dirname, '..', 'dashboard', 'dashboard.js');
+  const source = fs.readFileSync(dashboardPath, 'utf8');
+
+  assert.match(source, /createLegacyDashboardTabRuntime/);
+  assert.match(source, /createLegacyDashboardSessionRuntime/);
+  assert.match(source, /createLegacyAutoRefreshRuntime/);
+  assert.match(source, /legacyTabRuntime = createLegacyDashboardTabRuntime\(/);
+  assert.match(source, /legacySessionRuntime = createLegacyDashboardSessionRuntime\(/);
+  assert.match(source, /legacyAutoRefreshRuntime = createLegacyAutoRefreshRuntime\(/);
+  assert.equal(source.includes('function scheduleAutoRefresh()'), false);
+  assert.equal(source.includes('function bindVisibilityHandler()'), false);
+  assert.equal(source.includes('function clearAutoRefreshTimer()'), false);
+});
+
+test('dashboard main delegates config dirty-check orchestration to runtime module', () => {
+  const dashboardPath = path.resolve(__dirname, '..', 'dashboard', 'dashboard.js');
+  const source = fs.readFileSync(dashboardPath, 'utf8');
+
+  assert.match(source, /createLegacyConfigDirtyRuntime/);
+  assert.match(source, /legacyConfigDirtyRuntime = createLegacyConfigDirtyRuntime\(/);
+  assert.match(source, /legacyConfigDirtyRuntime\.runCoreChecks\(\)/);
+  assert.equal(source.includes('DIRTY_CHECK_REGISTRY'), false);
+});
+
+test('monitoring auto-refresh uses consolidated monitoring summary reads to bound poll fan-out', () => {
+  const dashboardPath = path.resolve(__dirname, '..', 'dashboard', 'dashboard.js');
+  const source = fs.readFileSync(dashboardPath, 'utf8');
+
+  assert.match(source, /if \(isAutoRefresh\) \{/);
+  assert.match(
+    source,
+    /const monitoringData = await dashboardApiClient\.getMonitoring\(\{ hours: 24, limit: 10 \}, requestOptions\);/
+  );
+  assert.match(source, /dashboardState\.setSnapshot\('monitoring', monitoringData\)/);
+  assert.equal(source.includes("const analyticsPromise = reason === 'auto-refresh'"), false);
+  assert.match(source, /dashboardApiClient\.getEvents\(24, requestOptions\)/);
+  assert.match(source, /dashboardApiClient\.getBans\(requestOptions\)/);
+  assert.match(source, /dashboardApiClient\.getMaze\(requestOptions\)/);
+  assert.match(source, /dashboardApiClient\.getCdp\(requestOptions\)/);
+  assert.match(source, /dashboardApiClient\.getCdpEvents\(\{ hours: 24, limit: 500 \}, requestOptions\)/);
+});
+
+test('legacy orchestration runtime provides tab/session/polling primitives', { concurrency: false }, async () => {
+  const module = await importBrowserModule('dashboard/src/lib/runtime/dashboard-legacy-orchestration.js');
+
+  const tabState = {
+    activeTab: 'monitoring',
+    session: { authenticated: false, csrfToken: '' },
+    setActiveTab(nextTab) {
+      this.activeTab = nextTab;
+    },
+    getActiveTab() {
+      return this.activeTab;
+    },
+    setSession(nextSession) {
+      this.session = { ...nextSession };
+    }
+  };
+  const tabCoordinator = {
+    activeTab: 'monitoring',
+    activations: [],
+    activate(tab, reason) {
+      this.activeTab = tab;
+      this.activations.push({ tab, reason });
+    },
+    getActiveTab() {
+      return this.activeTab;
+    }
+  };
+  const mountOptions = { useExternalTabPipeline: false };
+  const documentStub = {
+    visibilityState: 'visible',
+    body: { dataset: {} },
+    listener: null,
+    addEventListener(eventName, handler) {
+      if (eventName === 'visibilitychange') this.listener = handler;
+    },
+    removeEventListener(eventName, handler) {
+      if (eventName === 'visibilitychange' && this.listener === handler) {
+        this.listener = null;
+      }
+    }
+  };
+  const refreshCalls = [];
+  const tabRuntime = module.createLegacyDashboardTabRuntime({
+    document: documentStub,
+    normalizeTab: (tab) => String(tab || 'monitoring'),
+    defaultTab: 'monitoring',
+    getStateStore: () => tabState,
+    getTabCoordinator: () => tabCoordinator,
+    getRuntimeMountOptions: () => mountOptions,
+    refreshCoreActionButtonsState: () => {},
+    refreshDashboardForTab: async (tab, reason) => {
+      refreshCalls.push({ tab, reason });
+    }
+  });
+
+  assert.equal(tabRuntime.setActiveTab('status', 'click'), 'status');
+  assert.equal(tabState.activeTab, 'status');
+  assert.equal(documentStub.body.dataset.activeDashboardTab, 'status');
+  assert.deepEqual(tabCoordinator.activations[0], { tab: 'status', reason: 'click' });
+
+  await tabRuntime.refreshTab('config', 'manual');
+  assert.deepEqual(refreshCalls[0], { tab: 'config', reason: 'manual' });
+
+  const sessionController = {
+    state: { authenticated: true, csrfToken: 'csrf-token' },
+    restoreCount: 0,
+    async restoreAdminSession() {
+      this.restoreCount += 1;
+      return this.state.authenticated === true;
+    },
+    getState() {
+      return { ...this.state };
+    }
+  };
+  let logoutRequest = null;
+  const sessionMessage = { textContent: '', className: '' };
+  const sessionRuntime = module.createLegacyDashboardSessionRuntime({
+    getAdminSessionController: () => sessionController,
+    getStateStore: () => tabState,
+    refreshCoreActionButtonsState: () => {},
+    resolveAdminApiEndpoint: () => ({ endpoint: 'https://example.test' }),
+    getRuntimeEffects: () => ({
+      request: async (input, init) => {
+        logoutRequest = { input, init };
+      }
+    }),
+    getMessageNode: () => sessionMessage
+  });
+
+  assert.equal(await sessionRuntime.restoreSession(), true);
+  assert.deepEqual(tabState.session, { authenticated: true, csrfToken: 'csrf-token' });
+  assert.deepEqual(sessionRuntime.getSessionState(), { authenticated: true, csrfToken: 'csrf-token' });
+
+  await sessionRuntime.logoutSession();
+  assert.ok(logoutRequest);
+  assert.equal(logoutRequest.input, 'https://example.test/admin/logout');
+  assert.equal(logoutRequest.init.method, 'POST');
+  assert.equal(logoutRequest.init.credentials, 'same-origin');
+  assert.equal(sessionMessage.textContent, 'Logged out');
+  assert.equal(sessionMessage.className, 'message success');
+  assert.deepEqual(tabState.session, { authenticated: false, csrfToken: '' });
+
+  let timerHandle = null;
+  let clearCount = 0;
+  const pollingEffects = {
+    setTimer(handler, intervalMs) {
+      timerHandle = { handler, intervalMs };
+      return timerHandle;
+    },
+    clearTimer() {
+      clearCount += 1;
+    }
+  };
+  const pollRefreshes = [];
+  const pollingRuntime = module.createLegacyAutoRefreshRuntime({
+    effects: pollingEffects,
+    document: documentStub,
+    tabRefreshIntervals: { monitoring: 30000, config: 60000 },
+    defaultTab: 'monitoring',
+    normalizeTab: (tab) => String(tab || 'monitoring'),
+    getActiveTab: () => tabState.activeTab,
+    hasValidApiContext: () => true,
+    refreshDashboardForTab: async (tab, reason) => {
+      pollRefreshes.push({ tab, reason });
+    }
+  });
+
+  pollingRuntime.schedule();
+  assert.ok(timerHandle);
+  assert.equal(timerHandle.intervalMs, 60000);
+  await timerHandle.handler();
+  assert.deepEqual(pollRefreshes[0], { tab: 'config', reason: 'auto-refresh' });
+
+  pollingRuntime.bindVisibility();
+  documentStub.visibilityState = 'hidden';
+  if (typeof documentStub.listener === 'function') {
+    documentStub.listener();
+  }
+  assert.ok(clearCount >= 1);
+
+  pollingRuntime.destroy();
+});
+
+test('legacy config dirty runtime computes dirty state through capability contracts', { concurrency: false }, async () => {
+  const module = await importBrowserModule('dashboard/src/lib/runtime/dashboard-legacy-config-dirty.js');
+  const nodes = {
+    'save-maze-config': { dataset: {}, disabled: true, textContent: '' },
+    'save-robots-config': { dataset: {}, disabled: true, textContent: '' },
+    'save-ai-policy-config': { dataset: {}, disabled: true, textContent: '' },
+    'maze-enabled-toggle': { checked: true, dataset: {} },
+    'maze-auto-ban-toggle': { checked: true, dataset: {} },
+    'robots-enabled-toggle': { checked: true, dataset: {} },
+    'robots-crawl-delay': { value: '2', dataset: {} },
+    'robots-block-training-toggle': { checked: true, dataset: {} },
+    'robots-block-search-toggle': { checked: false, dataset: {} },
+    'robots-allow-search-toggle': { checked: true, dataset: {} }
+  };
+  const dirtyCalls = [];
+  const runtime = module.createLegacyConfigDirtyRuntime({
+    getById: (id) => nodes[id] || null,
+    getDraft: (sectionKey) => {
+      if (sectionKey === 'maze') return { enabled: false, autoBan: false, threshold: 10 };
+      if (sectionKey === 'robots') return { enabled: false, crawlDelay: 1 };
+      if (sectionKey === 'aiPolicy') {
+        return { blockTraining: false, blockSearch: false, allowSearch: false };
+      }
+      return {};
+    },
+    isDraftDirty: () => true,
+    hasValidApiContext: () => true,
+    validateIntegerFieldById: () => true,
+    parseIntegerLoose: () => 25,
+    readBanDurationFromInputs: () => ({ totalSeconds: 3600 }),
+    validateHoneypotPathsField: () => true,
+    validateBrowserRulesField: () => true,
+    normalizeListTextareaForCompare: (value) => String(value || '').trim(),
+    normalizeBrowserRulesForCompare: (value) => String(value || '').trim(),
+    normalizeEdgeIntegrationMode: (value) => String(value || '').trim(),
+    setDirtySaveButtonState: (buttonId, changed, apiValid, fieldsValid) => {
+      dirtyCalls.push({ buttonId, changed, apiValid, fieldsValid });
+    }
+  });
+
+  runtime.checkMaze();
+  runtime.checkRobots();
+  runtime.checkAiPolicy();
+
+  assert.equal(dirtyCalls.some((entry) => entry.buttonId === 'save-maze-config' && entry.changed), true);
+  assert.equal(dirtyCalls.some((entry) => entry.buttonId === 'save-robots-config' && entry.changed), true);
+  assert.equal(dirtyCalls.some((entry) => entry.buttonId === 'save-ai-policy-config' && entry.changed), true);
+  assert.equal(nodes['save-robots-config'].textContent, 'Save robots serving');
+  assert.equal(nodes['save-ai-policy-config'].textContent, 'Save AI bot policy');
 });
 
 test('dashboard module graph is layered (core -> services -> features -> main) with no cycles', () => {

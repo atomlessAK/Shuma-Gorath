@@ -25,49 +25,22 @@
   } from '$lib/state/dashboard-store.js';
 
   const chartLiteSrc = `${base}/assets/vendor/chart-lite-1.0.0.min.js`;
-  const pendingScripts = new Map();
 
   const dashboardStore = createDashboardStore({ initialTab: 'monitoring' });
 
   let dashboardState = dashboardStore.getState();
+  let runtimeTelemetry = dashboardStore.getRuntimeTelemetry();
   let storeUnsubscribe = () => {};
+  let telemetryUnsubscribe = () => {};
   let dashboardActions = null;
   let runtimeMode = 'native';
   let runtimeReady = false;
   let runtimeError = '';
   let loggingOut = false;
 
-  function ensureScript(src, dataKey) {
-    if (pendingScripts.has(src)) {
-      return pendingScripts.get(src);
-    }
-
-    if (document.querySelector(`script[${dataKey}="${src}"]`)) {
-      return Promise.resolve();
-    }
-
-    const promise = new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = src;
-      script.async = false;
-      script.setAttribute(dataKey, src);
-      script.addEventListener('load', () => resolve(), { once: true });
-      script.addEventListener('error', () => reject(new Error(`Failed to load ${src}`)), {
-        once: true
-      });
-      document.head.appendChild(script);
-    });
-
-    pendingScripts.set(src, promise);
-    return promise;
-  }
-
   async function bootstrapNativeRuntime() {
     await mountDashboardRuntime({
-      useExternalTabPipeline: true,
-      useExternalPollingPipeline: true,
-      useExternalSessionPipeline: true,
-      bindLogoutButton: false,
+      mode: 'external',
       initialTab: normalizeTab(window.location.hash.replace(/^#/, ''))
     });
 
@@ -94,13 +67,15 @@
     storeUnsubscribe = dashboardStore.subscribe((value) => {
       dashboardState = value;
     });
+    telemetryUnsubscribe = dashboardStore.runtimeTelemetryStore.subscribe((value) => {
+      runtimeTelemetry = value;
+    });
 
     try {
-      await ensureScript(chartLiteSrc, 'data-shuma-runtime-script');
       runtimeMode = resolveDashboardRuntimeMode(import.meta.env);
 
       if (runtimeMode === 'legacy') {
-        await mountDashboardRuntime();
+        await mountDashboardRuntime({ mode: 'legacy' });
         runtimeReady = true;
         return;
       }
@@ -117,6 +92,7 @@
       dashboardActions = null;
     }
     storeUnsubscribe();
+    telemetryUnsubscribe();
     unmountDashboardRuntime();
   });
 
@@ -148,6 +124,8 @@
 
 <svelte:head>
   <title>Shuma-Gorath Dashboard</title>
+  <link rel="preload" href={chartLiteSrc} as="script">
+  <script src={chartLiteSrc} data-shuma-runtime-script={chartLiteSrc}></script>
 </svelte:head>
 
 <span id="last-updated" class="text-muted"></span>
@@ -197,7 +175,7 @@
   >
     <div class="admin-groups">
       <IpBansTab managed={isNative()} isActive={isTabActive('ip-bans')} />
-      <StatusTab managed={isNative()} isActive={isTabActive('status')} />
+      <StatusTab managed={isNative()} isActive={isTabActive('status')} runtimeTelemetry={runtimeTelemetry} />
       <ConfigTab managed={isNative()} isActive={isTabActive('config')} />
       <TuningTab managed={isNative()} isActive={isTabActive('tuning')} />
     </div>

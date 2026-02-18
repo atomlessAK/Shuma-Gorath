@@ -10,6 +10,8 @@ make test-maze-benchmark # Deterministic maze asymmetry benchmark gate
 make test-integration # Integration tests only (waits for existing Spin readiness)
 make integration-test # alias for make test-integration
 make test-coverage    # Unit coverage to lcov.info (requires cargo-llvm-cov)
+make test-dashboard-unit # Dashboard module unit tests (Node `node:test`)
+make test-dashboard-budgets # Dashboard /_app bundle-size ceilings
 make test-dashboard-e2e # Playwright dashboard smoke tests (waits for existing Spin readiness)
 make seed-dashboard-data # Seed local dashboard sample records against running Spin
 make test-dashboard   # Manual dashboard checklist
@@ -112,12 +114,14 @@ make test-dashboard-e2e
 
 Behavior:
 1. Installs pinned Playwright dependencies via `pnpm` (through `corepack`).
-2. Runs dashboard module unit tests (`node --test e2e/dashboard.modules.unit.test.js`) using native ESM module loading for response adapters (including missing `Content-Type` JSON fallback), local chart runtime legend/axis rendering checks, shared state primitives, tab-router helpers, and ESM guardrails.
-3. Seeds deterministic dashboard data before tests (admin ban + CDP report + admin view events).
-4. Runs browser smoke checks for core dashboard behavior:
+2. Runs dashboard module unit tests via `make test-dashboard-unit`.
+3. Runs dashboard bundle-size budget gate (`scripts/tests/check_dashboard_bundle_budget.js`) against `dist/dashboard/_app`.
+4. Seeds deterministic dashboard data via `make seed-dashboard-data`.
+5. Runs browser smoke checks for core dashboard behavior:
    - page loads and refresh succeeds
    - runtime page errors or failed JS/CSS loads fail the run
    - only one dashboard tab panel is visible at a time (panel exclusivity)
+   - native Monitoring polling request fan-out stays within bounded per-cycle budget during remount/steady-state loops
    - seeded events/tables are visible
    - clean-state API payloads render explicit empty placeholders (no crash/blank UI)
    - form validation/submit-state behavior works
