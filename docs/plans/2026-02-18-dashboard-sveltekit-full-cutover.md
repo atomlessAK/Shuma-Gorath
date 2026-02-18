@@ -46,7 +46,7 @@
 3. Bridge modules guard against duplicate bootstrap and define cleanup hooks for future full Svelte-native replacement.
 
 ### 2.4 Static assets
-1. Existing `dashboard/assets/**` becomes SvelteKit static asset source (`kit.files.assets`).
+1. `dashboard/static/**` is the canonical SvelteKit static asset source.
 2. Chart runtime (`chart-lite`) is loaded from local static asset path in Svelte head.
 
 ## 3. Execution Tasks (reviewable slices)

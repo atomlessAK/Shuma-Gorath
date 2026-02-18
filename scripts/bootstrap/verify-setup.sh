@@ -94,10 +94,10 @@ fi
 # 9. Check pnpm lockfile dependencies
 if command -v corepack &> /dev/null; then
     corepack enable > /dev/null 2>&1 || true
-    if [[ -d node_modules/.pnpm ]] && [[ -e node_modules/svelte ]]; then
+    if [[ -d node_modules/.pnpm ]] && [[ -x node_modules/.bin/vite ]] && [[ -d node_modules/svelte ]] && [[ -d node_modules/@sveltejs/kit ]] && [[ -d node_modules/@playwright/test ]]; then
         pass "pnpm dependencies installed from lockfile"
     else
-        fail "pnpm dependencies missing (run: make setup)"
+        fail "pnpm dependencies missing or incomplete (run: make setup)"
     fi
 else
     warn "Skipping pnpm dependency check (corepack unavailable)"

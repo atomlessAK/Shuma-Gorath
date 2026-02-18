@@ -90,8 +90,8 @@ dashboard-build: ## Build SvelteKit dashboard static assets to dist/dashboard
 		exit 1; \
 	fi
 	@corepack enable > /dev/null 2>&1 || true
-	@if [ ! -d node_modules/.pnpm ]; then \
-		corepack pnpm install --frozen-lockfile; \
+	@if [ ! -d node_modules/.pnpm ] || [ ! -x node_modules/.bin/vite ] || [ ! -d node_modules/svelte ] || [ ! -d node_modules/@sveltejs/kit ]; then \
+		corepack pnpm install --offline --frozen-lockfile || corepack pnpm install --frozen-lockfile; \
 	fi
 	@corepack pnpm run build:dashboard
 
@@ -298,9 +298,7 @@ test-dashboard-unit: ## Run dashboard module unit tests (Node + dashboard JS con
 		exit 1; \
 	fi
 	@corepack enable > /dev/null 2>&1 || true
-	@if [ ! -d node_modules/.pnpm ]; then \
-		corepack pnpm install --frozen-lockfile; \
-	elif [ ! -e node_modules/svelte ]; then \
+	@if [ ! -d node_modules/.pnpm ] || [ ! -x node_modules/.bin/vite ] || [ ! -d node_modules/svelte ] || [ ! -d node_modules/@sveltejs/kit ] || [ ! -d node_modules/@playwright/test ]; then \
 		corepack pnpm install --offline --frozen-lockfile || corepack pnpm install --frozen-lockfile; \
 	fi
 	@corepack pnpm run test:dashboard:unit
@@ -323,9 +321,7 @@ test-dashboard-e2e: ## Run Playwright dashboard smoke tests (waits for existing 
 			exit 1; \
 		fi; \
 		corepack enable > /dev/null 2>&1 || true; \
-		if [ ! -d node_modules/.pnpm ]; then \
-			corepack pnpm install --frozen-lockfile; \
-		elif [ ! -e node_modules/svelte ]; then \
+		if [ ! -d node_modules/.pnpm ] || [ ! -x node_modules/.bin/vite ] || [ ! -d node_modules/svelte ] || [ ! -d node_modules/@sveltejs/kit ] || [ ! -d node_modules/@playwright/test ]; then \
 			corepack pnpm install --offline --frozen-lockfile || corepack pnpm install --frozen-lockfile; \
 		fi; \
 		$(MAKE) --no-print-directory test-dashboard-unit || exit 1; \

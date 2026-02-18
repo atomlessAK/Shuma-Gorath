@@ -181,7 +181,6 @@ dashboard/
   static/assets/vendor/chart-lite-1.0.0.min.js
   package.json
   dashboard.js
-  assets/
   modules/core/format.js
   modules/core/dom.js
   modules/core/json-object.js

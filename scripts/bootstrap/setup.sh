@@ -387,14 +387,24 @@ fi
 #--------------------------
 # Dashboard JS dependencies + Playwright browser runtime
 #--------------------------
-if [[ ! -d "node_modules/.pnpm" ]]; then
-    info "Installing dashboard dependencies with pnpm..."
-    corepack pnpm install --frozen-lockfile
-elif [[ ! -e "node_modules/svelte" ]]; then
+dashboard_deps_ready() {
+    [[ -d "node_modules/.pnpm" ]] && \
+    [[ -x "node_modules/.bin/vite" ]] && \
+    [[ -d "node_modules/svelte" ]] && \
+    [[ -d "node_modules/@sveltejs/kit" ]] && \
+    [[ -d "node_modules/@playwright/test" ]]
+}
+
+if dashboard_deps_ready; then
+    success "Dashboard dependencies already installed"
+else
     info "Refreshing dashboard dependencies from lockfile..."
     corepack pnpm install --offline --frozen-lockfile || corepack pnpm install --frozen-lockfile
-else
-    success "Dashboard dependencies already installed"
+    if dashboard_deps_ready; then
+        success "Dashboard dependencies installed from lockfile"
+    else
+        error "Dashboard dependencies are incomplete after pnpm install."
+    fi
 fi
 
 PLAYWRIGHT_CHROMIUM_PATH="$(corepack pnpm exec node -e "const { chromium } = require('@playwright/test'); process.stdout.write(chromium.executablePath() || '');" 2>/dev/null || true)"

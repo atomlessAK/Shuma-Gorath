@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { pathToFileURL } = require('node:url');
 
-const CHART_LITE_PATH = 'dashboard/assets/vendor/chart-lite-1.0.0.min.js';
+const CHART_LITE_PATH = 'dashboard/static/assets/vendor/chart-lite-1.0.0.min.js';
 
 function loadClassicBrowserScript(relativePath, overrides = {}) {
   const absolutePath = path.resolve(__dirname, '..', relativePath);
