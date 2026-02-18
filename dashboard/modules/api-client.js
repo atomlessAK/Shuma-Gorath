@@ -159,9 +159,19 @@ export const adaptCdpEvents = (payload) => {
  */
 export const adaptMonitoring = (payload) => {
   const source = asRecord(payload);
+  const detailsSource = asRecord(source.details);
+  const details = {
+    analytics: adaptAnalytics(detailsSource.analytics),
+    events: adaptEvents(detailsSource.events),
+    bans: adaptBans(detailsSource.bans),
+    maze: adaptMaze(detailsSource.maze),
+    cdp: adaptCdp(detailsSource.cdp),
+    cdp_events: adaptCdpEvents(detailsSource.cdp_events || detailsSource.cdpEvents)
+  };
   return {
     summary: asRecord(source.summary),
-    prometheus: asRecord(source.prometheus)
+    prometheus: asRecord(source.prometheus),
+    details
   };
 };
 

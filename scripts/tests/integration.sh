@@ -621,6 +621,9 @@ sections=["honeypot","challenge","pow","rate","geo"]
 ok=all(isinstance(summary.get(section), dict) for section in sections)
 prom=data.get("prometheus") or {}
 ok=ok and prom.get("endpoint")=="/metrics"
+details=data.get("details") or {}
+detail_sections=["analytics","events","bans","maze","cdp","cdp_events"]
+ok=ok and all(isinstance(details.get(section), dict) for section in detail_sections)
 print("1" if ok else "0")' <<< "$monitoring_resp")
 if [[ "$monitoring_shape_ok" == "1" ]]; then
   pass "/admin/monitoring returns structured telemetry summary"

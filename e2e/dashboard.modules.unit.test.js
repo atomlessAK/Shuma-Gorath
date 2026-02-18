@@ -6,6 +6,15 @@ const vm = require('node:vm');
 const { pathToFileURL } = require('node:url');
 
 const CHART_LITE_PATH = 'dashboard/static/assets/vendor/chart-lite-1.0.0.min.js';
+const DASHBOARD_NATIVE_RUNTIME_PATH = path.resolve(
+  __dirname,
+  '..',
+  'dashboard',
+  'src',
+  'lib',
+  'runtime',
+  'dashboard-native-runtime.js'
+);
 
 function loadClassicBrowserScript(relativePath, overrides = {}) {
   const absolutePath = path.resolve(__dirname, '..', relativePath);
@@ -255,10 +264,20 @@ test('dashboard API adapters normalize sparse payloads safely', { concurrency: f
 
     const monitoring = api.adaptMonitoring({
       summary: { honeypot: { total_hits: 1 } },
-      prometheus: { endpoint: '/metrics' }
+      prometheus: { endpoint: '/metrics' },
+      details: {
+        analytics: { ban_count: '2', test_mode: false, fail_mode: 'open' },
+        events: { recent_events: [], event_counts: {}, top_ips: [], unique_ips: 0 },
+        bans: { bans: [] },
+        maze: { total_hits: 0, unique_crawlers: 0, maze_auto_bans: 0, top_crawlers: [] },
+        cdp: { stats: { total_detections: 0, auto_bans: 0 }, config: {}, fingerprint_stats: {} },
+        cdp_events: { events: [] }
+      }
     });
     assert.equal(monitoring.summary.honeypot.total_hits, 1);
     assert.equal(monitoring.prometheus.endpoint, '/metrics');
+    assert.equal(monitoring.details.analytics.ban_count, 2);
+    assert.deepEqual(toPlain(monitoring.details.cdp_events.events), []);
   });
 });
 
@@ -511,6 +530,88 @@ test('chart-lite renders axis ticks and labels for bar and line charts', () => {
   });
   assert.ok(line.calls.fillText.some((text) => text === '0'));
   assert.ok(line.calls.fillText.some((text) => text.includes('09:00')));
+});
+
+test('chart runtime adapter lazily loads once and tears down on final release', { concurrency: false }, async () => {
+  const scripts = [];
+  let appendCount = 0;
+  let removeCount = 0;
+  function ChartStub() {}
+
+  const head = {
+    appendChild(node) {
+      appendCount += 1;
+      node.parentNode = this;
+      scripts.push(node);
+      window.Chart = ChartStub;
+      const handlers = node.__listeners?.load || [];
+      handlers.forEach((handler) => handler());
+    },
+    removeChild(node) {
+      removeCount += 1;
+      const index = scripts.indexOf(node);
+      if (index >= 0) scripts.splice(index, 1);
+      node.parentNode = null;
+    }
+  };
+
+  const documentStub = {
+    head,
+    body: head,
+    createElement: () => ({
+      dataset: {},
+      __listeners: {},
+      parentNode: null,
+      src: '',
+      async: false,
+      setAttribute(name, value) {
+        if (name === 'src') this.src = String(value || '');
+        this[name] = value;
+      },
+      getAttribute(name) {
+        if (name === 'src') return this.src;
+        return this[name];
+      },
+      addEventListener(eventName, handler) {
+        if (!this.__listeners[eventName]) this.__listeners[eventName] = [];
+        this.__listeners[eventName].push(handler);
+      }
+    }),
+    querySelectorAll: (selector) => (selector === 'script[src]' ? scripts : [])
+  };
+
+  await withBrowserGlobals({
+    window: {
+      Chart: undefined
+    },
+    document: documentStub
+  }, async () => {
+    const adapter = await importBrowserModule('dashboard/modules/services/chart-runtime-adapter.js');
+
+    const first = await adapter.acquireChartRuntime({
+      window,
+      document: documentStub,
+      src: '/dashboard/assets/vendor/chart-lite-1.0.0.min.js'
+    });
+    const second = await adapter.acquireChartRuntime({
+      window,
+      document: documentStub,
+      src: '/dashboard/assets/vendor/chart-lite-1.0.0.min.js'
+    });
+
+    assert.equal(first, ChartStub);
+    assert.equal(second, ChartStub);
+    assert.equal(appendCount, 1);
+    assert.equal(typeof adapter.getChartConstructor({ window }), 'function');
+
+    adapter.releaseChartRuntime({ window, document: documentStub });
+    assert.equal(removeCount, 0);
+    assert.equal(typeof window.Chart, 'function');
+
+    adapter.releaseChartRuntime({ window, document: documentStub });
+    assert.equal(removeCount, 1);
+    assert.equal(window.Chart, undefined);
+  });
 });
 
 test('dashboard state invalidation scopes are explicit and bounded', { concurrency: false }, async () => {
@@ -2327,10 +2428,15 @@ test('tables view patches monitoring rows in place to reduce refresh churn', { c
   const createTableBody = () => ({
     innerHTML: '',
     children: [],
+    appendCount: 0,
+    replaceCount: 0,
+    removeCount: 0,
     appendChild(node) {
+      this.appendCount += 1;
       this.children.push(node);
     },
     replaceChild(next, prev) {
+      this.replaceCount += 1;
       const index = this.children.indexOf(prev);
       if (index >= 0) {
         this.children[index] = next;
@@ -2339,6 +2445,7 @@ test('tables view patches monitoring rows in place to reduce refresh churn', { c
       this.children.push(next);
     },
     removeChild(node) {
+      this.removeCount += 1;
       const index = this.children.indexOf(node);
       if (index >= 0) {
         this.children.splice(index, 1);
@@ -2386,6 +2493,8 @@ test('tables view patches monitoring rows in place to reduce refresh churn', { c
     tables.updateEventsTable([firstEvent]);
     assert.equal(eventsTbody.children.length, 1);
     assert.equal(eventsTbody.children[0], firstEventRowRef);
+    assert.equal(eventsTbody.replaceCount, 0);
+    assert.equal(eventsTbody.removeCount, 1);
 
     const firstCdpEvent = {
       ts: 1700002000,
@@ -2407,6 +2516,8 @@ test('tables view patches monitoring rows in place to reduce refresh churn', { c
     tables.updateCdpEventsTable([firstCdpEvent]);
     assert.equal(cdpTbody.children.length, 1);
     assert.equal(cdpTbody.children[0], firstCdpRowRef);
+    assert.equal(cdpTbody.replaceCount, 0);
+    assert.equal(cdpTbody.removeCount, 1);
   });
 });
 
@@ -2478,7 +2589,7 @@ test('tables view monitoring loading state sets CDP placeholders', { concurrency
 test('dashboard ESM guardrails forbid legacy global registry and class syntax', () => {
   const dashboardRoot = path.resolve(__dirname, '..', 'dashboard');
   const moduleFiles = listJsFilesRecursively(path.join(dashboardRoot, 'modules'));
-  const filesToCheck = [path.join(dashboardRoot, 'dashboard.js'), ...moduleFiles];
+  const filesToCheck = [DASHBOARD_NATIVE_RUNTIME_PATH, ...moduleFiles];
   const legacyGlobalPattern = /\b(?:window|globalThis|global)\.ShumaDashboard[A-Za-z0-9_]*\b/;
   const classDeclarationPattern = /\bclass\s+[A-Za-z_$][\w$]*\b/;
 
@@ -2498,20 +2609,18 @@ test('dashboard ESM guardrails forbid legacy global registry and class syntax', 
   });
 });
 
-test('dashboard main wires config UI state through module factory', () => {
-  const dashboardPath = path.resolve(__dirname, '..', 'dashboard', 'dashboard.js');
-  const source = fs.readFileSync(dashboardPath, 'utf8');
+test('dashboard native runtime wires config UI state through module factory', () => {
+  const source = fs.readFileSync(DASHBOARD_NATIVE_RUNTIME_PATH, 'utf8');
 
   assert.equal(
     source.includes('configUiState = configUiStateModule.create('),
     true,
-    'dashboard.js must initialize configUiState from config-ui-state module'
+    'dashboard-native-runtime.js must initialize configUiState from config-ui-state module'
   );
 });
 
-test('dashboard main uses mount-scoped control bindings with explicit teardown', () => {
-  const dashboardPath = path.resolve(__dirname, '..', 'dashboard', 'dashboard.js');
-  const source = fs.readFileSync(dashboardPath, 'utf8');
+test('dashboard native runtime uses mount-scoped control bindings with explicit teardown', () => {
+  const source = fs.readFileSync(DASHBOARD_NATIVE_RUNTIME_PATH, 'utf8');
 
   assert.match(
     source,
@@ -2565,6 +2674,7 @@ test('svelte route guardrails forbid shell injection and bridge-era imports', ()
   assert.equal(mainSource.includes('$lib/bridges/'), false);
   assert.equal(loginSource.includes('$lib/bridges/'), false);
   assert.match(mainSource, /mountDashboardRuntime/);
+  assert.match(mainSource, /chartRuntimeSrc/);
   assert.equal(mainSource.includes('dashboard_runtime'), false);
   assert.equal(mainSource.includes("import('../../../dashboard.js')"), false);
 });
@@ -2648,6 +2758,7 @@ test('dashboard runtime adapter enforces single-mount and explicit teardown hook
   assert.match(source, /const mountOptions = \{\s*\.\.\.\(options \|\| \{\}\)\s*\};/);
   assert.match(source, /delete mountOptions\.mode;/);
   assert.match(source, /module\.mountDashboardExternalRuntime\(mountOptions \|\| \{\}\)/);
+  assert.match(source, /import\('\.\/dashboard-native-runtime\.js'\)/);
   assert.equal(source.includes('module.mountDashboardApp('), false);
   assert.match(source, /runtimeModule\.unmountDashboardApp\(\)/);
   assert.match(source, /refreshExternalDashboardTab/);
@@ -2671,8 +2782,9 @@ test('svelte dashboard route mounts the external runtime contract only', () => {
   assert.equal(source.includes("mode: 'external'"), false);
   assert.equal(source.includes("mode: 'legacy'"), false);
   assert.match(source, /mountDashboardRuntime\(\{\s*initialTab:/m);
-  assert.match(source, /<link rel="preload" href=\{chartLiteSrc\} as="script">/);
-  assert.match(source, /<script src=\{chartLiteSrc\} data-shuma-runtime-script=\{chartLiteSrc\}><\/script>/);
+  assert.match(source, /chartRuntimeSrc/);
+  assert.equal(source.includes('<link rel="preload"'), false);
+  assert.equal(source.includes('data-shuma-runtime-script='), false);
   assert.equal(source.includes('function ensureScript('), false);
   assert.equal(source.includes('document.createElement(\'script\')'), false);
   assert.equal(source.includes('useExternalTabPipeline'), false);
@@ -2680,9 +2792,8 @@ test('svelte dashboard route mounts the external runtime contract only', () => {
   assert.equal(source.includes('useExternalSessionPipeline'), false);
 });
 
-test('dashboard main delegates legacy tab/session/polling orchestration to runtime module', () => {
-  const dashboardPath = path.resolve(__dirname, '..', 'dashboard', 'dashboard.js');
-  const source = fs.readFileSync(dashboardPath, 'utf8');
+test('dashboard native runtime delegates legacy tab/session/polling orchestration to runtime module', () => {
+  const source = fs.readFileSync(DASHBOARD_NATIVE_RUNTIME_PATH, 'utf8');
 
   assert.match(source, /createLegacyDashboardTabRuntime/);
   assert.match(source, /createLegacyDashboardSessionRuntime/);
@@ -2695,9 +2806,8 @@ test('dashboard main delegates legacy tab/session/polling orchestration to runti
   assert.equal(source.includes('function clearAutoRefreshTimer()'), false);
 });
 
-test('dashboard main delegates config dirty-check orchestration to runtime module', () => {
-  const dashboardPath = path.resolve(__dirname, '..', 'dashboard', 'dashboard.js');
-  const source = fs.readFileSync(dashboardPath, 'utf8');
+test('dashboard native runtime delegates config dirty-check orchestration to runtime module', () => {
+  const source = fs.readFileSync(DASHBOARD_NATIVE_RUNTIME_PATH, 'utf8');
 
   assert.match(source, /createLegacyConfigDirtyRuntime/);
   assert.match(source, /legacyConfigDirtyRuntime = createLegacyConfigDirtyRuntime\(/);
@@ -2706,21 +2816,28 @@ test('dashboard main delegates config dirty-check orchestration to runtime modul
 });
 
 test('monitoring auto-refresh uses consolidated monitoring summary reads to bound poll fan-out', () => {
-  const dashboardPath = path.resolve(__dirname, '..', 'dashboard', 'dashboard.js');
-  const source = fs.readFileSync(dashboardPath, 'utf8');
+  const source = fs.readFileSync(DASHBOARD_NATIVE_RUNTIME_PATH, 'utf8');
+  const refreshMatch = source.match(
+    /async function refreshMonitoringTab\([\s\S]*?\n}\n\nasync function refreshIpBansTab/
+  );
+  assert.ok(refreshMatch, 'refreshMonitoringTab source block should exist');
+  const refreshSource = refreshMatch[0];
 
-  assert.match(source, /if \(isAutoRefresh\) \{/);
+  assert.match(refreshSource, /if \(isAutoRefresh\) \{/);
   assert.match(
-    source,
+    refreshSource,
     /const monitoringData = await dashboardApiClient\.getMonitoring\(\{ hours: 24, limit: 10 \}, requestOptions\);/
   );
-  assert.match(source, /dashboardState\.setSnapshot\('monitoring', monitoringData\)/);
-  assert.equal(source.includes("const analyticsPromise = reason === 'auto-refresh'"), false);
-  assert.match(source, /dashboardApiClient\.getEvents\(24, requestOptions\)/);
-  assert.match(source, /dashboardApiClient\.getBans\(requestOptions\)/);
-  assert.match(source, /dashboardApiClient\.getMaze\(requestOptions\)/);
-  assert.match(source, /dashboardApiClient\.getCdp\(requestOptions\)/);
-  assert.match(source, /dashboardApiClient\.getCdpEvents\(\{ hours: 24, limit: 500 \}, requestOptions\)/);
+  assert.match(refreshSource, /const monitoringDetails = monitoringData && typeof monitoringData === 'object'/);
+  assert.match(refreshSource, /const analyticsResponse = monitoringDetails\.analytics \|\| \{\};/);
+  assert.match(refreshSource, /dashboardState\.setSnapshot\('monitoring', monitoringData\)/);
+  assert.equal(refreshSource.includes('Promise.all(['), false);
+  assert.equal(refreshSource.includes('dashboardApiClient.getAnalytics('), false);
+  assert.equal(refreshSource.includes('dashboardApiClient.getEvents('), false);
+  assert.equal(refreshSource.includes('dashboardApiClient.getBans('), false);
+  assert.equal(refreshSource.includes('dashboardApiClient.getMaze('), false);
+  assert.equal(refreshSource.includes('dashboardApiClient.getCdp('), false);
+  assert.equal(refreshSource.includes('dashboardApiClient.getCdpEvents('), false);
 });
 
 test('legacy orchestration runtime provides tab/session/polling primitives', { concurrency: false }, async () => {
@@ -2917,24 +3034,23 @@ test('legacy config dirty runtime computes dirty state through capability contra
   assert.equal(nodes['save-ai-policy-config'].textContent, 'Save AI bot policy');
 });
 
-test('dashboard main exports explicit lifecycle entrypoints', () => {
-  const dashboardPath = path.resolve(__dirname, '..', 'dashboard', 'dashboard.js');
-  const source = fs.readFileSync(dashboardPath, 'utf8');
+test('dashboard native runtime exports explicit lifecycle entrypoints', () => {
+  const source = fs.readFileSync(DASHBOARD_NATIVE_RUNTIME_PATH, 'utf8');
 
-  assert.match(source, /export function mountDashboardApp\(options = \{\}\)/);
+  assert.match(source, /export async function mountDashboardApp\(options = \{\}\)/);
   assert.match(source, /export function unmountDashboardApp\(\)/);
 });
 
-test('dashboard module graph is layered (core -> services -> features -> main) with no cycles', () => {
+test('dashboard module graph is layered (core -> services -> features -> runtime main) with no cycles', () => {
   const dashboardRoot = path.resolve(__dirname, '..', 'dashboard');
   const moduleRoot = path.join(dashboardRoot, 'modules');
   const moduleFiles = listJsFilesRecursively(moduleRoot);
-  const allFiles = [path.join(dashboardRoot, 'dashboard.js'), ...moduleFiles];
+  const allFiles = [DASHBOARD_NATIVE_RUNTIME_PATH, ...moduleFiles];
 
   const relativeOf = (absolutePath) =>
     path.relative(dashboardRoot, absolutePath).split(path.sep).join('/');
   const rankOf = (relativePath) => {
-    if (relativePath === 'dashboard.js') return 3; // main
+    if (relativePath === 'src/lib/runtime/dashboard-native-runtime.js') return 3; // main
     if (relativePath.startsWith('modules/core/')) return 0;
     if (relativePath.startsWith('modules/services/')) return 1;
     if (

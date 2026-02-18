@@ -23,7 +23,7 @@
     normalizeTab
   } from '$lib/state/dashboard-store.js';
 
-  const chartLiteSrc = `${base}/assets/vendor/chart-lite-1.0.0.min.js`;
+  const chartRuntimeSrc = `${base}/assets/vendor/chart-lite-1.0.0.min.js`;
 
   const dashboardStore = createDashboardStore({ initialTab: 'monitoring' });
 
@@ -38,7 +38,8 @@
 
   async function bootstrapNativeRuntime() {
     await mountDashboardRuntime({
-      initialTab: normalizeTab(window.location.hash.replace(/^#/, ''))
+      initialTab: normalizeTab(window.location.hash.replace(/^#/, '')),
+      chartRuntimeSrc
     });
 
     const effects = createDashboardEffects();
@@ -112,8 +113,6 @@
 
 <svelte:head>
   <title>Shuma-Gorath Dashboard</title>
-  <link rel="preload" href={chartLiteSrc} as="script">
-  <script src={chartLiteSrc} data-shuma-runtime-script={chartLiteSrc}></script>
 </svelte:head>
 
 <span id="last-updated" class="text-muted"></span>

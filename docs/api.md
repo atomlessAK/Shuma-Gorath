@@ -138,7 +138,7 @@ When `SHUMA_DEBUG_HEADERS=true`, the health response includes:
 - `GET /admin/analytics` - Ban/event statistics
 - `GET /admin/events?hours=N` - Recent events + summary stats
 - `GET /admin/cdp/events?hours=N&limit=M` - CDP-only detections/auto-bans (time-windowed, limit configurable)
-- `GET /admin/monitoring?hours=N&limit=M` - Consolidated monitoring summaries (honeypot/challenge/PoW/rate/GEO)
+- `GET /admin/monitoring?hours=N&limit=M` - Consolidated monitoring summaries plus dashboard-native detail payload for Monitoring tab refreshes
 - `GET /admin/config` - Read configuration
 - `POST /admin/config` - Update configuration (partial JSON, disabled when `SHUMA_ADMIN_CONFIG_WRITE_ENABLED=false`)
 - `GET /admin/config/export` - Export non-secret runtime config as deploy-ready env key/value output
@@ -200,6 +200,13 @@ For CDP-only operational views without the 100-row mixed-event cap, use:
 - `total_violations`, `actions`, `top_countries`
 - `prometheus`:
 - `endpoint` (`/metrics`), helper notes, and scrape examples for external platforms
+- `details` (dashboard Monitoring-tab refresh contract):
+- `analytics`: `ban_count`, `test_mode`, `fail_mode`
+- `events`: `recent_events`, `event_counts`, `top_ips`, `unique_ips`
+- `bans`: `bans`
+- `maze`: `total_hits`, `unique_crawlers`, `maze_auto_bans`, `deepest_crawler`, `top_crawlers`
+- `cdp`: `config`, `stats`, `fingerprint_stats`
+- `cdp_events`: `events`, `hours`, `limit`, `total_matches`, `counts`
 
 Event `outcome` values may include canonical taxonomy metadata:
 

@@ -62,7 +62,7 @@ make test-dashboard-e2e    # In terminal 2
 - `POST /admin/unban?ip=x.x.x.x` - Unban an IP
 - `GET /admin/analytics` - Get ban statistics
 - `GET /admin/events?hours=24` - Get recent events
-- `GET /admin/monitoring?hours=24&limit=10` - Get consolidated monitoring summaries (honeypot/challenge/PoW/rate/GEO)
+- `GET /admin/monitoring?hours=24&limit=10` - Get consolidated monitoring summaries + detail payload (`analytics`, `events`, `bans`, `maze`, `cdp`, `cdp_events`) for dashboard Monitoring refresh
 - `GET /admin/config` - Get current configuration
 - `POST /admin/config` - Update configuration (test_mode, ban_durations, robots serving, AI bot policy, CDP, etc.)
 - `GET /admin/config/export` - Export non-secret runtime config for immutable redeploy handoff

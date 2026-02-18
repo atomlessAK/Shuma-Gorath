@@ -688,12 +688,19 @@ mod admin_config_tests {
         assert_eq!(*resp.status(), 200u16);
         let body: serde_json::Value = serde_json::from_slice(resp.body()).unwrap();
         let summary = body.get("summary").unwrap();
+        let details = body.get("details").unwrap();
 
         assert!(summary.get("honeypot").is_some());
         assert!(summary.get("challenge").is_some());
         assert!(summary.get("pow").is_some());
         assert!(summary.get("rate").is_some());
         assert!(summary.get("geo").is_some());
+        assert!(details.get("analytics").is_some());
+        assert!(details.get("events").is_some());
+        assert!(details.get("bans").is_some());
+        assert!(details.get("maze").is_some());
+        assert!(details.get("cdp").is_some());
+        assert!(details.get("cdp_events").is_some());
         assert_eq!(
             body.get("prometheus")
                 .and_then(|v| v.get("endpoint"))
@@ -719,6 +726,13 @@ mod admin_config_tests {
                 .and_then(|v| v.get("example_summary_stats"))
                 .and_then(|v| v.as_str())
                 .map(|value| value.contains("monitoring.summary"))
+                .unwrap_or(false)
+        );
+        assert!(
+            details
+                .get("events")
+                .and_then(|v| v.get("recent_events"))
+                .map(|v| v.is_array())
                 .unwrap_or(false)
         );
         assert!(
@@ -3642,6 +3656,7 @@ where
     let hours = query_u64_param(req.query(), "hours", 24).clamp(1, 720);
     let limit = query_u64_param(req.query(), "limit", 10).clamp(1, 50) as usize;
     let summary = crate::observability::monitoring::summarize_with_store(store, hours, limit);
+    let details = monitoring_details_payload(store, "default", hours);
 
     log_event(
         store,
@@ -3657,10 +3672,205 @@ where
 
     let body = serde_json::to_string(&json!({
         "summary": summary,
-        "prometheus": monitoring_prometheus_helper_payload()
+        "prometheus": monitoring_prometheus_helper_payload(),
+        "details": details
     }))
     .unwrap();
     Response::new(200, body)
+}
+
+fn read_u64_counter<S>(store: &S, key: &str) -> u64
+where
+    S: crate::challenge::KeyValueStore,
+{
+    store
+        .get(key)
+        .ok()
+        .flatten()
+        .and_then(|v| String::from_utf8(v).ok())
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0)
+}
+
+fn monitoring_details_payload<S>(store: &S, site_id: &str, hours: u64) -> serde_json::Value
+where
+    S: crate::challenge::KeyValueStore,
+{
+    let now = now_ts();
+    let mut events = load_recent_events(store, now, hours);
+    let mut ip_counts = std::collections::HashMap::new();
+    let mut event_counts = std::collections::HashMap::new();
+
+    for entry in &events {
+        if let Some(ip) = &entry.ip {
+            *ip_counts.entry(ip.clone()).or_insert(0u32) += 1;
+        }
+        *event_counts
+            .entry(format!("{:?}", entry.event))
+            .or_insert(0u32) += 1;
+    }
+    events.sort_by(|a, b| b.ts.cmp(&a.ts));
+    let unique_ips = ip_counts.len();
+    let mut top_ips: Vec<_> = ip_counts.into_iter().collect();
+    top_ips.sort_by(|a, b| b.1.cmp(&a.1));
+    let top_ips: Vec<_> = top_ips.into_iter().take(10).collect();
+    let recent_events: Vec<_> = events.iter().take(100).cloned().collect();
+
+    let cdp_events_limit = 500usize;
+    let mut cdp_events: Vec<EventLogEntry> = events
+        .iter()
+        .filter(|entry| {
+            entry
+                .reason
+                .as_deref()
+                .map(is_cdp_event_reason)
+                .unwrap_or(false)
+        })
+        .cloned()
+        .collect();
+    cdp_events.sort_by(|a, b| b.ts.cmp(&a.ts));
+    let total_matches = cdp_events.len();
+    let detections = cdp_events
+        .iter()
+        .filter(|entry| {
+            entry
+                .reason
+                .as_deref()
+                .map(|reason| reason.to_lowercase().starts_with("cdp_detected:"))
+                .unwrap_or(false)
+        })
+        .count();
+    let auto_bans = cdp_events
+        .iter()
+        .filter(|entry| {
+            entry
+                .reason
+                .as_deref()
+                .map(|reason| reason.eq_ignore_ascii_case("cdp_automation"))
+                .unwrap_or(false)
+        })
+        .count();
+    cdp_events.truncate(cdp_events_limit);
+
+    let active_bans = crate::enforcement::ban::list_active_bans(store, site_id);
+    let bans: Vec<_> = active_bans
+        .iter()
+        .map(|(ip, ban)| {
+            json!({
+                "ip": ip,
+                "reason": ban.reason,
+                "expires": ban.expires,
+                "banned_at": ban.banned_at,
+                "fingerprint": ban.fingerprint
+            })
+        })
+        .collect();
+
+    let mut maze_ips: Vec<(String, u32)> = Vec::new();
+    let mut total_hits: u32 = 0;
+    if let Ok(keys) = store.get_keys() {
+        for key in keys {
+            if key.starts_with("maze_hits:") {
+                let ip = key
+                    .strip_prefix("maze_hits:")
+                    .unwrap_or("unknown")
+                    .to_string();
+                if let Ok(Some(value)) = store.get(&key) {
+                    if let Ok(hits) = String::from_utf8_lossy(&value).parse::<u32>() {
+                        total_hits += hits;
+                        maze_ips.push((ip, hits));
+                    }
+                }
+            }
+        }
+    }
+    maze_ips.sort_by(|a, b| b.1.cmp(&a.1));
+    let deepest = maze_ips
+        .first()
+        .map(|(ip, hits)| json!({"ip": ip, "hits": hits}));
+    let top_crawlers: Vec<_> = maze_ips
+        .iter()
+        .take(10)
+        .map(|(ip, hits)| json!({"ip": ip, "hits": hits}))
+        .collect();
+    let maze_bans = active_bans
+        .iter()
+        .filter(|(_, ban)| ban.reason == "maze_crawler")
+        .count();
+
+    let cfg = crate::config::Config::load(store, site_id).ok();
+    let fail_mode = if crate::config::kv_store_fail_open() {
+        "open"
+    } else {
+        "closed"
+    };
+
+    json!({
+        "analytics": {
+            "ban_count": active_bans.len(),
+            "test_mode": cfg.as_ref().map(|v| v.test_mode).unwrap_or(false),
+            "fail_mode": fail_mode
+        },
+        "events": {
+            "recent_events": recent_events,
+            "event_counts": event_counts,
+            "top_ips": top_ips,
+            "unique_ips": unique_ips
+        },
+        "bans": {
+            "bans": bans
+        },
+        "maze": {
+            "total_hits": total_hits,
+            "unique_crawlers": maze_ips.len(),
+            "maze_auto_bans": maze_bans,
+            "deepest_crawler": deepest,
+            "top_crawlers": top_crawlers
+        },
+        "cdp": {
+            "config": {
+                "enabled": cfg.as_ref().map(|v| v.cdp_detection_enabled).unwrap_or(false),
+                "auto_ban": cfg.as_ref().map(|v| v.cdp_auto_ban).unwrap_or(false),
+                "detection_threshold": cfg.as_ref().map(|v| v.cdp_detection_threshold).unwrap_or(0.0),
+                "probe_family": cfg.as_ref().map(|v| v.cdp_probe_family.as_str()).unwrap_or("legacy"),
+                "probe_rollout_percent": cfg.as_ref().map(|v| v.cdp_probe_rollout_percent).unwrap_or(0),
+                "fingerprint_signal_enabled": cfg.as_ref().map(|v| v.fingerprint_signal_enabled).unwrap_or(false),
+                "fingerprint_state_ttl_seconds": cfg.as_ref().map(|v| v.fingerprint_state_ttl_seconds).unwrap_or(0),
+                "fingerprint_flow_window_seconds": cfg.as_ref().map(|v| v.fingerprint_flow_window_seconds).unwrap_or(0),
+                "fingerprint_flow_violation_threshold": cfg.as_ref().map(|v| v.fingerprint_flow_violation_threshold).unwrap_or(0),
+                "fingerprint_pseudonymize": cfg.as_ref().map(|v| v.fingerprint_pseudonymize).unwrap_or(false),
+                "fingerprint_entropy_budget": cfg.as_ref().map(|v| v.fingerprint_entropy_budget).unwrap_or(0),
+                "fingerprint_family_cap_header_runtime": cfg.as_ref().map(|v| v.fingerprint_family_cap_header_runtime).unwrap_or(0),
+                "fingerprint_family_cap_transport": cfg.as_ref().map(|v| v.fingerprint_family_cap_transport).unwrap_or(0),
+                "fingerprint_family_cap_temporal": cfg.as_ref().map(|v| v.fingerprint_family_cap_temporal).unwrap_or(0),
+                "fingerprint_family_cap_persistence": cfg.as_ref().map(|v| v.fingerprint_family_cap_persistence).unwrap_or(0),
+                "fingerprint_family_cap_behavior": cfg.as_ref().map(|v| v.fingerprint_family_cap_behavior).unwrap_or(0)
+            },
+            "stats": {
+                "total_detections": read_u64_counter(store, "cdp:detections"),
+                "auto_bans": read_u64_counter(store, "cdp:auto_bans")
+            },
+            "fingerprint_stats": {
+                "events": read_u64_counter(store, "fingerprint:events"),
+                "ua_client_hint_mismatch": read_u64_counter(store, "fingerprint:ua_ch_mismatch"),
+                "ua_transport_mismatch": read_u64_counter(store, "fingerprint:ua_transport_mismatch"),
+                "temporal_transition": read_u64_counter(store, "fingerprint:temporal_transition"),
+                "flow_violation": read_u64_counter(store, "fingerprint:flow_violation"),
+                "persistence_marker_missing": read_u64_counter(store, "fingerprint:persistence_marker_missing"),
+                "untrusted_transport_header": read_u64_counter(store, "fingerprint:untrusted_transport_header")
+            }
+        },
+        "cdp_events": {
+            "events": cdp_events,
+            "hours": hours,
+            "limit": cdp_events_limit,
+            "total_matches": total_matches,
+            "counts": {
+                "detections": detections,
+                "auto_bans": auto_bans
+            }
+        }
+    })
 }
 
 fn monitoring_prometheus_helper_payload() -> serde_json::Value {

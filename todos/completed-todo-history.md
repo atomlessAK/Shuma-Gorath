@@ -487,3 +487,38 @@ Moved from active TODO files on 2026-02-14.
 - [x] DSH-SVLT-EX15 Collapse Monitoring auto-refresh fan-out further by consuming a consolidated Monitoring summary contract (aligned with `MON-TEL-4`) so the native polling path does not require multiple endpoint reads per cycle.
 - [x] DSH-SVLT-EX16 Add dashboard performance gates to CI/Make flow: bundle-size ceilings for `/dashboard/_app` assets and polling request-budget assertions for native remount/steady-state flows.
 - [x] DSH-SVLT-EX17 Reduce repeated full-table DOM churn on Monitoring refresh by adding bounded row diff/patch updates (or virtualization where needed) for high-volume event/CDP tables.
+
+## Additional completions (2026-02-18, section-preserving archive)
+
+### todos/todo.md
+
+#### P1 Dashboard SvelteKit Excellence Round 2 (Architecture + Performance)
+- [x] DSH-SVLT-EX8 Continue shrinking the `dashboard/dashboard.js` hotspot by extracting config-dirty orchestration and save-check wiring into `dashboard/src/lib/runtime/*` with typed capability contracts.
+- [x] DSH-SVLT-EX9 Reduce native Monitoring-tab auto-refresh fan-out by removing redundant request paths and documenting the bounded request budget per refresh cycle.
+- [x] DSH-SVLT-EX10 Upgrade runtime telemetry aggregation from unbounded lifetime averages to bounded rolling windows (for example last `N` samples + p95) with deterministic reset semantics.
+- [x] DSH-SVLT-EX11 Add repeated remount stress coverage (multiple navigate-away/back loops) that asserts no timer/listener/request duplication over time.
+- [x] DSH-SVLT-EX12 Remove remaining direct DOM/window reads from action pipelines (redirect path, focus target lookup) by routing them through effect adapters for stricter testability.
+
+#### P1 Dashboard SvelteKit Excellence Round 4 (Native Decoupling + Perf Hardening)
+- [x] DSH-SVLT-EX18 Remove `dashboard/dashboard.js` from the native runtime refresh path by moving remaining tab-refresh/session orchestration into `dashboard/src/lib/runtime/*` modules with explicit typed contracts.
+- [x] DSH-SVLT-EX19 Implement and consume a consolidated Monitoring data contract for manual/native refresh cycles (close `MON-TEL-4` alignment) so Monitoring detail updates avoid multi-endpoint fan-out.
+- [x] DSH-SVLT-EX20 Replace global chart runtime script dependency with a module-scoped chart adapter lifecycle (lazy import + singleton guard + teardown) to minimize global side effects.
+- [x] DSH-SVLT-EX21 Add no-flicker Monitoring auto-refresh coverage (no placeholder reset on auto cycles, bounded table patch churn assertions) in dashboard smoke + module tests.
+- [x] DSH-SVLT-EX22 Add native remount/refresh soak performance gate (bounded fetch/render p95 + stable polling cadence across repeated mount loops) and wire into Make/CI reporting.
+
+#### P0 Branch Handoff (dashboard-sveltekit-port -> main)
+- [x] HND-SVLT-1 Resume from branch `codex/dashboard-sveltekit-port` at commit `979fa2f` (with `c7291e5` included immediately before it in branch history).
+  - Completed on branch `codex/dashboard-sveltekit-port`; current tip was `86b42bf` (contains remount fan-out test stabilization).
+- [x] HND-SVLT-2 In an unrestricted shell, run canonical verification only through Makefile paths:
+  - terminal A: `make dev`
+  - terminal B: `make test`
+  - required outcome: Rust unit + maze benchmark + integration + dashboard e2e all green.
+  - Completed on 2026-02-18 after commit `86b42bf`; `make test` passed end-to-end (including dashboard e2e).
+- [x] HND-SVLT-3 If verification is green, open/update PR from `codex/dashboard-sveltekit-port` into `main` and include:
+  - SvelteKit migration summary (hard cutover with no archived legacy fallback assets),
+  - Makefile-only workflow enforcement updates (`AGENTS.md`, `CONTRIBUTING.md`, `Makefile`),
+  - dashboard runtime/perf guardrails (`e2e` remount fan-out + bundle budget gate).
+  - Completed on 2026-02-18: PR opened as `https://github.com/atomless/Shuma-Gorath/pull/1` with required handoff summary.
+  - DNS troubleshooting outcome in Codex runtime: resolved (`curl -I https://api.github.com` returned `HTTP/2 200`; `gh api rate_limit` succeeded).
+- [x] HND-SVLT-4 Merge to `main` after CI is green; then continue Round 4 items (`DSH-SVLT-EX18..EX22`) on a fresh `codex/*` branch.
+  - Completed on 2026-02-18: work merged into `main`; Round 4 implementation and canonical verification (`make verify`, `make test`, `make build`) completed cleanly from `main`.

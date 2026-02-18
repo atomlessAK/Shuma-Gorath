@@ -11,7 +11,7 @@ let runtimeModule = null;
 
 async function resolveRuntimeModule() {
   if (runtimeModule) return runtimeModule;
-  runtimeModule = await import('../../../dashboard.js');
+  runtimeModule = await import('./dashboard-native-runtime.js');
   return runtimeModule;
 }
 
@@ -23,11 +23,11 @@ export async function mountDashboardRuntime(options = {}) {
   if (mountingPromise) return mountingPromise;
 
   mountingPromise = resolveRuntimeModule()
-    .then((module) => {
+    .then(async (module) => {
       if (typeof module.mountDashboardExternalRuntime !== 'function') {
         throw new Error('Dashboard runtime entrypoint is missing mountDashboardExternalRuntime()');
       }
-      module.mountDashboardExternalRuntime(mountOptions || {});
+      await module.mountDashboardExternalRuntime(mountOptions || {});
       mounted = true;
     })
     .finally(() => {

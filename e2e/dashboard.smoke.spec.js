@@ -330,46 +330,28 @@ test("dashboard clean-state renders explicit empty placeholders", async ({ page 
     geo_block: []
   };
 
-  await page.route("**/admin/analytics", async (route) => {
+  await page.route("**/admin/monitoring?hours=*&limit=*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ ban_count: 0, test_mode: false, fail_mode: "open" })
-    });
-  });
-  await page.route("**/admin/events?hours=*", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ recent_events: [], event_counts: {}, top_ips: [], unique_ips: 0 })
-    });
-  });
-  await page.route("**/admin/ban", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ bans: [] })
-    });
-  });
-  await page.route("**/admin/maze", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ total_hits: 0, unique_crawlers: 0, maze_auto_bans: 0, top_crawlers: [] })
-    });
-  });
-  await page.route("**/admin/cdp", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ stats: { total_detections: 0, auto_bans: 0 }, config: {} })
-    });
-  });
-  await page.route("**/admin/cdp/events?*", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ events: [] })
+      body: JSON.stringify({
+        summary: {
+          honeypot: { total_hits: 0, unique_crawlers: 0, top_crawlers: [], top_paths: [] },
+          challenge: { total_failures: 0, unique_offenders: 0, top_offenders: [], reasons: {}, trend: [] },
+          pow: { total_failures: 0, unique_offenders: 0, top_offenders: [], reasons: {}, trend: [] },
+          rate: { total_violations: 0, unique_offenders: 0, top_offenders: [], outcomes: {} },
+          geo: { total_violations: 0, actions: { block: 0, challenge: 0, maze: 0 }, top_countries: [] }
+        },
+        prometheus: { endpoint: "/metrics", notes: [] },
+        details: {
+          analytics: { ban_count: 0, test_mode: false, fail_mode: "open" },
+          events: { recent_events: [], event_counts: {}, top_ips: [], unique_ips: 0 },
+          bans: { bans: [] },
+          maze: { total_hits: 0, unique_crawlers: 0, maze_auto_bans: 0, top_crawlers: [] },
+          cdp: { stats: { total_detections: 0, auto_bans: 0 }, config: {}, fingerprint_stats: {} },
+          cdp_events: { events: [] }
+        }
+      })
     });
   });
   await page.route("**/admin/config", async (route) => {
@@ -781,6 +763,109 @@ test("route remount preserves keyboard navigation, ban/unban, config save, and p
   expect(monitoringRequests).toBeGreaterThan(beforePollWait);
 });
 
+test("monitoring auto-refresh avoids placeholder flicker and bounds table churn", async ({ page }) => {
+  await page.addInitScript(() => {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    window.setTimeout = (handler, ms, ...args) => {
+      if (typeof ms === "number" && ms >= 30000) {
+        return nativeSetTimeout(handler, 60, ...args);
+      }
+      return nativeSetTimeout(handler, ms, ...args);
+    };
+  });
+
+  let monitoringRequests = 0;
+  await page.route("**/admin/monitoring?hours=*&limit=*", async (route) => {
+    monitoringRequests += 1;
+    const sample = monitoringRequests;
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        summary: {
+          honeypot: {
+            total_hits: sample * 3,
+            unique_crawlers: sample,
+            top_crawlers: [{ label: "203.0.113.200", count: sample * 3 }],
+            top_paths: [{ label: "/instaban", count: sample * 3 }]
+          },
+          challenge: { total_failures: 0, unique_offenders: 0, top_offenders: [], reasons: {}, trend: [] },
+          pow: { total_failures: 0, unique_offenders: 0, top_offenders: [], reasons: {}, trend: [] },
+          rate: { total_violations: 0, unique_offenders: 0, top_offenders: [], outcomes: {} },
+          geo: { total_violations: 0, actions: { block: 0, challenge: 0, maze: 0 }, top_countries: [] }
+        },
+        prometheus: { endpoint: "/metrics", notes: [] },
+        details: {
+          analytics: { ban_count: 1, test_mode: false, fail_mode: "open" },
+          events: {
+            recent_events: [
+              {
+                ts: Math.floor(Date.now() / 1000),
+                event: "Challenge",
+                ip: "198.51.100.1",
+                reason: "risk",
+                outcome: "served",
+                admin: "ops"
+              }
+            ],
+            event_counts: { Challenge: 1 },
+            top_ips: [["198.51.100.1", 1]],
+            unique_ips: 1
+          },
+          bans: { bans: [{ ip: "198.51.100.2", reason: "manual_ban", expires: 1999999999 }] },
+          maze: { total_hits: sample * 3, unique_crawlers: sample, maze_auto_bans: 0, top_crawlers: [] },
+          cdp: { stats: { total_detections: 0, auto_bans: 0 }, config: {}, fingerprint_stats: {} },
+          cdp_events: { events: [] }
+        }
+      })
+    });
+  });
+
+  await openDashboard(page);
+  await openTab(page, "monitoring");
+  await expect(page.locator("#honeypot-total-hits")).not.toHaveText("...");
+
+  await page.evaluate(() => {
+    const tbody = document.querySelector("#events tbody");
+    window.__shumaEventRowMutations = 0;
+    if (!tbody) return;
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        if (record.type === "childList") {
+          window.__shumaEventRowMutations += record.addedNodes.length + record.removedNodes.length;
+        }
+      }
+    });
+    observer.observe(tbody, { childList: true });
+    window.__shumaEventObserver = observer;
+  });
+
+  await page.waitForTimeout(420);
+  expect(monitoringRequests).toBeGreaterThan(2);
+
+  const honeypotSamples = await page.evaluate(() => {
+    const samples = [];
+    for (let i = 0; i < 3; i += 1) {
+      samples.push(String(document.getElementById("honeypot-total-hits")?.textContent || "").trim());
+    }
+    return samples;
+  });
+  honeypotSamples.forEach((sample) => {
+    expect(sample).not.toBe("...");
+    expect(sample).toMatch(/^\d[\d,]*$/);
+  });
+
+  const rowMutations = await page.evaluate(() => {
+    if (window.__shumaEventObserver) {
+      window.__shumaEventObserver.disconnect();
+      window.__shumaEventObserver = null;
+    }
+    return Number(window.__shumaEventRowMutations || 0);
+  });
+  expect(rowMutations).toBeLessThanOrEqual(2);
+});
+
 test("repeated route remount loops keep polling request fan-out bounded", async ({ page }) => {
   const acceleratedPollingIntervalMs = 50;
   const remountObservationWindowMs = 240;
@@ -822,6 +907,73 @@ test("repeated route remount loops keep polling request fan-out bounded", async 
   const maxDelta = Math.max(...remountRequestDeltas);
   const minDelta = Math.min(...remountRequestDeltas);
   expect(maxDelta - minDelta).toBeLessThanOrEqual(2);
+});
+
+test("native remount soak keeps refresh p95 and polling cadence within bounds", async ({ page }) => {
+  const acceleratedPollingIntervalMs = 50;
+  const soakWindowMs = 260;
+  const maxExpectedRequestsInWindow = Math.ceil(soakWindowMs / acceleratedPollingIntervalMs) + 1;
+
+  await page.addInitScript(() => {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    window.setTimeout = (handler, ms, ...args) => {
+      if (typeof ms === "number" && ms >= 30000) {
+        return nativeSetTimeout(handler, 50, ...args);
+      }
+      return nativeSetTimeout(handler, ms, ...args);
+    };
+  });
+
+  let monitoringRequests = 0;
+  await page.route("**/admin/monitoring?hours=*&limit=*", async (route) => {
+    monitoringRequests += 1;
+    await page.waitForTimeout(18);
+    await route.continue();
+  });
+
+  const cadenceDeltas = [];
+  const fetchP95Samples = [];
+  const renderP95Samples = [];
+  const remountCycles = 5;
+
+  for (let cycle = 0; cycle < remountCycles; cycle += 1) {
+    await openDashboard(page);
+    await openTab(page, "monitoring");
+
+    const before = monitoringRequests;
+    await page.waitForTimeout(soakWindowMs);
+    const delta = monitoringRequests - before;
+    cadenceDeltas.push(delta);
+    expect(delta).toBeGreaterThan(0);
+    expect(delta).toBeLessThanOrEqual(maxExpectedRequestsInWindow);
+
+    await openTab(page, "status");
+    const telemetry = await page.evaluate(() => {
+      const parseP95 = (id) => {
+        const text = document.getElementById(id)?.textContent || "";
+        const match = /p95:\s*([0-9]+(?:\.[0-9]+)?)\s*ms/i.exec(text);
+        return match ? Number(match[1]) : NaN;
+      };
+      return {
+        fetchP95: parseP95("runtime-fetch-latency-avg"),
+        renderP95: parseP95("runtime-render-timing-avg")
+      };
+    });
+    expect(Number.isFinite(telemetry.fetchP95)).toBe(true);
+    expect(Number.isFinite(telemetry.renderP95)).toBe(true);
+    fetchP95Samples.push(telemetry.fetchP95);
+    renderP95Samples.push(telemetry.renderP95);
+    expect(telemetry.fetchP95).toBeLessThanOrEqual(500);
+    expect(telemetry.renderP95).toBeLessThanOrEqual(32);
+
+    await page.goto("about:blank");
+  }
+
+  const maxCadence = Math.max(...cadenceDeltas);
+  const minCadence = Math.min(...cadenceDeltas);
+  expect(maxCadence - minCadence).toBeLessThanOrEqual(2);
+  expect(Math.max(...fetchP95Samples)).toBeLessThanOrEqual(500);
+  expect(Math.max(...renderP95Samples)).toBeLessThanOrEqual(32);
 });
 
 test("dashboard tables keep sticky headers", async ({ page }) => {
@@ -942,7 +1094,7 @@ test("tab states surface loading and data-ready transitions across all tabs", as
   await expect(page.locator("#bans-table tbody")).toContainText("198.51.100.250");
   await expect(page.locator('[data-tab-state="ip-bans"]')).toBeHidden();
 
-  await page.route("**/admin/analytics", async (route) => {
+  await page.route("**/admin/monitoring?hours=*&limit=*", async (route) => {
     await delayPassThrough(route);
   }, { times: 1 });
 

@@ -6,7 +6,7 @@
 
 # 🐙 Shuma-Gorath
 
-A WebAssembly Bot Defence for Spin. [Shuma-Gorath](https://en.wikipedia.org/wiki/Shuma-Gorath) detects, blocks, and monitors automated abuse with honeypots, rate limiting, JS challenges, CDP signals, a maze, and a real-time ip banning admin, defence config and fine tuning, and event monitoring.
+[Shuma-Gorath](https://en.wikipedia.org/wiki/Shuma-Gorath) is written for the Chthulucene as a multifaceted defence against the growing onslaught from Shoggoth army of bots, crawlers, and scrapers. Running as WebAssembly in Spin, it detects, blocks, and monitors automated abuse with rate limiting, JS challenges, CDP signals, honeypots, aan infinite maze, a tarpit, ui challenges of escalating difficulty, real-time automatic ip and ip-range banning and manual ip ban admin, defence configuration and fine tuning, and event monitoring.
 
 Shuma-Gorath is designed to **complement enterprise bot defenses** (such as [Akamai Bot Manager](https://www.akamai.com/products/bot-manager_) as a second-layer of application-specific protection, but it can also run standalone.
 

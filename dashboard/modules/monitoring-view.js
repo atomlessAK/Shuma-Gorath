@@ -2,6 +2,7 @@
 
 import * as format from './core/format.js';
 import * as domModule from './core/dom.js';
+import { getChartConstructor } from './services/chart-runtime-adapter.js';
 
 const CHALLENGE_REASON_LABELS = Object.freeze({
   incorrect: 'Incorrect',
@@ -207,13 +208,13 @@ export const derivePrometheusHelperViewModel = (prometheusData = {}, origin = ''
   };
 };
 
-const updateMonitoringTrendChart = (existingChart, canvas, title, color, trendSeries) => {
-  if (!canvas || typeof Chart === 'undefined') return existingChart;
+const updateMonitoringTrendChart = (existingChart, canvas, title, color, trendSeries, chartCtor) => {
+  if (!canvas || typeof chartCtor !== 'function') return existingChart;
   const ctx = canvas.getContext('2d');
   if (!ctx) return existingChart;
 
   if (!existingChart) {
-    return new Chart(ctx, {
+    return new chartCtor(ctx, {
       type: 'line',
       data: {
         labels: trendSeries.labels,
@@ -374,6 +375,15 @@ export const create = (options = {}) => {
   let powFailuresTrendChart = null;
   let prometheusCopyHandler = null;
   let prometheusCopyCurlHandler = null;
+  let chartConstructor = typeof options.chartConstructor === 'function'
+    ? options.chartConstructor
+    : null;
+
+  const resolveChartConstructor = () => {
+    if (typeof chartConstructor === 'function') return chartConstructor;
+    chartConstructor = getChartConstructor();
+    return typeof chartConstructor === 'function' ? chartConstructor : null;
+  };
 
   const renderMazeStats = (viewModel) => {
     domModule.setText(domRefs.mazeTotalHits, viewModel.totalHits);
@@ -424,7 +434,8 @@ export const create = (options = {}) => {
       domRefs.challengeFailuresTrendChart,
       'Challenge Failures',
       'rgba(255,205,235,0.95)',
-      viewModel.challenge.trend
+      viewModel.challenge.trend,
+      resolveChartConstructor()
     );
 
     domModule.setText(domRefs.powFailuresTotal, viewModel.pow.totalFailures);
@@ -443,7 +454,8 @@ export const create = (options = {}) => {
       domRefs.powFailuresTrendChart,
       'PoW Failures',
       'rgba(205,155,185,0.95)',
-      viewModel.pow.trend
+      viewModel.pow.trend,
+      resolveChartConstructor()
     );
 
     domModule.setText(domRefs.rateViolationsTotal, viewModel.rate.totalViolations);
@@ -601,6 +613,7 @@ export const create = (options = {}) => {
     }
     challengeFailuresTrendChart = null;
     powFailuresTrendChart = null;
+    chartConstructor = null;
   };
 
   return {

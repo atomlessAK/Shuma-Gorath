@@ -1,32 +1,37 @@
 // @ts-check
 
-import * as dashboardCharts from './modules/charts.js';
-import * as statusModule from './modules/status.js';
-import * as configControls from './modules/config-controls.js';
-import * as adminSessionModule from './modules/admin-session.js';
-import * as tabLifecycleModule from './modules/tab-lifecycle.js';
-import * as dashboardApiClientModule from './modules/api-client.js';
-import * as dashboardStateModule from './modules/dashboard-state.js';
-import * as monitoringViewModule from './modules/monitoring-view.js';
-import * as tablesViewModule from './modules/tables-view.js';
-import * as configUiStateModule from './modules/config-ui-state.js';
-import * as tabStateViewModule from './modules/tab-state-view.js';
-import * as formatModule from './modules/core/format.js';
-import * as domModule from './modules/core/dom.js';
-import * as jsonObjectModule from './modules/core/json-object.js';
-import * as configSchemaModule from './modules/config-schema.js';
-import * as configDraftStoreModule from './modules/config-draft-store.js';
-import * as configFormUtilsModule from './modules/config-form-utils.js';
-import * as inputValidationModule from './modules/input-validation.js';
-import * as adminEndpointModule from './modules/services/admin-endpoint.js';
-import * as featureControllersModule from './modules/feature-controllers.js';
-import { createRuntimeEffects } from './modules/services/runtime-effects.js';
+import * as dashboardCharts from '../../../modules/charts.js';
+import * as statusModule from '../../../modules/status.js';
+import * as configControls from '../../../modules/config-controls.js';
+import * as adminSessionModule from '../../../modules/admin-session.js';
+import * as tabLifecycleModule from '../../../modules/tab-lifecycle.js';
+import * as dashboardApiClientModule from '../../../modules/api-client.js';
+import * as dashboardStateModule from '../../../modules/dashboard-state.js';
+import * as monitoringViewModule from '../../../modules/monitoring-view.js';
+import * as tablesViewModule from '../../../modules/tables-view.js';
+import * as configUiStateModule from '../../../modules/config-ui-state.js';
+import * as tabStateViewModule from '../../../modules/tab-state-view.js';
+import * as formatModule from '../../../modules/core/format.js';
+import * as domModule from '../../../modules/core/dom.js';
+import * as jsonObjectModule from '../../../modules/core/json-object.js';
+import * as configSchemaModule from '../../../modules/config-schema.js';
+import * as configDraftStoreModule from '../../../modules/config-draft-store.js';
+import * as configFormUtilsModule from '../../../modules/config-form-utils.js';
+import * as inputValidationModule from '../../../modules/input-validation.js';
+import * as adminEndpointModule from '../../../modules/services/admin-endpoint.js';
+import * as featureControllersModule from '../../../modules/feature-controllers.js';
+import {
+  acquireChartRuntime,
+  getChartConstructor,
+  releaseChartRuntime
+} from '../../../modules/services/chart-runtime-adapter.js';
+import { createRuntimeEffects } from '../../../modules/services/runtime-effects.js';
 import {
   createLegacyAutoRefreshRuntime,
   createLegacyDashboardSessionRuntime,
   createLegacyDashboardTabRuntime
-} from './src/lib/runtime/dashboard-legacy-orchestration.js';
-import { createLegacyConfigDirtyRuntime } from './src/lib/runtime/dashboard-legacy-config-dirty.js';
+} from './dashboard-legacy-orchestration.js';
+import { createLegacyConfigDirtyRuntime } from './dashboard-legacy-config-dirty.js';
 import {
   clearDashboardExternalAdapters,
   configureDashboardExternalAdapters,
@@ -36,7 +41,7 @@ import {
   refreshDashboardTab as refreshExternalDashboardTab,
   restoreDashboardSession as restoreExternalDashboardSession,
   setDashboardActiveTab as setExternalDashboardActiveTab
-} from './src/lib/runtime/dashboard-external-adapters.js';
+} from './dashboard-external-adapters.js';
 
 export {
   getExternalDashboardActiveTab as getDashboardActiveTab,
@@ -169,6 +174,7 @@ let runtimeMountOptions = {
   useExternalPollingPipeline: false,
   useExternalSessionPipeline: false,
   bindLogoutButton: true,
+  chartRuntimeSrc: '',
   initialTab: tabLifecycleModule.DEFAULT_DASHBOARD_TAB
 };
 const domCache = domModule.createCache({ document });
@@ -188,11 +194,15 @@ const TAB_REFRESH_INTERVAL_MS = Object.freeze({
 
 function normalizeRuntimeMountOptions(options = {}) {
   const source = options || {};
+  const chartRuntimeSrc = typeof source.chartRuntimeSrc === 'string'
+    ? source.chartRuntimeSrc.trim()
+    : '';
   return {
     useExternalTabPipeline: source.useExternalTabPipeline === true,
     useExternalPollingPipeline: source.useExternalPollingPipeline === true,
     useExternalSessionPipeline: source.useExternalSessionPipeline === true,
     bindLogoutButton: source.bindLogoutButton !== false,
+    chartRuntimeSrc,
     initialTab: tabLifecycleModule.normalizeTab(
       source.initialTab || tabLifecycleModule.DEFAULT_DASHBOARD_TAB
     )
@@ -1119,8 +1129,8 @@ async function refreshMonitoringTab(reason = 'manual', options = {}) {
   }
 
   const requestOptions = options && options.signal ? { signal: options.signal } : {};
+  const monitoringData = await dashboardApiClient.getMonitoring({ hours: 24, limit: 10 }, requestOptions);
   if (isAutoRefresh) {
-    const monitoringData = await dashboardApiClient.getMonitoring({ hours: 24, limit: 10 }, requestOptions);
     if (dashboardState) {
       dashboardState.setSnapshot('monitoring', monitoringData);
     }
@@ -1134,15 +1144,15 @@ async function refreshMonitoringTab(reason = 'manual', options = {}) {
   }
 
   const configSnapshot = dashboardState ? dashboardState.getSnapshot('config') : {};
-  const [analyticsResponse, events, bansData, mazeData, cdpData, cdpEventsData, monitoringData] = await Promise.all([
-    dashboardApiClient.getAnalytics(requestOptions),
-    dashboardApiClient.getEvents(24, requestOptions),
-    dashboardApiClient.getBans(requestOptions),
-    dashboardApiClient.getMaze(requestOptions),
-    dashboardApiClient.getCdp(requestOptions),
-    dashboardApiClient.getCdpEvents({ hours: 24, limit: 500 }, requestOptions),
-    dashboardApiClient.getMonitoring({ hours: 24, limit: 10 }, requestOptions)
-  ]);
+  const monitoringDetails = monitoringData && typeof monitoringData === 'object'
+    ? (monitoringData.details || {})
+    : {};
+  const analyticsResponse = monitoringDetails.analytics || {};
+  const events = monitoringDetails.events || {};
+  const bansData = monitoringDetails.bans || { bans: [] };
+  const mazeData = monitoringDetails.maze || {};
+  const cdpData = monitoringDetails.cdp || {};
+  const cdpEventsData = monitoringDetails.cdp_events || { events: [] };
   const analytics = deriveMonitoringAnalytics(configSnapshot, analyticsResponse);
   if (Array.isArray(bansData.bans)) {
     analytics.ban_count = bansData.bans.length;
@@ -1301,10 +1311,15 @@ function refreshActiveTab(reason = 'manual') {
   return refreshDashboardForTab(activeTab, reason);
 }
 
-export function mountDashboardApp(options = {}) {
+export async function mountDashboardApp(options = {}) {
   if (runtimeMounted) return;
-  runtimeMounted = true;
   runtimeMountOptions = normalizeRuntimeMountOptions(options);
+  await acquireChartRuntime({
+    window,
+    document,
+    src: runtimeMountOptions.chartRuntimeSrc || undefined
+  });
+  runtimeMounted = true;
 
   configDraftStore = configDraftStoreModule.create(CONFIG_DRAFT_DEFAULTS);
   runtimeEffects = createRuntimeEffects();
@@ -1370,10 +1385,12 @@ export function mountDashboardApp(options = {}) {
     onUnauthorized: redirectToLogin,
     request: (input, init) => runtimeEffects.request(input, init)
   });
+  const chartConstructor = getChartConstructor({ window });
 
   monitoringView = monitoringViewModule.create({
     escapeHtml,
-    effects: runtimeEffects
+    effects: runtimeEffects,
+    chartConstructor
   });
 
   tablesView = tablesViewModule.create({
@@ -1464,7 +1481,8 @@ export function mountDashboardApp(options = {}) {
   }
   dashboardCharts.init({
     getAdminContext,
-    apiClient: dashboardApiClient
+    apiClient: dashboardApiClient,
+    chartConstructor
   });
   statusPanel.render();
 
@@ -1566,13 +1584,14 @@ export function mountDashboardApp(options = {}) {
   }
 }
 
-export function mountDashboardExternalRuntime(options = {}) {
+export async function mountDashboardExternalRuntime(options = {}) {
   const source = options || {};
-  mountDashboardApp({
+  await mountDashboardApp({
     useExternalTabPipeline: true,
     useExternalPollingPipeline: true,
     useExternalSessionPipeline: true,
     bindLogoutButton: false,
+    chartRuntimeSrc: source.chartRuntimeSrc || '',
     initialTab: tabLifecycleModule.normalizeTab(
       source.initialTab || tabLifecycleModule.DEFAULT_DASHBOARD_TAB
     )
@@ -1623,4 +1642,5 @@ export function unmountDashboardApp() {
   runtimeEffects = null;
   statusPanel = null;
   adminSessionController = null;
+  releaseChartRuntime({ window });
 }

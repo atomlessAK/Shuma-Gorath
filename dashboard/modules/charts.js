@@ -1,6 +1,7 @@
 // @ts-check
 
 import { arraysEqualShallow } from './core/format.js';
+import { getChartConstructor } from './services/chart-runtime-adapter.js';
 
 let eventTypesChart = null;
 let topIpsChart = null;
@@ -8,6 +9,7 @@ let timeSeriesChart = null;
 let currentTimeRange = 'hour';
 let getAdminContext = null;
 let apiClient = null;
+let chartConstructor = null;
 const timeRangeButtonHandlers = [];
 
 const CHART_PALETTE = [
@@ -88,13 +90,21 @@ const getCanvasContext = (id) => {
   return canvas.getContext('2d');
 };
 
+const resolveChartConstructor = () => {
+  if (typeof chartConstructor === 'function') return chartConstructor;
+  chartConstructor = getChartConstructor();
+  return typeof chartConstructor === 'function' ? chartConstructor : null;
+};
+
 export const init = (options = {}) => {
   getAdminContext = typeof options.getAdminContext === 'function' ? options.getAdminContext : null;
   apiClient = options.apiClient || null;
+  chartConstructor = typeof options.chartConstructor === 'function' ? options.chartConstructor : null;
+  const ChartCtor = resolveChartConstructor();
 
   const ctx1 = getCanvasContext('eventTypesChart');
-  if (ctx1) {
-    eventTypesChart = new Chart(ctx1, {
+  if (ctx1 && ChartCtor) {
+    eventTypesChart = new ChartCtor(ctx1, {
       type: 'doughnut',
       data: {
         labels: [],
@@ -109,8 +119,8 @@ export const init = (options = {}) => {
   }
 
   const ctx2 = getCanvasContext('topIpsChart');
-  if (ctx2) {
-    topIpsChart = new Chart(ctx2, {
+  if (ctx2 && ChartCtor) {
+    topIpsChart = new ChartCtor(ctx2, {
       type: 'bar',
       data: {
         labels: [],
@@ -131,8 +141,8 @@ export const init = (options = {}) => {
   }
 
   const ctx3 = getCanvasContext('timeSeriesChart');
-  if (ctx3) {
-    timeSeriesChart = new Chart(ctx3, {
+  if (ctx3 && ChartCtor) {
+    timeSeriesChart = new ChartCtor(ctx3, {
       type: 'line',
       data: {
         labels: [],
@@ -271,4 +281,5 @@ export const destroy = () => {
   timeSeriesChart = null;
   getAdminContext = null;
   apiClient = null;
+  chartConstructor = null;
 };
