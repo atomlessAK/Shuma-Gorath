@@ -372,6 +372,8 @@ export const create = (options = {}) => {
 
   let challengeFailuresTrendChart = null;
   let powFailuresTrendChart = null;
+  let prometheusCopyHandler = null;
+  let prometheusCopyCurlHandler = null;
 
   const renderMazeStats = (viewModel) => {
     domModule.setText(domRefs.mazeTotalHits, viewModel.totalHits);
@@ -559,19 +561,46 @@ export const create = (options = {}) => {
     };
 
     if (domRefs.prometheusCopyButton && domRefs.prometheusExample) {
-      domRefs.prometheusCopyButton.addEventListener('click', async () => {
+      if (prometheusCopyHandler) {
+        domRefs.prometheusCopyButton.removeEventListener('click', prometheusCopyHandler);
+      }
+      prometheusCopyHandler = async () => {
         const text = String(domRefs.prometheusExample.textContent || '').trim();
         await copyWithFeedback(domRefs.prometheusCopyButton, text, 'Copy JS Example');
-      });
+      };
+      domRefs.prometheusCopyButton.addEventListener('click', prometheusCopyHandler);
     }
 
     if (domRefs.prometheusCopyCurlButton) {
-      domRefs.prometheusCopyCurlButton.addEventListener('click', async () => {
+      if (prometheusCopyCurlHandler) {
+        domRefs.prometheusCopyCurlButton.removeEventListener('click', prometheusCopyCurlHandler);
+      }
+      prometheusCopyCurlHandler = async () => {
         const fallback = `curl -sS '${window.location.origin || 'http://127.0.0.1:3000'}/metrics'`;
         const text = String(domRefs.prometheusCopyCurlButton.dataset.copyText || fallback).trim();
         await copyWithFeedback(domRefs.prometheusCopyCurlButton, text, 'Copy Curl Example');
-      });
+      };
+      domRefs.prometheusCopyCurlButton.addEventListener('click', prometheusCopyCurlHandler);
     }
+  };
+
+  const destroy = () => {
+    if (domRefs.prometheusCopyButton && prometheusCopyHandler) {
+      domRefs.prometheusCopyButton.removeEventListener('click', prometheusCopyHandler);
+      prometheusCopyHandler = null;
+    }
+    if (domRefs.prometheusCopyCurlButton && prometheusCopyCurlHandler) {
+      domRefs.prometheusCopyCurlButton.removeEventListener('click', prometheusCopyCurlHandler);
+      prometheusCopyCurlHandler = null;
+    }
+    if (challengeFailuresTrendChart && typeof challengeFailuresTrendChart.destroy === 'function') {
+      challengeFailuresTrendChart.destroy();
+    }
+    if (powFailuresTrendChart && typeof powFailuresTrendChart.destroy === 'function') {
+      powFailuresTrendChart.destroy();
+    }
+    challengeFailuresTrendChart = null;
+    powFailuresTrendChart = null;
   };
 
   return {
@@ -579,6 +608,7 @@ export const create = (options = {}) => {
     updateMazeStats,
     updateMonitoringSummary,
     updatePrometheusHelper,
-    bindPrometheusCopyButtons
+    bindPrometheusCopyButtons,
+    destroy
   };
 };

@@ -7,7 +7,7 @@ export const CONFIG_DRAFT_DEFAULTS = Object.freeze({
   edgeMode: { mode: 'off' },
   rateLimit: { value: 80 },
   jsRequired: { enforced: true },
-  maze: { enabled: false, autoBan: false, threshold: 50 },
+  maze: { enabled: true, autoBan: true, threshold: 50 },
   banDurations: { honeypot: 86400, rateLimit: 3600, browser: 21600, cdp: 43200, admin: 21600 },
   pow: { enabled: true, difficulty: 15, ttl: 90, mutable: true },
   botness: {

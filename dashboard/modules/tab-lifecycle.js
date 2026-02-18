@@ -62,7 +62,8 @@ export const createTabLifecycleCoordinator = (options = {}) => {
 
   let activeTab = DEFAULT_DASHBOARD_TAB;
   let initialized = false;
-  let unbindFns = [];
+  const cleanupFns = [];
+  let hashChangeHandler = null;
 
   const applyDomState = (tabName) => {
     const tab = normalizeTab(tabName);
@@ -187,7 +188,7 @@ export const createTabLifecycleCoordinator = (options = {}) => {
         event.preventDefault();
         activate(link.dataset.dashboardTabLink, 'click');
       };
-      const onKeydown = (event) => {
+      const onKeyDown = (event) => {
         if (event.key === 'ArrowRight') {
           event.preventDefault();
           focusByOffset(1);
@@ -203,10 +204,10 @@ export const createTabLifecycleCoordinator = (options = {}) => {
         }
       };
       link.addEventListener('click', onClick);
-      link.addEventListener('keydown', onKeydown);
-      unbindFns.push(() => {
+      link.addEventListener('keydown', onKeyDown);
+      cleanupFns.push(() => {
         link.removeEventListener('click', onClick);
-        link.removeEventListener('keydown', onKeydown);
+        link.removeEventListener('keydown', onKeyDown);
       });
     });
   };
@@ -217,23 +218,34 @@ export const createTabLifecycleCoordinator = (options = {}) => {
       controllers[tab].init({ tab });
     });
     bindLinkInteractions();
-    unbindFns.push(onHashChange(syncFromHash));
+    hashChangeHandler = () => syncFromHash();
+    window.addEventListener('hashchange', hashChangeHandler);
+    cleanupFns.push(() => {
+      if (hashChangeHandler) {
+        window.removeEventListener('hashchange', hashChangeHandler);
+      }
+      hashChangeHandler = null;
+    });
     initialized = true;
     syncFromHash();
-  };
-
-  const destroy = () => {
-    if (!initialized) return;
-    controllers[activeTab].unmount({ tab: activeTab, nextTab: null, reason: 'destroy' });
-    unbindFns.forEach((unbind) => unbind());
-    unbindFns = [];
-    initialized = false;
   };
 
   const refreshActive = async (context = {}) => controllers[activeTab].refresh({
     tab: activeTab,
     reason: context.reason || 'manual'
   });
+
+  const destroy = () => {
+    if (!initialized) return;
+    controllers[activeTab].unmount({ tab: activeTab, nextTab: null, reason: 'destroy' });
+    while (cleanupFns.length > 0) {
+      const cleanup = cleanupFns.pop();
+      try {
+        cleanup();
+      } catch (_e) {}
+    }
+    initialized = false;
+  };
 
   return {
     init,

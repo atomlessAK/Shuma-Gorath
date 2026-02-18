@@ -7,6 +7,13 @@ function authHeaders() {
   };
 }
 
+function adminHeaders() {
+  return {
+    ...authHeaders(),
+    ...forwardedHeaders("127.0.0.1")
+  };
+}
+
 function forwardedHeaders(ip) {
   const headers = {
     "X-Forwarded-For": ip
@@ -45,7 +52,7 @@ async function safeUnban(baseURL, ip) {
   try {
     await request(baseURL, `/admin/unban?ip=${encodeURIComponent(ip)}`, {
       method: "POST",
-      headers: authHeaders()
+      headers: adminHeaders()
     });
   } catch {
     // Best-effort cleanup for synthetic seed IPs.
@@ -62,7 +69,7 @@ async function seedDashboardData() {
   let restoreTestMode = false;
 
   const config = await request(baseURL, "/admin/config", {
-    headers: authHeaders()
+    headers: adminHeaders()
   });
   if (config && typeof config.test_mode === "boolean") {
     originalTestMode = config.test_mode;
@@ -73,7 +80,7 @@ async function seedDashboardData() {
     await request(baseURL, "/admin/config", {
       method: "POST",
       headers: {
-        ...authHeaders(),
+        ...adminHeaders(),
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ test_mode: false })
@@ -82,7 +89,7 @@ async function seedDashboardData() {
     await request(baseURL, "/admin/ban", {
       method: "POST",
       headers: {
-        ...authHeaders(),
+        ...adminHeaders(),
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
@@ -108,13 +115,13 @@ async function seedDashboardData() {
     await safeUnban(baseURL, cdpIp);
 
     await request(baseURL, "/admin/analytics", {
-      headers: authHeaders()
+      headers: adminHeaders()
     });
     await request(baseURL, "/admin/events?hours=24", {
-      headers: authHeaders()
+      headers: adminHeaders()
     });
     const events = await request(baseURL, "/admin/events?hours=24", {
-      headers: authHeaders()
+      headers: adminHeaders()
     });
 
     if (!events || !Array.isArray(events.recent_events) || events.recent_events.length === 0) {
@@ -131,7 +138,7 @@ async function seedDashboardData() {
       await request(baseURL, "/admin/config", {
         method: "POST",
         headers: {
-          ...authHeaders(),
+          ...adminHeaders(),
           "Content-Type": "application/json"
         },
         body: JSON.stringify({ test_mode: originalTestMode })

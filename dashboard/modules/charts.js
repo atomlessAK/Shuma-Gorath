@@ -8,6 +8,7 @@ let timeSeriesChart = null;
 let currentTimeRange = 'hour';
 let getAdminContext = null;
 let apiClient = null;
+const timeRangeButtonHandlers = [];
 
 const CHART_PALETTE = [
   'rgb(255,205,235)',
@@ -159,12 +160,21 @@ export const init = (options = {}) => {
     });
   }
 
+  while (timeRangeButtonHandlers.length > 0) {
+    const cleanup = timeRangeButtonHandlers.pop();
+    cleanup();
+  }
+
   document.querySelectorAll('.time-btn').forEach((button) => {
-    button.addEventListener('click', () => {
+    const onClick = () => {
       document.querySelectorAll('.time-btn').forEach((entry) => entry.classList.remove('active'));
       button.classList.add('active');
       currentTimeRange = button.dataset.range || 'hour';
       updateTimeSeriesChart();
+    };
+    button.addEventListener('click', onClick);
+    timeRangeButtonHandlers.push(() => {
+      button.removeEventListener('click', onClick);
     });
   });
 };
@@ -240,4 +250,25 @@ export const updateTimeSeriesChart = () => {
       timeSeriesChart.update();
     })
     .catch((err) => console.error('Failed to update time series:', err));
+};
+
+export const destroy = () => {
+  while (timeRangeButtonHandlers.length > 0) {
+    const cleanup = timeRangeButtonHandlers.pop();
+    cleanup();
+  }
+  if (eventTypesChart && typeof eventTypesChart.destroy === 'function') {
+    eventTypesChart.destroy();
+  }
+  if (topIpsChart && typeof topIpsChart.destroy === 'function') {
+    topIpsChart.destroy();
+  }
+  if (timeSeriesChart && typeof timeSeriesChart.destroy === 'function') {
+    timeSeriesChart.destroy();
+  }
+  eventTypesChart = null;
+  topIpsChart = null;
+  timeSeriesChart = null;
+  getAdminContext = null;
+  apiClient = null;
 };

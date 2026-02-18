@@ -80,17 +80,14 @@ cleanup_integration_state() {
   fi
 
   if [[ -n "${ORIGINAL_CONFIG_RESTORE_PAYLOAD:-}" ]]; then
-    curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -X POST \
-      -H "Authorization: Bearer $SHUMA_API_KEY" \
+    curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST \
       -H "Content-Type: application/json" \
       -d "${ORIGINAL_CONFIG_RESTORE_PAYLOAD}" \
       "$BASE_URL/admin/config" > /dev/null || true
   fi
 
   for ip in "${TEST_CLEANUP_IPS[@]}"; do
-    curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" \
-      -H "Authorization: Bearer $SHUMA_API_KEY" \
-      -X POST \
+    curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST \
       "$BASE_URL/admin/unban?ip=${ip}" > /dev/null || true
   done
 }
@@ -149,6 +146,12 @@ if [[ -n "${SHUMA_HEALTH_SECRET:-}" ]]; then
   HEALTH_SECRET_HEADER=(-H "X-Shuma-Health-Secret: ${SHUMA_HEALTH_SECRET}")
 fi
 
+ADMIN_REQUEST_HEADERS=(
+  "${FORWARDED_SECRET_HEADER[@]}"
+  -H "X-Forwarded-For: 127.0.0.1"
+  -H "Authorization: Bearer $SHUMA_API_KEY"
+)
+
 # Test 1: Health check
 info "Testing /health endpoint..."
 
@@ -162,36 +165,31 @@ fi
 
 # Preflight: normalize runtime config so tests are deterministic
 info "Resetting test_mode=false before integration scenarios..."
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -X POST \
-  -H "Authorization: Bearer $SHUMA_API_KEY" \
+curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST \
   -H "Content-Type: application/json" \
   -d '{"test_mode": false, "honeypot_enabled": true}' \
   "$BASE_URL/admin/config" > /dev/null || true
 
 info "Resetting GEO policy lists to empty defaults..."
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -X POST \
-  -H "Authorization: Bearer $SHUMA_API_KEY" \
+curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST \
   -H "Content-Type: application/json" \
   -d '{"geo_risk":[],"geo_allow":[],"geo_challenge":[],"geo_maze":[],"geo_block":[]}' \
   "$BASE_URL/admin/config" > /dev/null || true
 
 info "Resetting whitelist/path whitelist to empty defaults..."
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -X POST \
-  -H "Authorization: Bearer $SHUMA_API_KEY" \
+curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST \
   -H "Content-Type: application/json" \
   -d '{"whitelist":[],"path_whitelist":[]}' \
   "$BASE_URL/admin/config" > /dev/null || true
 
 info "Clearing bans for integration test IPs..."
 for ip in "${TEST_CLEANUP_IPS[@]}"; do
-  curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" \
-    -H "Authorization: Bearer $SHUMA_API_KEY" \
-    -X POST \
+  curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST \
     "$BASE_URL/admin/unban?ip=${ip}" > /dev/null || true
 done
 
 info "Resolving configured honeypot path..."
-config_snapshot=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/config")
+config_snapshot=$(curl -s "${ADMIN_REQUEST_HEADERS[@]}" "$BASE_URL/admin/config")
 snapshot_payload_and_path=$(python3 -c 'import json,sys
 try:
     data=json.loads(sys.stdin.read())
@@ -323,7 +321,7 @@ fi
 
 # Test 5: Unban integration test IP via admin API
 info "Testing admin unban for integration test IP..."
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -X POST "$BASE_URL/admin/unban?ip=${TEST_HONEYPOT_IP}" -H "Authorization: Bearer $SHUMA_API_KEY" > /dev/null
+curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST "$BASE_URL/admin/unban?ip=${TEST_HONEYPOT_IP}" > /dev/null
 resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: ${TEST_HONEYPOT_IP}" "$BASE_URL/")
 if ! echo "$resp" | grep -q 'Access Blocked'; then
   pass "Unban for integration test IP works"
@@ -341,7 +339,7 @@ fi
 
 # Test 7: Get config via admin API
 info "Testing GET /admin/config..."
-config_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/config")
+config_resp=$(curl -s "${ADMIN_REQUEST_HEADERS[@]}" "$BASE_URL/admin/config")
 if echo "$config_resp" | grep -q '"test_mode"'; then
   pass "GET /admin/config returns test_mode field"
 else
@@ -351,7 +349,7 @@ fi
 
 # Test 8: Enable test mode
 info "Testing POST /admin/config to enable test_mode..."
-enable_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $SHUMA_API_KEY" -H "Content-Type: application/json" \
+enable_resp=$(curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST -H "Content-Type: application/json" \
   -d '{"test_mode": true}' "$BASE_URL/admin/config")
 if echo "$enable_resp" | grep -q '"test_mode":true'; then
   pass "POST /admin/config enables test_mode"
@@ -425,7 +423,7 @@ fi
 # Test 10: Test mode allows honeypot access without blocking
 info "Testing test_mode behavior (honeypot should not block)..."
 # First, unban the test IP to ensure clean state
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" -X POST "$BASE_URL/admin/unban?ip=10.0.0.99" > /dev/null
+curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST "$BASE_URL/admin/unban?ip=10.0.0.99" > /dev/null
 # Hit honeypot with test IP
 honeypot_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 10.0.0.99" "$BASE_URL$HONEYPOT_PATH")
 if echo "$honeypot_resp" | grep -q 'TEST MODE'; then
@@ -446,7 +444,7 @@ fi
 
 # Test 11: Disable test mode and verify blocking resumes
 info "Testing POST /admin/config to disable test_mode..."
-disable_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $SHUMA_API_KEY" -H "Content-Type: application/json" \
+disable_resp=$(curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST -H "Content-Type: application/json" \
   -d '{"test_mode": false}' "$BASE_URL/admin/config")
 if echo "$disable_resp" | grep -q '"test_mode":false'; then
   pass "POST /admin/config disables test_mode"
@@ -458,7 +456,7 @@ fi
 # Test 12: Verify blocking works again after test mode disabled
 info "Testing that blocking resumes after test_mode disabled..."
 # Unban first to get clean state
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" -X POST "$BASE_URL/admin/unban?ip=10.0.0.100" > /dev/null
+curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST "$BASE_URL/admin/unban?ip=10.0.0.100" > /dev/null
 # Hit honeypot - should now actually ban
 curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 10.0.0.100" "$BASE_URL$HONEYPOT_PATH" > /dev/null
 block_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 10.0.0.100" "$BASE_URL/")
@@ -470,16 +468,16 @@ else
 fi
 
 # Cleanup: unban test IPs
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" -X POST "$BASE_URL/admin/unban?ip=10.0.0.99" > /dev/null
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" -X POST "$BASE_URL/admin/unban?ip=10.0.0.100" > /dev/null
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" -X POST "$BASE_URL/admin/unban?ip=10.0.0.150" > /dev/null
+curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST "$BASE_URL/admin/unban?ip=10.0.0.99" > /dev/null
+curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST "$BASE_URL/admin/unban?ip=10.0.0.100" > /dev/null
+curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST "$BASE_URL/admin/unban?ip=10.0.0.150" > /dev/null
 
 # Test 13-15: GEO policy routing (requires trusted forwarded headers)
 if [[ -z "${SHUMA_FORWARDED_IP_SECRET:-}" ]]; then
   info "Skipping GEO policy routing tests (SHUMA_FORWARDED_IP_SECRET is not set)"
 else
   info "Testing GEO policy route: challenge tier..."
-  geo_challenge_cfg=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $SHUMA_API_KEY" -H "Content-Type: application/json" \
+  geo_challenge_cfg=$(curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST -H "Content-Type: application/json" \
     -d '{"geo_risk":[],"geo_allow":[],"geo_challenge":["BR"],"geo_maze":[],"geo_block":[]}' "$BASE_URL/admin/config")
   if ! echo "$geo_challenge_cfg" | grep -q '"geo_challenge":\["BR"\]'; then
     fail "Failed to apply GEO challenge policy config"
@@ -495,7 +493,7 @@ else
   fi
 
   info "Testing GEO policy route: maze tier..."
-  geo_maze_cfg=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $SHUMA_API_KEY" -H "Content-Type: application/json" \
+  geo_maze_cfg=$(curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST -H "Content-Type: application/json" \
     -d '{"geo_risk":[],"geo_allow":[],"geo_challenge":[],"geo_maze":["RU"],"geo_block":[],"maze_enabled":true,"maze_auto_ban":false}' "$BASE_URL/admin/config")
   if ! echo "$geo_maze_cfg" | grep -q '"geo_maze":\["RU"\]'; then
     fail "Failed to apply GEO maze policy config"
@@ -511,7 +509,7 @@ else
   fi
 
   info "Testing GEO policy route: block tier..."
-  geo_block_cfg=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $SHUMA_API_KEY" -H "Content-Type: application/json" \
+  geo_block_cfg=$(curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST -H "Content-Type: application/json" \
     -d '{"geo_risk":[],"geo_allow":[],"geo_challenge":[],"geo_maze":[],"geo_block":["KP"]}' "$BASE_URL/admin/config")
   if ! echo "$geo_block_cfg" | grep -q '"geo_block":\["KP"\]'; then
     fail "Failed to apply GEO block policy config"
@@ -530,7 +528,7 @@ else
   fi
 
   info "Resetting GEO policy lists after routing tests..."
-  curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $SHUMA_API_KEY" -H "Content-Type: application/json" \
+  curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST -H "Content-Type: application/json" \
     -d '{"geo_risk":[],"geo_allow":[],"geo_challenge":[],"geo_maze":[],"geo_block":[]}' "$BASE_URL/admin/config" > /dev/null || true
 
   info "Testing legacy explicit maze/trap path rejection..."
@@ -589,7 +587,7 @@ fi
 
 # Test 19: CDP config available via admin API
 info "Testing CDP config in /admin/cdp..."
-cdp_config=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/cdp")
+cdp_config=$(curl -s "${ADMIN_REQUEST_HEADERS[@]}" "$BASE_URL/admin/cdp")
 if echo "$cdp_config" | grep -qE '"enabled"|cdp_detection'; then
   pass "/admin/cdp returns CDP configuration"
 else
@@ -599,7 +597,7 @@ fi
 
 # Test 20: CDP stats counters reflect reports
 info "Testing CDP stats counters..."
-cdp_stats_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/cdp")
+cdp_stats_resp=$(curl -s "${ADMIN_REQUEST_HEADERS[@]}" "$BASE_URL/admin/cdp")
 cdp_total_detections=$(python3 -c 'import json,sys; d=json.loads(sys.stdin.read()); print(int(d.get("stats",{}).get("total_detections",0)))' <<< "$cdp_stats_resp")
 cdp_total_autobans=$(python3 -c 'import json,sys; d=json.loads(sys.stdin.read()); print(int(d.get("stats",{}).get("auto_bans",0)))' <<< "$cdp_stats_resp")
 if [[ "$cdp_total_detections" -ge 2 ]] && [[ "$cdp_total_autobans" -ge 1 ]]; then
@@ -611,7 +609,7 @@ fi
 
 # Test 21: Consolidated monitoring summary endpoint
 info "Testing monitoring summary endpoint..."
-monitoring_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/monitoring?hours=24&limit=5")
+monitoring_resp=$(curl -s "${ADMIN_REQUEST_HEADERS[@]}" "$BASE_URL/admin/monitoring?hours=24&limit=5")
 monitoring_shape_ok=$(python3 -c 'import json,sys
 try:
     data=json.loads(sys.stdin.read())
@@ -634,9 +632,9 @@ fi
 # Test 22: unban_ip function works via admin endpoint
 info "Testing unban functionality..."
 # First ban an IP
-curl -s "${FORWARDED_SECRET_HEADER[@]}" -X POST -H "Authorization: Bearer $SHUMA_API_KEY" "$BASE_URL/admin/ban?ip=10.0.0.202&reason=test" > /dev/null
+curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST "$BASE_URL/admin/ban?ip=10.0.0.202&reason=test" > /dev/null
 # Then unban it
-unban_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" -X POST "$BASE_URL/admin/unban?ip=10.0.0.202")
+unban_resp=$(curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST "$BASE_URL/admin/unban?ip=10.0.0.202")
 if echo "$unban_resp" | grep -qi 'unbanned'; then
   pass "Unban via admin API works correctly"
 else
@@ -646,8 +644,7 @@ fi
 
 # Test 23: External fingerprint advisory mode should not immediately ban on strong edge report
 info "Testing external fingerprint advisory precedence..."
-fingerprint_advisory_cfg=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -X POST \
-  -H "Authorization: Bearer $SHUMA_API_KEY" \
+fingerprint_advisory_cfg=$(curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST \
   -H "Content-Type: application/json" \
   -d '{"provider_backends":{"fingerprint_signal":"external"},"edge_integration_mode":"advisory","cdp_detection_enabled":true,"cdp_auto_ban":true}' \
   "$BASE_URL/admin/config")
@@ -655,7 +652,7 @@ if ! echo "$fingerprint_advisory_cfg" | grep -q '"status":"updated"'; then
   fail "Failed to apply external fingerprint advisory config"
   echo -e "${YELLOW}DEBUG advisory config:${NC} $fingerprint_advisory_cfg"
 else
-  curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" -X POST "$BASE_URL/admin/unban?ip=10.0.0.230" > /dev/null
+  curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST "$BASE_URL/admin/unban?ip=10.0.0.230" > /dev/null
   edge_report='{"bot_score":99.0,"action":"deny","detection_ids":["bm_automation"],"tags":["ja3_mismatch"]}'
   advisory_edge_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 10.0.0.230" -X POST \
     -H "Content-Type: application/json" \
@@ -680,8 +677,7 @@ fi
 
 # Test 24: External fingerprint authoritative mode should enforce strong edge bans
 info "Testing external fingerprint authoritative precedence..."
-fingerprint_authoritative_cfg=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -X POST \
-  -H "Authorization: Bearer $SHUMA_API_KEY" \
+fingerprint_authoritative_cfg=$(curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST \
   -H "Content-Type: application/json" \
   -d '{"provider_backends":{"fingerprint_signal":"external"},"edge_integration_mode":"authoritative","cdp_detection_enabled":true,"cdp_auto_ban":true}' \
   "$BASE_URL/admin/config")
@@ -689,7 +685,7 @@ if ! echo "$fingerprint_authoritative_cfg" | grep -q '"status":"updated"'; then
   fail "Failed to apply external fingerprint authoritative config"
   echo -e "${YELLOW}DEBUG authoritative config:${NC} $fingerprint_authoritative_cfg"
 else
-  curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" -X POST "$BASE_URL/admin/unban?ip=10.0.0.231" > /dev/null
+  curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST "$BASE_URL/admin/unban?ip=10.0.0.231" > /dev/null
   edge_report='{"bot_score":99.0,"action":"deny","detection_ids":["bm_automation"],"tags":["ja3_mismatch"]}'
   authoritative_edge_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 10.0.0.231" -X POST \
     -H "Content-Type: application/json" \
@@ -711,8 +707,7 @@ fi
 
 # Test 25: External rate limiter missing backend explicitly downgrades to internal behavior
 info "Testing external rate limiter downgrade-to-internal behavior..."
-rate_fallback_cfg=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -X POST \
-  -H "Authorization: Bearer $SHUMA_API_KEY" \
+rate_fallback_cfg=$(curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST \
   -H "Content-Type: application/json" \
   -d '{"provider_backends":{"rate_limiter":"external"},"edge_integration_mode":"advisory","rate_limit":1}' \
   "$BASE_URL/admin/config")
@@ -730,7 +725,7 @@ print(provider.get("rate_limiter",""))' <<< "$rate_fallback_cfg")
     echo -e "${YELLOW}DEBUG rate fallback config:${NC} $rate_fallback_cfg"
   fi
 
-  curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "Authorization: Bearer $SHUMA_API_KEY" -X POST "$BASE_URL/admin/unban?ip=10.0.0.232" > /dev/null
+  curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST "$BASE_URL/admin/unban?ip=10.0.0.232" > /dev/null
   rate_first=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 10.0.0.232" "$BASE_URL/")
   rate_second=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 10.0.0.232" "$BASE_URL/")
   if echo "$rate_second" | grep -qE 'Rate Limit Exceeded|Access Blocked'; then

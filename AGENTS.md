@@ -36,7 +36,10 @@ This file provides instructions for coding agents working in this repository.
    - `make test-unit`, `make test-integration`, and `make test-dashboard-e2e` for focused reruns,
    - `make build` for release build verification,
    - `make setup`/`make verify` when environment/bootstrap behavior is touched.
-   Direct ad-hoc tool invocations (for example `cargo test`, `cargo build`, `spin up`) are not the canonical verification path for normal contributor/agent workflow.
+   Makefile targets are the single source of truth for setup/build/test/deploy workflows.
+   Direct ad-hoc tool invocations (for example `cargo test`, `cargo build`, `corepack pnpm run ...`, `playwright test`, `node e2e/...`, `spin up`) are not the canonical path for normal contributor/agent workflow.
+   If a required workflow is missing from `Makefile`, add/update the target first, then run it via `make` (do not bypass and "fix later").
+   Keep docs/PR notes/user guidance aligned to `make` commands so contributors follow one documented path.
    For `make test`, integration and dashboard e2e tests are mandatory and must not be skipped: start Spin first with `make dev` (separate terminal/session), then run `make test`.
    Exception: if a change is documentation-only (`*.md` and no behavior/config/runtime code changes), do not run tests; document that verification was intentionally skipped because the slice is docs-only.
 8. Before reporting completion, confirm relevant CI status (or state explicitly that CI is pending/unverified).

@@ -5,14 +5,17 @@
   "description": "Dashboard e2e smoke tests for Shuma-Gorath",
   "packageManager": "pnpm@10.5.2",
   "scripts": {
+    "build:dashboard": "cd dashboard && ../node_modules/.bin/vite build",
     "seed:dashboard:e2e": "node e2e/seed-dashboard-data.js",
     "test:dashboard:unit": "node --test e2e/dashboard.modules.unit.test.js",
-    "test:dashboard:e2e": "pnpm run test:dashboard:unit && node e2e/seed-dashboard-data.js && playwright test --config=playwright.config.mjs"
+    "test:dashboard:e2e": "playwright test --config=playwright.config.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "1.51.1"
-  },
-  "dependencies": {
-    "lit": "3.2.1"
+    "@playwright/test": "1.51.1",
+    "@sveltejs/adapter-static": "^3.0.0",
+    "@sveltejs/kit": "^2.0.0",
+    "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "svelte": "^5.0.0",
+    "vite": "^6.0.0"
   }
 }

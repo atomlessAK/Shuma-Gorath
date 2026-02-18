@@ -1,6 +1,6 @@
 # TODO Roadmap
 
-Last updated: 2026-02-17
+Last updated: 2026-02-18
 
 This is the active work queue.
 `todos/security-review.md` tracks security finding validity and closure status.
@@ -8,6 +8,10 @@ Completed items are archived in `todos/completed-todo-history.md`.
 
 ## Direction Snapshot (for next implementation stages)
 - [ ] Follow internal-first delivery policy: harden Shuma-native capability paths before completing external-provider parity for the same capability; use enterprise/Akamai patterns to inform design, not as baseline dependencies.
+
+## P0 Priority Override (Highest Priority Queue)
+- [x] Complete the remaining SvelteKit migration work (`DSH-SVLT-NEXT1.*`, `DSH-SVLT-NEXT2.*`, `DSH-SVLT-NEXT3.*`, `DSH-SVLT-TEST1.*`, `DSH-SVLT-TEST2.*`) before non-critical roadmap work.
+- [x] Treat all non-blocking research/backlog items below as lower priority until the Svelte-native dashboard path replaces the bridge path.
 
 ## P1 Research Dossiers (Paper-by-Paper TODOs)
 Completion rule for every paper TODO below: capture key findings, map to `self_hosted_minimal` vs `enterprise_akamai` ownership, and propose concrete Shuma TODO updates.
@@ -141,7 +145,7 @@ Implementation rule: when internal feature work touches provider-managed capabil
 - [ ] Evaluate renaming `SHUMA_CHALLENGE_PUZZLE_RISK_THRESHOLD` to `SHUMA_BOTNESS_CHALLENGE_PUZZLE_THRESHOLD` to reflect botness semantics.
 - [ ] Standardize terminology across code/UI/docs so `honeypot` and `maze` are used consistently instead of interchangeably.
 - [ ] Initialize Ban IP pane duration controls from the current Admin Manual Ban default duration so Ban IP and Ban Durations panes stay consistent.
-- [ ] Dashboard modernization now follows full Lit cutover (`DSH-LIT-*`) after framework-adoption gate trigger; remove remaining frameworkless-first assumptions from active docs as migration lands.
+- [x] Dashboard modernization now follows SvelteKit full cutover (`DSH-SVLT-*`) with static adapter output served via Spin (`dist/dashboard`), superseding the prior framework migration direction.
 - [ ] Document setup-time config bootstrapping clearly: how `make setup` creates/populates local env, how env-only vars are sourced, and how KV defaults are seeded and later overridden.
 - [ ] Long-term option: integrate upstream identity/proxy auth (OIDC/SAML) for dashboard/admin instead of app-level key login.
 
@@ -163,73 +167,44 @@ Implementation rule: when internal feature work touches provider-managed capabil
 - [ ] MON-TEL-7 Add tests for telemetry correctness and dashboard rendering states (empty/loading/error/data) for each new monitoring section, including cardinality guardrails and retention-window behavior.
 - [ ] MON-TEL-7.a Extend dashboard automated tests to assert new monitoring cards/tables/charts across empty/loading/error/data states, not just adapter contracts.
 
-### P3 Dashboard Lit Full Cutover (All Tabs, Excellence Architecture)
-Reference plan: `docs/plans/2026-02-17-dashboard-lit-full-cutover.md`
+### P1 Dashboard SvelteKit Excellence Round 2 (Architecture + Performance)
+- [x] DSH-SVLT-EX8 Continue shrinking the `dashboard/dashboard.js` hotspot by extracting config-dirty orchestration and save-check wiring into `dashboard/src/lib/runtime/*` with typed capability contracts.
+- [x] DSH-SVLT-EX9 Reduce native Monitoring-tab auto-refresh fan-out by removing redundant request paths and documenting the bounded request budget per refresh cycle.
+- [x] DSH-SVLT-EX10 Upgrade runtime telemetry aggregation from unbounded lifetime averages to bounded rolling windows (for example last `N` samples + p95) with deterministic reset semantics.
+- [x] DSH-SVLT-EX11 Add repeated remount stress coverage (multiple navigate-away/back loops) that asserts no timer/listener/request duplication over time.
+- [x] DSH-SVLT-EX12 Remove remaining direct DOM/window reads from action pipelines (redirect path, focus target lookup) by routing them through effect adapters for stricter testability.
 
-#### Decision and migration guardrails
-- [x] DSH-LIT-R0 Convert the latest dashboard review findings into a sequenced Lit full-cutover backlog with explicit architecture targets, no-compat pre-launch assumptions, and verification gates.
-- [x] DSH-LIT-R1 Record gate-trigger evidence and supersede frameworkless-first decision text in dashboard planning docs, including rationale for full cutover across all tabs.
-- [x] DSH-LIT-R2 Define hard cutover constraints: single Lit app entrypoint, no long-lived dual-wiring, and explicit legacy module-removal completion criteria.
+### P1 Dashboard SvelteKit Excellence Round 4 (Native Decoupling + Perf Hardening)
+- [ ] DSH-SVLT-EX18 Remove `dashboard/dashboard.js` from the native runtime refresh path by moving remaining tab-refresh/session orchestration into `dashboard/src/lib/runtime/*` modules with explicit typed contracts.
+- [ ] DSH-SVLT-EX19 Implement and consume a consolidated Monitoring data contract for manual/native refresh cycles (close `MON-TEL-4` alignment) so Monitoring detail updates avoid multi-endpoint fan-out.
+- [ ] DSH-SVLT-EX20 Replace global chart runtime script dependency with a module-scoped chart adapter lifecycle (lazy import + singleton guard + teardown) to minimize global side effects.
+- [ ] DSH-SVLT-EX21 Add no-flicker Monitoring auto-refresh coverage (no placeholder reset on auto cycles, bounded table patch churn assertions) in dashboard smoke + module tests.
+- [ ] DSH-SVLT-EX22 Add native remount/refresh soak performance gate (bounded fetch/render p95 + stable polling cadence across repeated mount loops) and wire into Make/CI reporting.
 
-#### Lit runtime and platform foundations
-- [x] DSH-LIT-DEP1 Add pinned Lit runtime loading strategy suitable for no-build-step deployment (local vendored ESM + integrity/provenance notes; no runtime CDN dependency).
-- [x] DSH-LIT-APP1 Introduce root `<shuma-dashboard-app>` Lit component as the only dashboard boot surface (routing, tab shell, auth/session gate, refresh lifecycle wiring).
-- [x] DSH-LIT-APP2 Move all module-scope event wiring into explicit component lifecycle hooks (`connectedCallback`/`disconnectedCallback`) to eliminate parse-time side effects.
-- [x] DSH-LIT-APP3 Replace global coordinator responsibilities with explicit feature controllers mounted through the app shell (monitoring, ip-bans, status, config, tuning).
+### P0 Branch Handoff (dashboard-sveltekit-port -> main)
+- [x] HND-SVLT-1 Resume from branch `codex/dashboard-sveltekit-port` at commit `979fa2f` (with `c7291e5` included immediately before it in branch history).
+  - Completed on branch `codex/dashboard-sveltekit-port`; current tip is `86b42bf` (contains remount fan-out test stabilization).
+- [x] HND-SVLT-2 In an unrestricted shell, run canonical verification only through Makefile paths:
+  - terminal A: `make dev`
+  - terminal B: `make test`
+  - required outcome: Rust unit + maze benchmark + integration + dashboard e2e all green.
+  - Completed on 2026-02-18 after commit `86b42bf`; `make test` passed end-to-end (including dashboard e2e).
+- [x] HND-SVLT-3 If verification is green, open/update PR from `codex/dashboard-sveltekit-port` into `main` and include:
+  - SvelteKit migration summary (hard cutover with no archived legacy fallback assets),
+  - Makefile-only workflow enforcement updates (`AGENTS.md`, `CONTRIBUTING.md`, `Makefile`),
+  - dashboard runtime/perf guardrails (`e2e` remount fan-out + bundle budget gate).
+  - Completed on 2026-02-18: PR opened as `https://github.com/atomless/Shuma-Gorath/pull/1` with required handoff summary.
+  - DNS troubleshooting outcome in Codex runtime: resolved (`curl -I https://api.github.com` returned `HTTP/2 200`; `gh api rate_limit` succeeded).
+  - Current readiness state after merge-forward fixes pushed at `7b06525`: PR is `mergeable=MERGEABLE`, `mergeStateStatus=UNSTABLE` (checks in progress), with CI + CodeQL + dashboard-e2e jobs now reporting on branch `codex/dashboard-sveltekit-port`.
+- [ ] HND-SVLT-4 Merge to `main` after CI is green; then continue Round 4 items (`DSH-SVLT-EX18..EX22`) on a fresh `codex/*` branch.
+  - In progress on 2026-02-18: branch merged `origin/main` locally and resolved immediate dashboard regressions (`refreshAllDirtySections` restore, tab lifecycle duplicate destroy removal, dirty-state default for maze save button, export guardrail update).
+  - Remaining before merge: complete clean `make test` run including dashboard Playwright smoke, push latest fixes to PR `#1`, and confirm GitHub Actions status is green.
 
-#### State, effects, and data flow architecture
-- [ ] DSH-LIT-STATE1 Add centralized immutable dashboard store (`state + reducer + action creators + selectors`) and remove ad-hoc mutable orchestration globals.
-- [x] DSH-LIT-STATE1.a Exported canonical state action creators/selectors from `dashboard/modules/dashboard-state.js` and covered reducer/selectors behavior in module unit tests.
-- [ ] DSH-LIT-STATE2 Move all API and side effects into explicit service/effect adapters (network, timers, clipboard, history/hash) injected into feature controllers/components.
-- [x] DSH-LIT-STATE2.a Added hash/history/animation-frame effect adapters in `runtime-effects` and routed tab lifecycle through injected effects instead of direct `window` access.
-- [ ] DSH-LIT-STATE3 Replace broad `refreshCoreActionButtonsState()` fan-out with selector-driven recomputation scoped to affected controls/sections only.
-- [x] DSH-LIT-STATE3.a Removed broad dirty-check fan-out and introduced tab/section-scoped dirty recomputation (`DIRTY_SECTIONS_BY_TAB` + targeted input-triggered refresh paths).
-- [x] DSH-LIT-STATE3.b Made validation interaction callbacks field-aware (`onFieldInteraction(fieldId)`) and routed dirty/action recomputation through field-scoped selectors.
-- [ ] DSH-LIT-STATE4 Remove wrapper/null-guard bridge functions caused by init-order coupling by making init order explicit in app shell lifecycle.
-- [x] DSH-LIT-STATE4.a Removed null-guard bridge wrappers around validation/duration helpers and now rely on explicit initialization order.
-
-#### Config domain redesign (addresses `config-controls.js` + `config-ui-state.js` review findings)
-- [ ] DSH-LIT-CFG1 Replace procedural config save handlers with a declarative save registry (`buttonId`, validator set, patch builder, draft key, success reducer, post-save hooks).
-- [ ] DSH-LIT-CFG2 Build a generic config save pipeline from the registry (`authorize -> validate -> save -> commit draft -> emit UI status`) and remove duplicated handler flow code.
-- [ ] DSH-LIT-CFG3 Replace monolithic config response->DOM updater logic with declarative config-to-form binding specs + coercion adapters.
-- [x] DSH-LIT-CFG1.a Replaced per-button procedural save handlers in `dashboard/modules/config-controls.js` with a registry-driven save spec list.
-- [x] DSH-LIT-CFG2.a Added a single generic save pipeline (`prepare -> patch -> save -> success/error handlers`) and covered it with module tests.
-- [x] DSH-LIT-CFG3.a Introduced declarative control-binding helpers in `dashboard/modules/config-ui-state.js` and moved section hydration onto binding specs.
-- [ ] DSH-LIT-CFG4 Split Config tab into section-scoped Lit components (maze, robots+ai-policy, geo, honeypot, browser policy, bypass lists, challenge+pow, botness, cdp, edge mode, advanced patch editor).
-- [ ] DSH-LIT-CFG5 Implement section-local dirty state selectors and save-button enablement; remove whole-page dirty rechecks on every field input.
-- [ ] DSH-LIT-CFG6 Keep shared schema as single source of truth for writable paths, section grouping, defaults, coercions, validation bounds, and status meaning references.
-
-#### Status and inventory redesign
-- [ ] DSH-LIT-STS1 Split status module into domain state/classification data and Lit rendering components; remove mixed state/render responsibilities from one module.
-- [ ] DSH-LIT-STS2 Render runtime variable inventory with declarative Lit templates (no string-built nested `innerHTML` tables) and preserve grouped table semantics.
-- [ ] DSH-LIT-STS3 Keep admin-write highlighting and meaning metadata centralized in shared schema/data modules to avoid drift with Config tab.
-- [x] DSH-LIT-STS1.a Extracted status rendering into `dashboard/modules/status-view.js` so `dashboard/modules/status.js` now owns state/classification while view rendering is isolated.
-
-#### Rendering and component system excellence
-- [ ] DSH-LIT-UI1 Replace remaining string-template `innerHTML` rendering in dashboard modules with Lit templates/directives (`repeat`, keyed rows, conditionals).
-- [ ] DSH-LIT-UI2 Add shared presentational primitives (stat cards, offender card, table shell, empty/loading/error state blocks, form field rows) used across all tabs.
-- [ ] DSH-LIT-UI3 Enforce safe rendering rules: no unvetted `unsafeHTML`, no manual HTML concatenation paths for data-bearing UI, and centralized escaping/formatting utilities where text conversion is required.
-- [x] DSH-LIT-UI3.a Replaced status runtime-variable inventory string-concatenation rendering with explicit DOM node construction in `status-view`.
-
-#### Full-tab Lit migration (all-in scope, not monitoring-only)
-- [ ] DSH-LIT-TAB1 Migrate Monitoring tab completely to Lit components, preserving chart/event behavior contracts and telemetry helper UX.
-- [ ] DSH-LIT-TAB2 Migrate IP Bans tab completely to Lit components, including quick-unban interactions and detail expansion behavior.
-- [ ] DSH-LIT-TAB3 Migrate Status tab completely to Lit components, including feature-status cards and runtime variable inventory.
-- [ ] DSH-LIT-TAB4 Migrate Config tab completely to Lit components using the new config registry/binding architecture.
-- [ ] DSH-LIT-TAB5 Migrate Tuning tab completely to Lit components and align its controls with the same state/save architecture as Config.
-
-#### Legacy removal and hard cutover completion
-- [ ] DSH-LIT-CUT1 Switch `dashboard/index.html` to Lit app entrypoint only and remove old imperative bootstrap path once parity gates pass.
-- [ ] DSH-LIT-CUT2 Remove or archive superseded modules (`dashboard.js` orchestration remnants and obsolete procedural helpers) with no dead code left.
-- [ ] DSH-LIT-CUT3 Add static guards that fail CI on prohibited legacy patterns in dashboard code (`innerHTML` data rendering, module-scope event binding, direct DOM query storm patterns).
-
-#### Verification, quality gates, and docs
-- [ ] DSH-LIT-TEST1 Add unit coverage for store reducer/selectors, config save registry pipeline, config binding spec coercion, and status classification logic.
-- [ ] DSH-LIT-TEST2 Add component-level tests for each tab’s Lit components (render, state transitions, loading/empty/error/data, and interaction events).
-- [ ] DSH-LIT-TEST3 Expand Playwright e2e contracts to assert full-tab parity after Lit cutover (hash routes, keyboard nav, auth/session, save flows, monitoring interactions, logout).
-- [ ] DSH-LIT-TEST4 Keep canonical verification discipline per slice (`make test` with Spin running + `make build`) and fail migration slices that reduce test coverage.
-- [ ] DSH-LIT-DOC1 Update public docs (`README.md`, `docs/dashboard.md`, `docs/testing.md`) and contributor docs with Lit architecture, component boundaries, and maintenance guidance.
-- [ ] DSH-LIT-DOC2 Publish a final post-cutover no-net-behavior audit documenting intentional deltas and rollback strategy.
+#### Next Session Pickup Point (SvelteKit)
+- Start in `/Users/jamestindall/Projects/Shuma-Gorath/.worktrees/dashboard-sveltekit` on branch `codex/dashboard-sveltekit-port` at merge-forward commit `f76bb6c` plus local unstaged fixes.
+- First objective: complete `HND-SVLT-4` by finishing clean `make test` (including dashboard Playwright smoke) and pushing current regression fixes to PR `https://github.com/atomless/Shuma-Gorath/pull/1`.
+- Second objective: confirm PR `#1` mergeability/checks are green, then merge to `main`.
+- After merge: create a fresh `codex/*` branch and begin Round 4 tasks at `DSH-SVLT-EX18`.
 
 ## Recurring Quality Gates
 - [ ] Keep unit, integration, e2e, and CI flows passing; clean up defunct tests quickly.

@@ -17,6 +17,9 @@
    - `make setup`/`make verify` when setup/bootstrap tooling changes.
    Notes:
    - `make test` requires Spin running (`make dev`) and fails if integration/e2e cannot run.
+   - Makefile is the single source of truth for setup/build/test/deploy; avoid direct command paths in normal workflow (`cargo ...`, `corepack pnpm run ...`, `playwright ...`, `node scripts/...`, `spin ...`).
+   - If you need a workflow that is not exposed in `Makefile`, add/update the Make target first and then execute it via `make`.
+   - Keep contributor docs, runbooks, and PR verification notes expressed as `make ...` commands to prevent fragmented workflows.
 3. Update docs for behavior/config/ops changes.
 4. Note security and operational implications.
 5. Consider human-visitor friction impact (challenge frequency, latency, UX impact).

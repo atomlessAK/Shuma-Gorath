@@ -77,7 +77,45 @@ else
     info "  Without cargo-watch, use 'make run' instead of 'make dev'"
 fi
 
-# 6b. Sanity check Makefile dev target
+# 7. Check Node.js
+if command -v node &> /dev/null; then
+    pass "Node.js installed: $(node --version)"
+else
+    fail "Node.js not installed (run: make setup)"
+fi
+
+# 8. Check corepack
+if command -v corepack &> /dev/null; then
+    pass "corepack installed: $(corepack --version)"
+else
+    fail "corepack not installed (run: make setup)"
+fi
+
+# 9. Check pnpm lockfile dependencies
+if command -v corepack &> /dev/null; then
+    corepack enable > /dev/null 2>&1 || true
+    if [[ -d node_modules/.pnpm ]] && [[ -e node_modules/svelte ]]; then
+        pass "pnpm dependencies installed from lockfile"
+    else
+        fail "pnpm dependencies missing (run: make setup)"
+    fi
+else
+    warn "Skipping pnpm dependency check (corepack unavailable)"
+fi
+
+# 10. Check Playwright Chromium runtime
+if command -v corepack &> /dev/null && [[ -d node_modules/.pnpm ]]; then
+    PLAYWRIGHT_CHROMIUM_PATH="$(corepack pnpm exec node -e "const { chromium } = require('@playwright/test'); process.stdout.write(chromium.executablePath() || '');" 2>/dev/null || true)"
+    if [[ -n "$PLAYWRIGHT_CHROMIUM_PATH" ]] && [[ -x "$PLAYWRIGHT_CHROMIUM_PATH" ]]; then
+        pass "Playwright Chromium runtime installed: $PLAYWRIGHT_CHROMIUM_PATH"
+    else
+        fail "Playwright Chromium runtime missing (run: make setup)"
+    fi
+else
+    warn "Skipping Playwright Chromium check (pnpm dependencies unavailable)"
+fi
+
+# 10b. Sanity check Makefile dev target
 if grep -q "cargo watch .* -x './scripts/set_crate_type.sh" Makefile 2>/dev/null; then
     fail "Makefile dev target uses cargo watch -x with a shell script (make dev will fail)"
 else

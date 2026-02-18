@@ -14,6 +14,76 @@ export const create = (options = {}) => {
   const query = domCache.query;
   const queryAll = domCache.queryAll;
   const byId = domCache.byId;
+  const EVENT_ROW_RENDER_LIMIT = 100;
+  const CDP_ROW_RENDER_LIMIT = 500;
+
+  const canPatchTableRows = (tbody) => (
+    Boolean(tbody) &&
+    typeof tbody.appendChild === 'function' &&
+    typeof tbody.replaceChild === 'function' &&
+    typeof tbody.removeChild === 'function' &&
+    typeof document !== 'undefined' &&
+    typeof document.createElement === 'function'
+  );
+
+  const tableRows = (tbody) => {
+    if (!tbody || !tbody.children) return [];
+    return Array.from(tbody.children);
+  };
+
+  const patchTableRows = (tbody, rows) => {
+    if (!tbody) return;
+    if (!canPatchTableRows(tbody)) {
+      const fallbackHtml = rows
+        .map((row) => `<tr data-row-key="${escapeHtml(row.key)}">${row.html}</tr>`)
+        .join('');
+      domModule.setHtml(tbody, fallbackHtml);
+      return;
+    }
+
+    const existingRows = tableRows(tbody);
+    for (let index = 0; index < rows.length; index += 1) {
+      const nextRow = rows[index];
+      const currentRow = existingRows[index];
+      if (currentRow) {
+        const currentKey = String(currentRow?.dataset?.rowKey || '');
+        if (currentKey === nextRow.key) {
+          if (currentRow.innerHTML !== nextRow.html) {
+            domModule.setHtml(currentRow, nextRow.html);
+          }
+          continue;
+        }
+
+        const replacement = document.createElement('tr');
+        replacement.dataset.rowKey = nextRow.key;
+        domModule.setHtml(replacement, nextRow.html);
+        tbody.replaceChild(replacement, currentRow);
+        existingRows[index] = replacement;
+        continue;
+      }
+
+      const appended = document.createElement('tr');
+      appended.dataset.rowKey = nextRow.key;
+      domModule.setHtml(appended, nextRow.html);
+      tbody.appendChild(appended);
+      existingRows.push(appended);
+    }
+
+    const nextCount = rows.length;
+    while (tableRows(tbody).length > nextCount) {
+      const rowList = tableRows(tbody);
+      const tail = rowList[rowList.length - 1];
+      if (!tail) break;
+      tbody.removeChild(tail);
+    }
+  };
+
+  const buildStableKey = (parts, duplicates) => {
+    const base = parts.map((part) => String(part || '')).join('|');
+    const count = duplicates.get(base) || 0;
+    duplicates.set(base, count + 1);
+    return count === 0 ? base : `${base}#${count}`;
+  };
 
   const updateBansTable = (bans) => {
     const tbody = query('#bans-table tbody');
@@ -97,9 +167,8 @@ export const create = (options = {}) => {
   const updateEventsTable = (events) => {
     const tbody = query('#events tbody');
     if (!tbody) return;
-    domModule.setHtml(tbody, '');
-
-    if (!Array.isArray(events) || events.length === 0) {
+    const rows = Array.isArray(events) ? events.slice(0, EVENT_ROW_RENDER_LIMIT) : [];
+    if (rows.length === 0) {
       domModule.setHtml(
         tbody,
         '<tr><td colspan="6" style="text-align: center; color: #6b7280;">No recent events</td></tr>'
@@ -107,15 +176,15 @@ export const create = (options = {}) => {
       return;
     }
 
-    for (const ev of events) {
-      const tr = document.createElement('tr');
+    const duplicates = new Map();
+    const eventRows = rows.map((ev) => {
       const eventClass = String(ev.event || '').toLowerCase().replace(/[^a-z_]/g, '');
       const safeEvent = escapeHtml(ev.event || '-');
       const safeIp = escapeHtml(ev.ip || '-');
       const safeReason = escapeHtml(ev.reason || '-');
       const safeOutcome = escapeHtml(ev.outcome || '-');
       const safeAdmin = escapeHtml(ev.admin || '-');
-      tr.innerHTML = `
+      const html = `
       <td>${new Date(ev.ts * 1000).toLocaleString()}</td>
       <td><span class="badge ${eventClass}">${safeEvent}</span></td>
       <td><code>${safeIp}</code></td>
@@ -123,8 +192,14 @@ export const create = (options = {}) => {
       <td>${safeOutcome}</td>
       <td>${safeAdmin}</td>
     `;
-      tbody.appendChild(tr);
-    }
+      const key = buildStableKey(
+        [ev.ts, ev.event, ev.ip, ev.reason, ev.outcome, ev.admin],
+        duplicates
+      );
+      return { key, html };
+    });
+
+    patchTableRows(tbody, eventRows);
   };
 
   const extractCdpField = (text, key) => {
@@ -135,9 +210,8 @@ export const create = (options = {}) => {
   const updateCdpEventsTable = (events) => {
     const tbody = query('#cdp-events tbody');
     if (!tbody) return;
-    domModule.setHtml(tbody, '');
 
-    const cdpEvents = Array.isArray(events) ? events : [];
+    const cdpEvents = Array.isArray(events) ? events.slice(0, CDP_ROW_RENDER_LIMIT) : [];
     if (cdpEvents.length === 0) {
       domModule.setHtml(
         tbody,
@@ -146,7 +220,8 @@ export const create = (options = {}) => {
       return;
     }
 
-    for (const ev of cdpEvents) {
+    const duplicates = new Map();
+    const cdpRows = cdpEvents.map((ev) => {
       const reason = ev.reason || '';
       const reasonLower = reason.toLowerCase();
       const outcome = ev.outcome || '-';
@@ -158,12 +233,11 @@ export const create = (options = {}) => {
         ? `Auto-ban: ${outcome}`
         : (outcome.toLowerCase().startsWith('checks:') ? outcome.replace(/^checks:/i, 'Checks: ') : outcome);
 
-      const tr = document.createElement('tr');
       const safeIp = escapeHtml(ev.ip || '-');
       const safeTier = escapeHtml(tier);
       const safeScore = escapeHtml(score);
       const safeDetails = escapeHtml(details);
-      tr.innerHTML = `
+      const html = `
       <td>${new Date(ev.ts * 1000).toLocaleString()}</td>
       <td><code>${safeIp}</code></td>
       <td><span class="badge ${isBan ? 'ban' : 'challenge'}">${isBan ? 'BAN' : 'DETECTION'}</span></td>
@@ -171,8 +245,14 @@ export const create = (options = {}) => {
       <td>${safeScore}</td>
       <td>${safeDetails}</td>
     `;
-      tbody.appendChild(tr);
-    }
+      const key = buildStableKey(
+        [ev.ts, ev.ip, ev.reason, ev.outcome, ev.admin],
+        duplicates
+      );
+      return { key, html };
+    });
+
+    patchTableRows(tbody, cdpRows);
   };
 
   const updateCdpTotals = (cdpData) => {

@@ -22,7 +22,13 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { browserName: "chromium" }
+      use: {
+        browserName: "chromium",
+        channel: "chromium",
+        launchOptions: {
+          args: ["--disable-crashpad", "--disable-crash-reporter"]
+        }
+      }
     }
   ]
 });

@@ -9,6 +9,9 @@
 #   - wasm32-wasip1 target
 #   - Fermyon Spin CLI
 #   - cargo-watch (for file watching)
+#   - Node.js + corepack (for dashboard toolchain)
+#   - pnpm dependencies from lockfile
+#   - Playwright Chromium runtime (for dashboard e2e)
 #
 # After setup, run: make dev
 
@@ -249,6 +252,35 @@ else
 fi
 
 #--------------------------
+# Node.js / corepack
+#--------------------------
+if command -v node &> /dev/null; then
+    NODE_VERSION="$(node --version)"
+    success "Node.js already installed (${NODE_VERSION})"
+else
+    if command -v brew &> /dev/null; then
+        info "Installing Node.js via Homebrew..."
+        brew install node
+        success "Node.js installed ($(node --version 2>/dev/null || echo unknown))"
+    else
+        error "Node.js not found and Homebrew is unavailable. Install Node.js 18+ and re-run make setup."
+    fi
+fi
+
+if command -v corepack &> /dev/null; then
+    success "corepack already available"
+else
+    if command -v npm &> /dev/null; then
+        info "Installing corepack via npm..."
+        npm install -g corepack
+        success "corepack installed"
+    else
+        error "npm is unavailable; cannot install corepack. Install Node.js 18+ and re-run make setup."
+    fi
+fi
+corepack enable > /dev/null 2>&1 || true
+
+#--------------------------
 # Rust / Cargo
 #--------------------------
 if command -v rustc &> /dev/null; then
@@ -353,6 +385,33 @@ else
 fi
 
 #--------------------------
+# Dashboard JS dependencies + Playwright browser runtime
+#--------------------------
+if [[ ! -d "node_modules/.pnpm" ]]; then
+    info "Installing dashboard dependencies with pnpm..."
+    corepack pnpm install --frozen-lockfile
+elif [[ ! -e "node_modules/svelte" ]]; then
+    info "Refreshing dashboard dependencies from lockfile..."
+    corepack pnpm install --offline --frozen-lockfile || corepack pnpm install --frozen-lockfile
+else
+    success "Dashboard dependencies already installed"
+fi
+
+PLAYWRIGHT_CHROMIUM_PATH="$(corepack pnpm exec node -e "const { chromium } = require('@playwright/test'); process.stdout.write(chromium.executablePath() || '');" 2>/dev/null || true)"
+if [[ -n "$PLAYWRIGHT_CHROMIUM_PATH" && -x "$PLAYWRIGHT_CHROMIUM_PATH" ]]; then
+    success "Playwright Chromium already installed ($PLAYWRIGHT_CHROMIUM_PATH)"
+else
+    info "Installing Playwright Chromium runtime..."
+    corepack pnpm exec playwright install chromium
+    PLAYWRIGHT_CHROMIUM_PATH="$(corepack pnpm exec node -e "const { chromium } = require('@playwright/test'); process.stdout.write(chromium.executablePath() || '');" 2>/dev/null || true)"
+    if [[ -n "$PLAYWRIGHT_CHROMIUM_PATH" && -x "$PLAYWRIGHT_CHROMIUM_PATH" ]]; then
+        success "Playwright Chromium installed ($PLAYWRIGHT_CHROMIUM_PATH)"
+    else
+        error "Playwright Chromium install did not produce an executable browser runtime."
+    fi
+fi
+
+#--------------------------
 # Local dev secrets
 #--------------------------
 ensure_env_local_file
@@ -418,6 +477,23 @@ spin --version 2>/dev/null | head -1 || echo "not found"
 
 echo -n "  cargo-watch:  "
 cargo-watch --version 2>/dev/null || echo "not found"
+
+echo -n "  Node.js:      "
+node --version 2>/dev/null || echo "not found"
+
+echo -n "  corepack:     "
+corepack --version 2>/dev/null || echo "not found"
+
+echo -n "  pnpm:         "
+corepack pnpm --version 2>/dev/null || echo "not found"
+
+echo -n "  Chromium:     "
+PLAYWRIGHT_CHROMIUM_PATH="$(corepack pnpm exec node -e "const { chromium } = require('@playwright/test'); process.stdout.write(chromium.executablePath() || '');" 2>/dev/null || true)"
+if [[ -n "$PLAYWRIGHT_CHROMIUM_PATH" && -x "$PLAYWRIGHT_CHROMIUM_PATH" ]]; then
+    echo "$PLAYWRIGHT_CHROMIUM_PATH"
+else
+    echo "not found"
+fi
 
 echo ""
 echo -e "${CYAN}═══════════════════════════════════════════════════${NC}"
