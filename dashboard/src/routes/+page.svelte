@@ -6,7 +6,6 @@
   import MonitoringTab from '$lib/components/dashboard/MonitoringTab.svelte';
   import StatusTab from '$lib/components/dashboard/StatusTab.svelte';
   import TuningTab from '$lib/components/dashboard/TuningTab.svelte';
-  import { resolveDashboardRuntimeMode } from '$lib/runtime/dashboard-runtime-mode.js';
   import { createDashboardActions } from '$lib/runtime/dashboard-actions.js';
   import { createDashboardEffects } from '$lib/runtime/dashboard-effects.js';
   import {
@@ -33,14 +32,12 @@
   let storeUnsubscribe = () => {};
   let telemetryUnsubscribe = () => {};
   let dashboardActions = null;
-  let runtimeMode = 'native';
   let runtimeReady = false;
   let runtimeError = '';
   let loggingOut = false;
 
   async function bootstrapNativeRuntime() {
     await mountDashboardRuntime({
-      mode: 'external',
       initialTab: normalizeTab(window.location.hash.replace(/^#/, ''))
     });
 
@@ -72,14 +69,6 @@
     });
 
     try {
-      runtimeMode = resolveDashboardRuntimeMode(import.meta.env);
-
-      if (runtimeMode === 'legacy') {
-        await mountDashboardRuntime({ mode: 'legacy' });
-        runtimeReady = true;
-        return;
-      }
-
       await bootstrapNativeRuntime();
     } catch (error) {
       runtimeError = error && error.message ? error.message : 'Dashboard bootstrap failed.';
@@ -97,17 +86,17 @@
   });
 
   function onTabClick(event, tab) {
-    if (runtimeMode !== 'native' || !dashboardActions) return;
+    if (!dashboardActions) return;
     dashboardActions.onTabClick(event, tab);
   }
 
   function onTabKeydown(event, tab) {
-    if (runtimeMode !== 'native' || !dashboardActions) return;
+    if (!dashboardActions) return;
     dashboardActions.onTabKeydown(event, tab);
   }
 
   async function onLogoutClick(event) {
-    if (runtimeMode !== 'native' || !dashboardActions) return;
+    if (!dashboardActions) return;
     event.preventDefault();
     if (loggingOut) return;
     loggingOut = true;
@@ -118,7 +107,6 @@
     }
   }
 
-  const isNative = () => runtimeMode === 'native';
   const isTabActive = (tab) => normalizeTab(dashboardState.activeTab) === normalizeTab(tab);
 </script>
 
@@ -129,7 +117,7 @@
 </svelte:head>
 
 <span id="last-updated" class="text-muted"></span>
-<div class="container panel panel-border" data-dashboard-runtime-mode={runtimeMode}>
+<div class="container panel panel-border" data-dashboard-runtime-mode="native">
   <header>
     <div class="shuma-image-wrapper">
       <img src="assets/shuma-gorath-white.png" alt="Shuma-Gorath" class="shuma-gorath-img">
@@ -140,7 +128,7 @@
       id="logout-btn"
       class="btn btn-subtle dashboard-logout"
       aria-label="Log out of admin session"
-      disabled={isNative() ? (loggingOut || dashboardState.session.authenticated !== true) : false}
+      disabled={loggingOut || dashboardState.session.authenticated !== true}
       on:click={onLogoutClick}
     >Logout</button>
     <nav class="dashboard-tabs" aria-label="Dashboard sections">
@@ -148,13 +136,13 @@
         <a
           id={`dashboard-tab-${tab}`}
           class="dashboard-tab-link"
-          class:active={isNative() ? isTabActive(tab) : false}
+          class:active={isTabActive(tab)}
           data-dashboard-tab-link={tab}
           href={`#${tab}`}
           role="tab"
-          aria-selected={isNative() ? (isTabActive(tab) ? 'true' : 'false') : 'false'}
+          aria-selected={isTabActive(tab) ? 'true' : 'false'}
           aria-controls={`dashboard-panel-${tab}`}
-          tabindex={isNative() ? (isTabActive(tab) ? 0 : -1) : -1}
+          tabindex={isTabActive(tab) ? 0 : -1}
           on:click={(event) => onTabClick(event, tab)}
           on:keydown={(event) => onTabKeydown(event, tab)}
         >
@@ -165,19 +153,19 @@
   </header>
   <div id="test-mode-banner" class="test-mode-banner hidden">TEST MODE ACTIVE - Logging only, no blocking</div>
 
-  <MonitoringTab managed={isNative()} isActive={isTabActive('monitoring')} />
+  <MonitoringTab managed={true} isActive={isTabActive('monitoring')} />
 
   <div
     id="dashboard-admin-section"
     class="section admin-section"
-    hidden={isNative() && isTabActive('monitoring')}
-    aria-hidden={isNative() ? (isTabActive('monitoring') ? 'true' : 'false') : 'true'}
+    hidden={isTabActive('monitoring')}
+    aria-hidden={isTabActive('monitoring') ? 'true' : 'false'}
   >
     <div class="admin-groups">
-      <IpBansTab managed={isNative()} isActive={isTabActive('ip-bans')} />
-      <StatusTab managed={isNative()} isActive={isTabActive('status')} runtimeTelemetry={runtimeTelemetry} />
-      <ConfigTab managed={isNative()} isActive={isTabActive('config')} />
-      <TuningTab managed={isNative()} isActive={isTabActive('tuning')} />
+      <IpBansTab managed={true} isActive={isTabActive('ip-bans')} />
+      <StatusTab managed={true} isActive={isTabActive('status')} runtimeTelemetry={runtimeTelemetry} />
+      <ConfigTab managed={true} isActive={isTabActive('config')} />
+      <TuningTab managed={true} isActive={isTabActive('tuning')} />
     </div>
     <div id="admin-msg" class="message"></div>
   </div>
@@ -185,7 +173,7 @@
   {#if runtimeError}
     <p class="message error">{runtimeError}</p>
   {/if}
-  {#if isNative() && !runtimeReady && !runtimeError}
+  {#if !runtimeReady && !runtimeError}
     <p class="message info">Loading dashboard runtime...</p>
   {/if}
 </div>

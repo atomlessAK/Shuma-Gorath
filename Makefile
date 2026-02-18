@@ -65,7 +65,6 @@ DEV_DEBUG_HEADERS ?= true
 SPIN_DEV_OVERRIDES := --env SHUMA_DEBUG_HEADERS=$(DEV_DEBUG_HEADERS) --env SHUMA_ADMIN_CONFIG_WRITE_ENABLED=$(DEV_ADMIN_CONFIG_WRITE_ENABLED)
 SPIN_PROD_OVERRIDES := --env SHUMA_DEBUG_HEADERS=false --env SHUMA_ADMIN_CONFIG_WRITE_ENABLED=false
 SPIN_READY_TIMEOUT_SECONDS ?= 90
-DASHBOARD_RUNTIME_MODE ?= native
 SHUMA_DASHBOARD_BUNDLE_MAX_TOTAL_BYTES ?= 350000
 SHUMA_DASHBOARD_BUNDLE_MAX_JS_BYTES ?= 320000
 SHUMA_DASHBOARD_BUNDLE_MAX_CSS_BYTES ?= 40000
@@ -94,7 +93,7 @@ dashboard-build: ## Build SvelteKit dashboard static assets to dist/dashboard
 	@if [ ! -d node_modules/.pnpm ]; then \
 		corepack pnpm install --frozen-lockfile; \
 	fi
-	@PUBLIC_SHUMA_DASHBOARD_RUNTIME_MODE=$(DASHBOARD_RUNTIME_MODE) corepack pnpm run build:dashboard
+	@corepack pnpm run build:dashboard
 
 #--------------------------
 # Development
@@ -107,7 +106,6 @@ dev: ## Build and run with file watching (auto-rebuild on save)
 	@echo "$(YELLOW)❤️  Health:    http://127.0.0.1:3000/health$(NC)"
 	@echo "$(YELLOW)🌀 Maze Preview: http://127.0.0.1:3000/admin/maze/preview (admin auth)$(NC)"
 	@echo "$(YELLOW)⚙️  Effective dev flags: WRITE=$(DEV_ADMIN_CONFIG_WRITE_ENABLED) DEBUG_HEADERS=$(DEV_DEBUG_HEADERS)$(NC)"
-	@echo "$(YELLOW)🧭 Dashboard runtime mode build config: $(DASHBOARD_RUNTIME_MODE)$(NC)"
 	@echo "$(CYAN)👀 Watching src/*.rs, dashboard/*, and spin.toml for changes... (Ctrl+C to stop)$(NC)"
 	@$(MAKE) --no-print-directory config-seed >/dev/null
 	@$(MAKE) --no-print-directory dashboard-build >/dev/null
@@ -128,7 +126,6 @@ dev-closed: ## Build and run with file watching and SHUMA_KV_STORE_FAIL_OPEN=fal
 	@echo "$(YELLOW)❤️  Health:    http://127.0.0.1:3000/health$(NC)"
 	@echo "$(YELLOW)🌀 Maze Preview: http://127.0.0.1:3000/admin/maze/preview (admin auth)$(NC)"
 	@echo "$(YELLOW)⚙️  Effective dev flags: WRITE=$(DEV_ADMIN_CONFIG_WRITE_ENABLED) DEBUG_HEADERS=$(DEV_DEBUG_HEADERS)$(NC)"
-	@echo "$(YELLOW)🧭 Dashboard runtime mode build config: $(DASHBOARD_RUNTIME_MODE)$(NC)"
 	@echo "$(CYAN)👀 Watching src/*.rs, dashboard/*, and spin.toml for changes... (Ctrl+C to stop)$(NC)"
 	@$(MAKE) --no-print-directory config-seed >/dev/null
 	@$(MAKE) --no-print-directory dashboard-build >/dev/null
@@ -147,7 +144,6 @@ local: dev ## Alias for dev
 run: ## Build once and run (no file watching)
 	@echo "$(CYAN)🚀 Starting development server...$(NC)"
 	@echo "$(YELLOW)⚙️  Effective dev flags: WRITE=$(DEV_ADMIN_CONFIG_WRITE_ENABLED) DEBUG_HEADERS=$(DEV_DEBUG_HEADERS)$(NC)"
-	@echo "$(YELLOW)🧭 Dashboard runtime mode build config: $(DASHBOARD_RUNTIME_MODE)$(NC)"
 	@$(MAKE) --no-print-directory config-seed >/dev/null
 	@$(MAKE) --no-print-directory dashboard-build >/dev/null
 	@pkill -x spin 2>/dev/null || true
@@ -434,8 +430,6 @@ env-help: ## Show supported env-only runtime overrides
 	@echo "  SHUMA_RATE_LIMITER_OUTAGE_MODE_MAIN"
 	@echo "  SHUMA_RATE_LIMITER_OUTAGE_MODE_ADMIN_AUTH"
 	@echo ""
-	@echo "$(CYAN)Dashboard build-time runtime mode toggle:$(NC)"
-	@echo "  DASHBOARD_RUNTIME_MODE=native|legacy (default: native)"
 
 api-key-rotate: ## Generate a replacement SHUMA_API_KEY and print rotation guidance
 	@$(MAKE) --no-print-directory api-key-generate

@@ -2565,35 +2565,8 @@ test('svelte route guardrails forbid shell injection and bridge-era imports', ()
   assert.equal(mainSource.includes('$lib/bridges/'), false);
   assert.equal(loginSource.includes('$lib/bridges/'), false);
   assert.match(mainSource, /mountDashboardRuntime/);
-  assert.match(mainSource, /resolveDashboardRuntimeMode/);
   assert.equal(mainSource.includes('dashboard_runtime'), false);
   assert.equal(mainSource.includes("import('../../../dashboard.js')"), false);
-});
-
-test('dashboard runtime mode resolver is config-driven and defaults to native', { concurrency: false }, async () => {
-  const runtimeModeModule = await importBrowserModule(
-    'dashboard/src/lib/runtime/dashboard-runtime-mode.js'
-  );
-
-  assert.equal(runtimeModeModule.resolveDashboardRuntimeMode(), 'native');
-  assert.equal(
-    runtimeModeModule.resolveDashboardRuntimeMode({
-      PUBLIC_SHUMA_DASHBOARD_RUNTIME_MODE: 'legacy'
-    }),
-    'legacy'
-  );
-  assert.equal(
-    runtimeModeModule.resolveDashboardRuntimeMode({
-      PUBLIC_SHUMA_DASHBOARD_RUNTIME_MODE: 'NATIVE'
-    }),
-    'native'
-  );
-  assert.equal(
-    runtimeModeModule.resolveDashboardRuntimeMode({
-      PUBLIC_SHUMA_DASHBOARD_RUNTIME_MODE: 'invalid'
-    }),
-    'native'
-  );
 });
 
 test('svelte dashboard actions route login redirect and focus through effects adapters', () => {
@@ -2670,12 +2643,12 @@ test('dashboard runtime adapter enforces single-mount and explicit teardown hook
     'dashboard-runtime.js'
   );
   const source = fs.readFileSync(runtimePath, 'utf8');
-  assert.match(source, /if \(mounted && mountedMode === mode\) return;/);
-  assert.match(source, /if \(mounted && mountedMode !== mode\) \{\s*unmountDashboardRuntime\(\);/m);
+  assert.match(source, /if \(mounted\) return;/);
   assert.match(source, /if \(mountingPromise\) return mountingPromise;/);
-  assert.match(source, /const mode = String\(source\.mode \|\| 'legacy'\)/);
+  assert.match(source, /const mountOptions = \{\s*\.\.\.\(options \|\| \{\}\)\s*\};/);
+  assert.match(source, /delete mountOptions\.mode;/);
   assert.match(source, /module\.mountDashboardExternalRuntime\(mountOptions \|\| \{\}\)/);
-  assert.match(source, /module\.mountDashboardApp\(mountOptions \|\| \{\}\)/);
+  assert.equal(source.includes('module.mountDashboardApp('), false);
   assert.match(source, /runtimeModule\.unmountDashboardApp\(\)/);
   assert.match(source, /refreshExternalDashboardTab/);
   assert.match(source, /setExternalDashboardActiveTab/);
@@ -2684,7 +2657,7 @@ test('dashboard runtime adapter enforces single-mount and explicit teardown hook
   assert.match(source, /setDashboardActiveTab/);
 });
 
-test('svelte dashboard route uses runtime mode mount contracts without legacy external flags', () => {
+test('svelte dashboard route mounts the external runtime contract only', () => {
   const routePath = path.resolve(
     __dirname,
     '..',
@@ -2695,8 +2668,9 @@ test('svelte dashboard route uses runtime mode mount contracts without legacy ex
   );
   const source = fs.readFileSync(routePath, 'utf8');
 
-  assert.match(source, /mountDashboardRuntime\(\{\s*mode: 'external'/m);
-  assert.match(source, /mountDashboardRuntime\(\{ mode: 'legacy' \}\)/);
+  assert.equal(source.includes("mode: 'external'"), false);
+  assert.equal(source.includes("mode: 'legacy'"), false);
+  assert.match(source, /mountDashboardRuntime\(\{\s*initialTab:/m);
   assert.match(source, /<link rel="preload" href=\{chartLiteSrc\} as="script">/);
   assert.match(source, /<script src=\{chartLiteSrc\} data-shuma-runtime-script=\{chartLiteSrc\}><\/script>/);
   assert.equal(source.includes('function ensureScript('), false);

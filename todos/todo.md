@@ -190,7 +190,7 @@ Implementation rule: when internal feature work touches provider-managed capabil
   - required outcome: Rust unit + maze benchmark + integration + dashboard e2e all green.
   - Completed on 2026-02-18 after commit `86b42bf`; `make test` passed end-to-end (including dashboard e2e).
 - [x] HND-SVLT-3 If verification is green, open/update PR from `codex/dashboard-sveltekit-port` into `main` and include:
-  - SvelteKit migration summary (`dashboard/legacy/*` retained only as archived fallback assets),
+  - SvelteKit migration summary (hard cutover with no archived legacy fallback assets),
   - Makefile-only workflow enforcement updates (`AGENTS.md`, `CONTRIBUTING.md`, `Makefile`),
   - dashboard runtime/perf guardrails (`e2e` remount fan-out + bundle budget gate).
   - Completed on 2026-02-18: PR opened as `https://github.com/atomless/Shuma-Gorath/pull/1` with required handoff summary.

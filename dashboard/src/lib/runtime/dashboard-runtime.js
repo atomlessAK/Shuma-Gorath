@@ -7,7 +7,6 @@ import {
 } from './dashboard-external-adapters.js';
 let mountingPromise = null;
 let mounted = false;
-let mountedMode = 'legacy';
 let runtimeModule = null;
 
 async function resolveRuntimeModule() {
@@ -17,32 +16,19 @@ async function resolveRuntimeModule() {
 }
 
 export async function mountDashboardRuntime(options = {}) {
-  const source = options || {};
-  const mode = String(source.mode || 'legacy').toLowerCase() === 'external' ? 'external' : 'legacy';
-  const mountOptions = { ...source };
+  const mountOptions = { ...(options || {}) };
   delete mountOptions.mode;
 
-  if (mounted && mountedMode === mode) return;
-  if (mounted && mountedMode !== mode) {
-    unmountDashboardRuntime();
-  }
+  if (mounted) return;
   if (mountingPromise) return mountingPromise;
 
   mountingPromise = resolveRuntimeModule()
     .then((module) => {
-      if (mode === 'external') {
-        if (typeof module.mountDashboardExternalRuntime !== 'function') {
-          throw new Error('Dashboard runtime entrypoint is missing mountDashboardExternalRuntime()');
-        }
-        module.mountDashboardExternalRuntime(mountOptions || {});
-      } else {
-        if (typeof module.mountDashboardApp !== 'function') {
-          throw new Error('Dashboard runtime entrypoint is missing mountDashboardApp()');
-        }
-        module.mountDashboardApp(mountOptions || {});
+      if (typeof module.mountDashboardExternalRuntime !== 'function') {
+        throw new Error('Dashboard runtime entrypoint is missing mountDashboardExternalRuntime()');
       }
+      module.mountDashboardExternalRuntime(mountOptions || {});
       mounted = true;
-      mountedMode = mode;
     })
     .finally(() => {
       mountingPromise = null;
@@ -57,7 +43,6 @@ export function unmountDashboardRuntime() {
     runtimeModule.unmountDashboardApp();
   }
   mounted = false;
-  mountedMode = 'legacy';
 }
 
 export async function restoreDashboardSession() {
