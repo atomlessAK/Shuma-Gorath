@@ -195,7 +195,7 @@ Implementation rule: when internal feature work touches provider-managed capabil
   - dashboard runtime/perf guardrails (`e2e` remount fan-out + bundle budget gate).
   - Completed on 2026-02-18: PR opened as `https://github.com/atomless/Shuma-Gorath/pull/1` with required handoff summary.
   - DNS troubleshooting outcome in Codex runtime: resolved (`curl -I https://api.github.com` returned `HTTP/2 200`; `gh api rate_limit` succeeded).
-  - Current blocker moved to merge/readiness state: PR currently reports `mergeStateStatus=DIRTY` and no GitHub Actions checks have reported yet for branch `codex/dashboard-sveltekit-port`.
+  - Current readiness state after merge-forward fixes pushed at `7b06525`: PR is `mergeable=MERGEABLE`, `mergeStateStatus=UNSTABLE` (checks in progress), with CI + CodeQL + dashboard-e2e jobs now reporting on branch `codex/dashboard-sveltekit-port`.
 - [ ] HND-SVLT-4 Merge to `main` after CI is green; then continue Round 4 items (`DSH-SVLT-EX18..EX22`) on a fresh `codex/*` branch.
   - In progress on 2026-02-18: branch merged `origin/main` locally and resolved immediate dashboard regressions (`refreshAllDirtySections` restore, tab lifecycle duplicate destroy removal, dirty-state default for maze save button, export guardrail update).
   - Remaining before merge: complete clean `make test` run including dashboard Playwright smoke, push latest fixes to PR `#1`, and confirm GitHub Actions status is green.
