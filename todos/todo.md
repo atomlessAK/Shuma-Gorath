@@ -182,7 +182,7 @@ Implementation rule: when internal feature work touches provider-managed capabil
 - [ ] DSH-SVLT-EX22 Add native remount/refresh soak performance gate (bounded fetch/render p95 + stable polling cadence across repeated mount loops) and wire into Make/CI reporting.
 
 ### P0 Branch Handoff (dashboard-sveltekit-port -> main)
-- [ ] HND-SVLT-1 Resume from branch `codex/dashboard-sveltekit-port` at commit `c7291e5` plus the pending migration batch commit from this session.
+- [ ] HND-SVLT-1 Resume from branch `codex/dashboard-sveltekit-port` at commit `979fa2f` (with `c7291e5` included immediately before it in branch history).
 - [ ] HND-SVLT-2 In an unrestricted shell, run canonical verification only through Makefile paths:
   - terminal A: `make dev`
   - terminal B: `make test`
