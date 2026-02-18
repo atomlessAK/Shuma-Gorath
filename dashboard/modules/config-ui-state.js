@@ -46,10 +46,67 @@ const formatCountryCodes = (list) => {
   return list.join(',');
 };
 
+const setControlProperty = (control, prop, value) => {
+  if (!control || value === undefined) return;
+  control[prop] = value;
+};
+
+const applyControlBindings = ({ getById, config, bindings }) => {
+  const values = {};
+  for (const binding of bindings) {
+    const control = getById(binding.id);
+    if (!control) {
+      return { ok: false, values };
+    }
+    const raw = typeof binding.read === 'function' ? binding.read(config) : config[binding.key];
+    if (raw === undefined) continue;
+    const next = typeof binding.coerce === 'function' ? binding.coerce(raw, config) : raw;
+    setControlProperty(control, binding.prop || 'value', next);
+    values[binding.name || binding.id] = next;
+  }
+  return { ok: true, values };
+};
+
+const resetSaveButton = (getById, buttonId, label) => {
+  const button = getById(buttonId);
+  if (!button) return;
+  button.dataset.saving = 'false';
+  button.disabled = true;
+  button.textContent = label;
+};
+
+const renderInfoRows = ({ container, rows, emptyText, valueKey }) => {
+  if (!container) return;
+  container.textContent = '';
+  if (!Array.isArray(rows) || rows.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'text-muted';
+    empty.textContent = emptyText;
+    container.appendChild(empty);
+    return;
+  }
+  rows.forEach((row) => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'info-row';
+
+    const label = document.createElement('span');
+    label.className = 'info-label';
+    label.textContent = String(row.label || '--');
+
+    const value = document.createElement('span');
+    value.textContent = String(row[valueKey] ?? '--');
+
+    wrapper.appendChild(label);
+    wrapper.appendChild(value);
+    container.appendChild(wrapper);
+  });
+};
+
 export const create = (options = {}) => {
   const getById = typeof options.getById === 'function' ? options.getById : () => null;
   const setDraft = typeof options.setDraft === 'function' ? options.setDraft : () => {};
   const getDraft = typeof options.getDraft === 'function' ? options.getDraft : () => ({});
+
   const statusPanel = options.statusPanel || { update: () => {}, render: () => {} };
   const applyStatusPatch =
     typeof statusPanel.applyPatch === 'function'
@@ -63,9 +120,10 @@ export const create = (options = {}) => {
     typeof options.adminConfigWriteEnabled === 'function'
       ? options.adminConfigWriteEnabled
       : () => false;
-  const parseBoolLike = typeof options.parseBoolLike === 'function'
-    ? options.parseBoolLike
-    : (value, fallback = false) => (typeof value === 'boolean' ? value : fallback);
+  const parseBoolLike =
+    typeof options.parseBoolLike === 'function'
+      ? options.parseBoolLike
+      : (value, fallback = false) => (typeof value === 'boolean' ? value : fallback);
   const normalizeEdgeIntegrationMode =
     typeof options.normalizeEdgeIntegrationMode === 'function'
       ? options.normalizeEdgeIntegrationMode
@@ -89,6 +147,7 @@ export const create = (options = {}) => {
     typeof options.normalizeBrowserRulesForCompare === 'function'
       ? options.normalizeBrowserRulesForCompare
       : (value) => String(value || '');
+
   const setBanDurationInputFromSeconds =
     typeof options.setBanDurationInputFromSeconds === 'function'
       ? options.setBanDurationInputFromSeconds
@@ -115,6 +174,15 @@ export const create = (options = {}) => {
     });
   };
 
+  const isElementFocused = (element) => Boolean(element && document.activeElement === element);
+  const hasUnsavedSectionEdits = (buttonId) => {
+    const button = getById(buttonId);
+    if (!button) return false;
+    return button.disabled === false && button.dataset.saving !== 'true';
+  };
+  const shouldPreserveInProgressEdits = (buttonId, fields = []) =>
+    hasUnsavedSectionEdits(buttonId) || fields.some(isElementFocused);
+
   const updateBanDurations = (config = {}) => {
     if (!config.ban_durations) return;
     setBanDurationInputFromSeconds('honeypot', config.ban_durations.honeypot);
@@ -122,50 +190,66 @@ export const create = (options = {}) => {
     setBanDurationInputFromSeconds('browser', config.ban_durations.browser);
     setBanDurationInputFromSeconds('cdp', config.ban_durations.cdp);
     setBanDurationInputFromSeconds('admin', config.ban_durations.admin);
+
     setDraft('banDurations', {
-      honeypot: Number.parseInt(config.ban_durations.honeypot, 10) || banDurationFields.honeypot.fallback,
-      rateLimit: Number.parseInt(config.ban_durations.rate_limit, 10) || banDurationFields.rateLimit.fallback,
-      browser: Number.parseInt(config.ban_durations.browser, 10) || banDurationFields.browser.fallback,
+      honeypot:
+        Number.parseInt(config.ban_durations.honeypot, 10) || banDurationFields.honeypot.fallback,
+      rateLimit:
+        Number.parseInt(config.ban_durations.rate_limit, 10) || banDurationFields.rateLimit.fallback,
+      browser:
+        Number.parseInt(config.ban_durations.browser, 10) || banDurationFields.browser.fallback,
       cdp: Number.parseInt(config.ban_durations.cdp, 10) || banDurationFields.cdp.fallback,
       admin: Number.parseInt(config.ban_durations.admin, 10) || banDurationFields.admin.fallback
     });
-    const btn = getById('save-durations-btn');
-    if (!btn) return;
-    btn.dataset.saving = 'false';
-    btn.disabled = true;
-    btn.textContent = 'Save Durations';
+
+    resetSaveButton(getById, 'save-durations-btn', 'Save Durations');
   };
 
   const updateMazeConfig = (config = {}) => {
-    const statusPatch = {};
     const mazeEnabledToggle = getById('maze-enabled-toggle');
     const mazeAutoBanToggle = getById('maze-auto-ban-toggle');
     const mazeThreshold = getById('maze-threshold');
+
     if (!mazeEnabledToggle || !mazeAutoBanToggle || !mazeThreshold) return;
 
-    if (config.maze_enabled !== undefined) {
-      mazeEnabledToggle.checked = config.maze_enabled;
-      statusPatch.mazeEnabled = config.maze_enabled === true;
+    if (
+      shouldPreserveInProgressEdits('save-maze-config', [
+        mazeEnabledToggle,
+        mazeAutoBanToggle,
+        mazeThreshold
+      ])
+    ) {
+      return;
     }
-    if (config.maze_auto_ban !== undefined) {
-      mazeAutoBanToggle.checked = config.maze_auto_ban;
-      statusPatch.mazeAutoBan = config.maze_auto_ban === true;
-    }
-    if (config.maze_auto_ban_threshold !== undefined) {
-      mazeThreshold.value = config.maze_auto_ban_threshold;
-    }
+
+    const { ok } = applyControlBindings({
+      getById,
+      config,
+      bindings: [
+        { id: 'maze-enabled-toggle', name: 'enabled', key: 'maze_enabled', prop: 'checked' },
+        { id: 'maze-auto-ban-toggle', name: 'autoBan', key: 'maze_auto_ban', prop: 'checked' },
+        {
+          id: 'maze-threshold',
+          name: 'threshold',
+          key: 'maze_auto_ban_threshold',
+          prop: 'value'
+        }
+      ]
+    });
+    if (!ok) return;
+
     setDraft('maze', {
       enabled: mazeEnabledToggle.checked,
       autoBan: mazeAutoBanToggle.checked,
       threshold: Number.parseInt(mazeThreshold.value, 10) || 50
     });
-    const btn = getById('save-maze-config');
-    if (btn) {
-      btn.dataset.saving = 'false';
-      btn.disabled = true;
-      btn.textContent = 'Save Maze Settings';
-    }
-    applyStatusPatch(statusPatch);
+
+    applyStatusPatch({
+      mazeEnabled: mazeEnabledToggle.checked,
+      mazeAutoBan: mazeAutoBanToggle.checked
+    });
+
+    resetSaveButton(getById, 'save-maze-config', 'Save Maze Settings');
   };
 
   const updateGeoConfig = (config = {}) => {
@@ -176,18 +260,24 @@ export const create = (options = {}) => {
     const maze = formatCountryCodes(config.geo_maze);
     const block = formatCountryCodes(config.geo_block);
 
-    const riskField = getById('geo-risk-list');
-    const allowField = getById('geo-allow-list');
-    const challengeField = getById('geo-challenge-list');
-    const mazeField = getById('geo-maze-list');
-    const blockField = getById('geo-block-list');
-    if (!riskField || !allowField || !challengeField || !mazeField || !blockField) return;
-
-    riskField.value = risk;
-    allowField.value = allow;
-    challengeField.value = challenge;
-    mazeField.value = maze;
-    blockField.value = block;
+    const { ok } = applyControlBindings({
+      getById,
+      config: {
+        risk,
+        allow,
+        challenge,
+        maze,
+        block
+      },
+      bindings: [
+        { id: 'geo-risk-list', key: 'risk', prop: 'value' },
+        { id: 'geo-allow-list', key: 'allow', prop: 'value' },
+        { id: 'geo-challenge-list', key: 'challenge', prop: 'value' },
+        { id: 'geo-maze-list', key: 'maze', prop: 'value' },
+        { id: 'geo-block-list', key: 'block', prop: 'value' }
+      ]
+    });
+    if (!ok) return;
 
     setDraft('geo', {
       risk: normalizeCountryCodesForCompare(risk),
@@ -207,110 +297,116 @@ export const create = (options = {}) => {
     });
 
     setGeoConfigEditable(mutable);
-
-    const scoringBtn = getById('save-geo-scoring-config');
-    if (scoringBtn) {
-      scoringBtn.disabled = true;
-      scoringBtn.textContent = 'Save GEO Scoring';
-    }
-    const routingBtn = getById('save-geo-routing-config');
-    if (routingBtn) {
-      routingBtn.disabled = true;
-      routingBtn.textContent = 'Save GEO Routing';
-    }
+    resetSaveButton(getById, 'save-geo-scoring-config', 'Save GEO Scoring');
+    resetSaveButton(getById, 'save-geo-routing-config', 'Save GEO Routing');
   };
 
   const updateHoneypotConfig = (config = {}) => {
-    const enabledToggle = getById('honeypot-enabled-toggle');
-    const field = getById('honeypot-paths');
-    if (!field) return;
-    if (enabledToggle) {
-      enabledToggle.checked = config.honeypot_enabled !== false;
-    }
+    const enabled = config.honeypot_enabled !== false;
     const formatted = formatListTextarea(config.honeypots);
-    field.value = formatted;
+
+    const { ok } = applyControlBindings({
+      getById,
+      config: {
+        enabled,
+        values: formatted
+      },
+      bindings: [
+        { id: 'honeypot-enabled-toggle', key: 'enabled', prop: 'checked' },
+        { id: 'honeypot-paths', key: 'values', prop: 'value' }
+      ]
+    });
+    if (!ok) return;
+
     setDraft('honeypot', {
-      enabled: enabledToggle ? enabledToggle.checked : true,
+      enabled,
       values: normalizeListTextareaForCompare(formatted)
     });
-    const btn = getById('save-honeypot-config');
-    if (!btn) return;
-    btn.disabled = true;
-    btn.textContent = 'Save Honeypots';
+
+    resetSaveButton(getById, 'save-honeypot-config', 'Save Honeypots');
   };
 
   const updateBrowserPolicyConfig = (config = {}) => {
-    const blockField = getById('browser-block-rules');
-    const whitelistField = getById('browser-whitelist-rules');
-    if (!blockField || !whitelistField) return;
-
     const blockText = formatBrowserRulesTextarea(config.browser_block);
     const whitelistText = formatBrowserRulesTextarea(config.browser_whitelist);
-    blockField.value = blockText;
-    whitelistField.value = whitelistText;
+
+    const { ok } = applyControlBindings({
+      getById,
+      config: {
+        block: blockText,
+        whitelist: whitelistText
+      },
+      bindings: [
+        { id: 'browser-block-rules', key: 'block', prop: 'value' },
+        { id: 'browser-whitelist-rules', key: 'whitelist', prop: 'value' }
+      ]
+    });
+    if (!ok) return;
+
     setDraft('browserPolicy', {
       block: normalizeBrowserRulesForCompare(blockText),
       whitelist: normalizeBrowserRulesForCompare(whitelistText)
     });
-    const btn = getById('save-browser-policy-config');
-    if (!btn) return;
-    btn.disabled = true;
-    btn.textContent = 'Save Browser Policy';
+
+    resetSaveButton(getById, 'save-browser-policy-config', 'Save Browser Policy');
   };
 
   const updateBypassAllowlistConfig = (config = {}) => {
-    const networkField = getById('network-whitelist');
-    const pathField = getById('path-whitelist');
-    if (!networkField || !pathField) return;
-
     const networkText = formatListTextarea(config.whitelist);
     const pathText = formatListTextarea(config.path_whitelist);
-    networkField.value = networkText;
-    pathField.value = pathText;
+
+    const { ok } = applyControlBindings({
+      getById,
+      config: {
+        network: networkText,
+        path: pathText
+      },
+      bindings: [
+        { id: 'network-whitelist', key: 'network', prop: 'value' },
+        { id: 'path-whitelist', key: 'path', prop: 'value' }
+      ]
+    });
+    if (!ok) return;
+
     setDraft('bypassAllowlists', {
       network: normalizeListTextareaForCompare(networkText),
       path: normalizeListTextareaForCompare(pathText)
     });
-    const btn = getById('save-whitelist-config');
-    if (!btn) return;
-    btn.disabled = true;
-    btn.textContent = 'Save Allowlists';
+
+    resetSaveButton(getById, 'save-whitelist-config', 'Save Allowlists');
   };
 
   const updateRobotsConfig = (config = {}) => {
+    const aiBlockTraining = config.ai_policy_block_training ?? config.robots_block_ai_training;
+    const aiBlockSearch = config.ai_policy_block_search ?? config.robots_block_ai_search;
+    const aiAllowSearch =
+      config.ai_policy_allow_search_engines ?? config.robots_allow_search_engines;
+
+    const { ok } = applyControlBindings({
+      getById,
+      config: {
+        robotsEnabled: config.robots_enabled,
+        blockTraining: aiBlockTraining,
+        blockSearch: aiBlockSearch,
+        allowSearchToggle: aiAllowSearch === undefined ? undefined : !aiAllowSearch,
+        crawlDelay: config.robots_crawl_delay
+      },
+      bindings: [
+        { id: 'robots-enabled-toggle', key: 'robotsEnabled', prop: 'checked' },
+        { id: 'robots-block-training-toggle', key: 'blockTraining', prop: 'checked' },
+        { id: 'robots-block-search-toggle', key: 'blockSearch', prop: 'checked' },
+        { id: 'robots-allow-search-toggle', key: 'allowSearchToggle', prop: 'checked' },
+        { id: 'robots-crawl-delay', key: 'crawlDelay', prop: 'value' }
+      ]
+    });
+    if (!ok) return;
+
     const robotsEnabledToggle = getById('robots-enabled-toggle');
+    const robotsCrawlDelay = getById('robots-crawl-delay');
     const robotsBlockTrainingToggle = getById('robots-block-training-toggle');
     const robotsBlockSearchToggle = getById('robots-block-search-toggle');
     const robotsAllowSearchToggle = getById('robots-allow-search-toggle');
-    const robotsCrawlDelay = getById('robots-crawl-delay');
-    if (
-      !robotsEnabledToggle ||
-      !robotsBlockTrainingToggle ||
-      !robotsBlockSearchToggle ||
-      !robotsAllowSearchToggle ||
-      !robotsCrawlDelay
-    ) {
-      return;
-    }
 
-    if (config.robots_enabled !== undefined) {
-      robotsEnabledToggle.checked = config.robots_enabled;
-    }
-    const aiBlockTraining = config.ai_policy_block_training ?? config.robots_block_ai_training;
-    if (aiBlockTraining !== undefined) {
-      robotsBlockTrainingToggle.checked = aiBlockTraining;
-    }
-    const aiBlockSearch = config.ai_policy_block_search ?? config.robots_block_ai_search;
-    if (aiBlockSearch !== undefined) {
-      robotsBlockSearchToggle.checked = aiBlockSearch;
-    }
-    const aiAllowSearch = config.ai_policy_allow_search_engines ?? config.robots_allow_search_engines;
-    if (aiAllowSearch !== undefined) {
-      robotsAllowSearchToggle.checked = !aiAllowSearch;
-    }
-    if (config.robots_crawl_delay !== undefined) {
-      robotsCrawlDelay.value = config.robots_crawl_delay;
-    }
     setDraft('robots', {
       enabled: robotsEnabledToggle.checked,
       crawlDelay: Number.parseInt(robotsCrawlDelay.value, 10) || 2
@@ -321,110 +417,124 @@ export const create = (options = {}) => {
       allowSearch: robotsAllowSearchToggle.checked
     });
 
-    const robotsBtn = getById('save-robots-config');
-    if (robotsBtn) {
-      robotsBtn.disabled = true;
-      robotsBtn.textContent = 'Save robots serving';
-    }
-    const aiBtn = getById('save-ai-policy-config');
-    if (aiBtn) {
-      aiBtn.disabled = true;
-      aiBtn.textContent = 'Save AI bot policy';
-    }
+    resetSaveButton(getById, 'save-robots-config', 'Save robots serving');
+    resetSaveButton(getById, 'save-ai-policy-config', 'Save AI bot policy');
   };
 
   const updateCdpConfig = (config = {}) => {
+    const { ok } = applyControlBindings({
+      getById,
+      config,
+      bindings: [
+        {
+          id: 'cdp-enabled-toggle',
+          key: 'cdp_detection_enabled',
+          prop: 'checked'
+        },
+        {
+          id: 'cdp-auto-ban-toggle',
+          key: 'cdp_auto_ban',
+          prop: 'checked'
+        },
+        {
+          id: 'cdp-threshold-slider',
+          key: 'cdp_detection_threshold',
+          prop: 'value'
+        },
+        {
+          id: 'cdp-threshold-value',
+          key: 'cdp_detection_threshold',
+          prop: 'textContent',
+          coerce: (value) => Number.parseFloat(value).toFixed(1)
+        }
+      ]
+    });
+    if (!ok) return;
+
     const cdpEnabledToggle = getById('cdp-enabled-toggle');
     const cdpAutoBanToggle = getById('cdp-auto-ban-toggle');
     const cdpThresholdSlider = getById('cdp-threshold-slider');
-    const cdpThresholdValue = getById('cdp-threshold-value');
-    if (!cdpEnabledToggle || !cdpAutoBanToggle || !cdpThresholdSlider || !cdpThresholdValue) return;
 
-    const statusPatch = {};
-    if (config.cdp_detection_enabled !== undefined) {
-      cdpEnabledToggle.checked = config.cdp_detection_enabled;
-      statusPatch.cdpEnabled = config.cdp_detection_enabled === true;
-    }
-    if (config.cdp_auto_ban !== undefined) {
-      cdpAutoBanToggle.checked = config.cdp_auto_ban;
-      statusPatch.cdpAutoBan = config.cdp_auto_ban === true;
-    }
-    if (config.cdp_detection_threshold !== undefined) {
-      cdpThresholdSlider.value = config.cdp_detection_threshold;
-      cdpThresholdValue.textContent = Number.parseFloat(config.cdp_detection_threshold).toFixed(1);
-    }
     setDraft('cdp', {
       enabled: cdpEnabledToggle.checked,
       autoBan: cdpAutoBanToggle.checked,
       threshold: Number.parseFloat(cdpThresholdSlider.value)
     });
-    const btn = getById('save-cdp-config');
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'Save CDP Settings';
-    }
-    applyStatusPatch(statusPatch);
+
+    applyStatusPatch({
+      cdpEnabled: cdpEnabledToggle.checked,
+      cdpAutoBan: cdpAutoBanToggle.checked
+    });
+
+    resetSaveButton(getById, 'save-cdp-config', 'Save CDP Settings');
   };
 
   const updateEdgeIntegrationModeConfig = (config = {}) => {
     const mode = normalizeEdgeIntegrationMode(config.edge_integration_mode);
-    const select = getById('edge-integration-mode-select');
-    if (!select) return;
-    select.value = mode;
-    setDraft('edgeMode', { mode });
+    const { ok } = applyControlBindings({
+      getById,
+      config: { mode },
+      bindings: [{ id: 'edge-integration-mode-select', key: 'mode', prop: 'value' }]
+    });
+    if (!ok) return;
 
-    const btn = getById('save-edge-integration-mode-config');
-    if (!btn) return;
-    btn.disabled = true;
-    btn.textContent = 'Save Edge Integration Mode';
+    setDraft('edgeMode', { mode });
+    resetSaveButton(getById, 'save-edge-integration-mode-config', 'Save Edge Integration Mode');
   };
 
   const updateRateLimitConfig = (config = {}) => {
     const rateLimit = Number.parseInt(config.rate_limit, 10) || 80;
-    const field = getById('rate-limit-threshold');
-    if (!field) return;
-    field.value = rateLimit;
+
+    const { ok } = applyControlBindings({
+      getById,
+      config: { rateLimit },
+      bindings: [{ id: 'rate-limit-threshold', key: 'rateLimit', prop: 'value' }]
+    });
+    if (!ok) return;
+
     setDraft('rateLimit', { value: rateLimit });
     applyStatusPatch({ rateLimit });
-
-    const btn = getById('save-rate-limit-config');
-    if (!btn) return;
-    btn.disabled = true;
-    btn.textContent = 'Save Rate Limit';
+    resetSaveButton(getById, 'save-rate-limit-config', 'Save Rate Limit');
   };
 
   const updateJsRequiredConfig = (config = {}) => {
     const enforced = parseBoolLike(config.js_required_enforced, true);
-    const toggle = getById('js-required-enforced-toggle');
-    if (!toggle) return;
-    toggle.checked = enforced;
+
+    const { ok } = applyControlBindings({
+      getById,
+      config: { enforced },
+      bindings: [{ id: 'js-required-enforced-toggle', key: 'enforced', prop: 'checked' }]
+    });
+    if (!ok) return;
+
     setDraft('jsRequired', { enforced });
     applyStatusPatch({ jsRequiredEnforced: enforced });
-
-    const btn = getById('save-js-required-config');
-    if (!btn) return;
-    btn.disabled = true;
-    btn.textContent = 'Save JS Required';
+    resetSaveButton(getById, 'save-js-required-config', 'Save JS Required');
   };
 
   const updatePowConfig = (config = {}) => {
     const powEnabled = parseBoolLike(config.pow_enabled, true);
     const difficulty = Number.parseInt(config.pow_difficulty, 10);
     const ttl = Number.parseInt(config.pow_ttl_seconds, 10);
+
+    const { ok } = applyControlBindings({
+      getById,
+      config: {
+        enabled: powEnabled,
+        difficulty: Number.isNaN(difficulty) ? undefined : difficulty,
+        ttl: Number.isNaN(ttl) ? undefined : ttl
+      },
+      bindings: [
+        { id: 'pow-enabled-toggle', key: 'enabled', prop: 'checked' },
+        { id: 'pow-difficulty', key: 'difficulty', prop: 'value' },
+        { id: 'pow-ttl', key: 'ttl', prop: 'value' }
+      ]
+    });
+    if (!ok) return;
+
     const difficultyField = getById('pow-difficulty');
     const ttlField = getById('pow-ttl');
     const powEnabledToggle = getById('pow-enabled-toggle');
-    if (!difficultyField || !ttlField || !powEnabledToggle) return;
-
-    applyStatusPatch({ powEnabled });
-
-    if (!Number.isNaN(difficulty)) {
-      difficultyField.value = difficulty;
-    }
-    if (!Number.isNaN(ttl)) {
-      ttlField.value = ttl;
-    }
-    powEnabledToggle.checked = powEnabled;
 
     setDraft('pow', {
       enabled: powEnabledToggle.checked,
@@ -432,41 +542,36 @@ export const create = (options = {}) => {
       ttl: Number.parseInt(ttlField.value, 10) || 90
     });
 
-    const btn = getById('save-pow-config');
-    if (!btn) return;
-    btn.disabled = true;
-    btn.textContent = 'Save PoW Settings';
+    applyStatusPatch({ powEnabled });
+    resetSaveButton(getById, 'save-pow-config', 'Save PoW Settings');
   };
 
   const updateBotnessSignalDefinitions = (signalDefinitions) => {
-    const scoredSignals = (signalDefinitions && Array.isArray(signalDefinitions.scored_signals))
-      ? signalDefinitions.scored_signals
-      : [];
-    const terminalSignals = (signalDefinitions && Array.isArray(signalDefinitions.terminal_signals))
-      ? signalDefinitions.terminal_signals
-      : [];
+    const scoredSignals =
+      signalDefinitions && Array.isArray(signalDefinitions.scored_signals)
+        ? signalDefinitions.scored_signals
+        : [];
+    const terminalSignals =
+      signalDefinitions && Array.isArray(signalDefinitions.terminal_signals)
+        ? signalDefinitions.terminal_signals
+        : [];
 
     const scoredTarget = getById('botness-signal-list');
     const terminalTarget = getById('botness-terminal-list');
     if (!scoredTarget || !terminalTarget) return;
 
-    scoredTarget.innerHTML = scoredSignals.length
-      ? scoredSignals.map((signal) => `
-      <div class="info-row">
-        <span class="info-label">${signal.label}</span>
-        <span>${signal.weight}</span>
-      </div>
-    `).join('')
-      : '<p class="text-muted">No scored signals</p>';
-
-    terminalTarget.innerHTML = terminalSignals.length
-      ? terminalSignals.map((signal) => `
-      <div class="info-row">
-        <span class="info-label">${signal.label}</span>
-        <span>${signal.action}</span>
-      </div>
-    `).join('')
-      : '<p class="text-muted">No terminal signals</p>';
+    renderInfoRows({
+      container: scoredTarget,
+      rows: scoredSignals,
+      emptyText: 'No scored signals',
+      valueKey: 'weight'
+    });
+    renderInfoRows({
+      container: terminalTarget,
+      rows: terminalSignals,
+      emptyText: 'No terminal signals',
+      valueKey: 'action'
+    });
   };
 
   const updateChallengeConfig = (config = {}) => {
@@ -490,6 +595,7 @@ export const create = (options = {}) => {
     const botnessStatus = getById('botness-config-status');
     const challengeDefaultLabel = getById('challenge-puzzle-default');
     const mazeDefaultLabel = getById('maze-threshold-default');
+
     if (
       !challengeThresholdField ||
       !mazeThresholdField ||
@@ -506,20 +612,32 @@ export const create = (options = {}) => {
       return;
     }
 
-    if (!Number.isNaN(challengeThreshold)) {
-      challengeThresholdField.value = challengeThreshold;
-    }
-    if (!Number.isNaN(mazeThreshold)) {
-      mazeThresholdField.value = mazeThreshold;
-    }
-    if (!Number.isNaN(challengeTransformCount)) {
-      transformCountField.value = challengeTransformCount;
-    }
-    challengeEnabledToggle.checked = challengeEnabled;
-    weightJsRequiredField.value = Number.parseInt(weights.js_required, 10) || 1;
-    weightGeoRiskField.value = Number.parseInt(weights.geo_risk, 10) || 2;
-    weightRateMediumField.value = Number.parseInt(weights.rate_medium, 10) || 1;
-    weightRateHighField.value = Number.parseInt(weights.rate_high, 10) || 2;
+    const { ok } = applyControlBindings({
+      getById,
+      config: {
+        challengeThreshold: Number.isNaN(challengeThreshold) ? undefined : challengeThreshold,
+        mazeThreshold: Number.isNaN(mazeThreshold) ? undefined : mazeThreshold,
+        transformCount: Number.isNaN(challengeTransformCount)
+          ? undefined
+          : challengeTransformCount,
+        challengeEnabled,
+        weightJsRequired: Number.parseInt(weights.js_required, 10) || 1,
+        weightGeoRisk: Number.parseInt(weights.geo_risk, 10) || 2,
+        weightRateMedium: Number.parseInt(weights.rate_medium, 10) || 1,
+        weightRateHigh: Number.parseInt(weights.rate_high, 10) || 2
+      },
+      bindings: [
+        { id: 'challenge-puzzle-threshold', key: 'challengeThreshold', prop: 'value' },
+        { id: 'maze-threshold-score', key: 'mazeThreshold', prop: 'value' },
+        { id: 'challenge-puzzle-transform-count', key: 'transformCount', prop: 'value' },
+        { id: 'challenge-puzzle-enabled-toggle', key: 'challengeEnabled', prop: 'checked' },
+        { id: 'weight-js-required', key: 'weightJsRequired', prop: 'value' },
+        { id: 'weight-geo-risk', key: 'weightGeoRisk', prop: 'value' },
+        { id: 'weight-rate-medium', key: 'weightRateMedium', prop: 'value' },
+        { id: 'weight-rate-high', key: 'weightRateHigh', prop: 'value' }
+      ]
+    });
+    if (!ok) return;
 
     botnessStatus.textContent = writable ? 'EDITABLE' : 'READ ONLY';
     challengeDefaultLabel.textContent = Number.isNaN(challengeDefault) ? '--' : challengeDefault;
@@ -561,21 +679,14 @@ export const create = (options = {}) => {
 
     updateBotnessSignalDefinitions(config.botness_signal_definitions);
 
-    const btn = getById('save-botness-config');
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'Save Botness Settings';
-    }
+    resetSaveButton(getById, 'save-botness-config', 'Save Botness Settings');
 
     setDraft('challengePuzzle', {
       enabled: challengeEnabledToggle.checked,
       count: Number.parseInt(transformCountField.value, 10) || 6
     });
-    const challengeBtn = getById('save-challenge-puzzle-config');
-    if (challengeBtn) {
-      challengeBtn.disabled = true;
-      challengeBtn.textContent = 'Save Challenge Puzzle';
-    }
+    resetSaveButton(getById, 'save-challenge-puzzle-config', 'Save Challenge Puzzle');
+
     transformCountField.disabled = !writable;
     challengeEnabledToggle.disabled = !writable;
   };
@@ -583,13 +694,16 @@ export const create = (options = {}) => {
   const setAdvancedConfigEditorFromConfig = (config, preserveDirty = true) => {
     const field = getById('advanced-config-json');
     if (!field) return;
+
     const previousBaseline = getDraft('advancedConfig').normalized || '{}';
     const template = buildAdvancedConfigTemplate(config || {});
     const formatted = JSON.stringify(template, null, 2);
     const currentNormalized = normalizeJsonObjectForCompare(field.value);
     const hasUnsavedEdits = field.dataset.dirty === 'true';
 
-    setDraft('advancedConfig', { normalized: normalizeJsonObjectForCompare(formatted) || '{}' });
+    setDraft('advancedConfig', {
+      normalized: normalizeJsonObjectForCompare(formatted) || '{}'
+    });
 
     const shouldReplace =
       !preserveDirty ||

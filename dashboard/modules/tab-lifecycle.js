@@ -25,6 +25,34 @@ export const createTabLifecycleCoordinator = (options = {}) => {
   const adminPanelSelector = options.adminPanelSelector || '#dashboard-admin-section [data-dashboard-tab-panel]';
   const onActiveTabChange =
     typeof options.onActiveTabChange === 'function' ? options.onActiveTabChange : null;
+  const effects = options.effects || {};
+  const readHash = typeof effects.readHash === 'function'
+    ? effects.readHash
+    : () => String((window.location && window.location.hash) || '');
+  const replaceHash = typeof effects.replaceHash === 'function'
+    ? effects.replaceHash
+    : (value) => {
+      const normalized = String(value || '').replace(/^#/, '');
+      history.replaceState(
+        null,
+        '',
+        `${window.location.pathname}${window.location.search}#${normalized}`
+      );
+    };
+  const setHash = typeof effects.setHash === 'function'
+    ? effects.setHash
+    : (value) => {
+      window.location.hash = String(value || '').replace(/^#/, '');
+    };
+  const onHashChange = typeof effects.onHashChange === 'function'
+    ? effects.onHashChange
+    : (handler) => {
+      window.addEventListener('hashchange', handler);
+      return () => window.removeEventListener('hashchange', handler);
+    };
+  const requestFrame = typeof effects.requestFrame === 'function'
+    ? effects.requestFrame
+    : (task) => window.requestAnimationFrame(task);
 
   const controllerSource = options.controllers || {};
   const controllers = {};
@@ -111,13 +139,10 @@ export const createTabLifecycleCoordinator = (options = {}) => {
   };
 
   const syncFromHash = () => {
-    const requested = normalizeTab((window.location.hash || '').replace(/^#/, ''));
-    if (window.location.hash !== `#${requested}`) {
-      history.replaceState(
-        null,
-        '',
-        `${window.location.pathname}${window.location.search}#${requested}`
-      );
+    const hash = readHash();
+    const requested = normalizeTab(String(hash || '').replace(/^#/, ''));
+    if (hash !== `#${requested}`) {
+      replaceHash(requested);
     }
     setActiveTab(requested, 'hash');
   };
@@ -135,13 +160,13 @@ export const createTabLifecycleCoordinator = (options = {}) => {
 
   const activate = (tabName, reason = 'programmatic') => {
     const tab = normalizeTab(tabName);
-    if (window.location.hash !== `#${tab}`) {
-      window.location.hash = tab;
+    if (readHash() !== `#${tab}`) {
+      setHash(tab);
     } else {
       setActiveTab(tab, reason);
     }
     if (reason === 'keyboard') {
-      window.requestAnimationFrame(() => focusActivePanel(tab));
+      requestFrame(() => focusActivePanel(tab));
     }
   };
 
@@ -192,8 +217,7 @@ export const createTabLifecycleCoordinator = (options = {}) => {
       controllers[tab].init({ tab });
     });
     bindLinkInteractions();
-    window.addEventListener('hashchange', syncFromHash);
-    unbindFns.push(() => window.removeEventListener('hashchange', syncFromHash));
+    unbindFns.push(onHashChange(syncFromHash));
     initialized = true;
     syncFromHash();
   };

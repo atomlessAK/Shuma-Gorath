@@ -165,6 +165,7 @@ dashboard/
   modules/services/admin-endpoint.js
   modules/services/runtime-effects.js
   modules/status.js
+  modules/status-view.js
   modules/dashboard-state.js
   modules/monitoring-view.js
   modules/tables-view.js
@@ -192,8 +193,10 @@ dashboard/
 15. Runtime endpoint resolution is centralized in `modules/services/admin-endpoint.js` for deterministic same-origin behavior and local loopback override handling.
 16. Runtime side effects (request adapter, clipboard copy, timers) flow through `modules/services/runtime-effects.js` so feature logic is easier to test.
 17. Active tab refresh pipeline fetches only required data for that tab.
-18. Config save operations in `modules/config-controls.js` now bind through a structured `context` contract rather than an untyped callback bag.
-19. Dirty-check evaluation in `dashboard.js` is registry-driven to reduce per-pane drift and keep save-button semantics consistent.
+18. Config save operations in `modules/config-controls.js` are registry-driven (`prepare -> patch -> save -> success/error`) so save-flow behavior is consistent across config sections.
+19. Config hydration in `modules/config-ui-state.js` now applies declarative control-binding specs (with coercion) instead of section-by-section hand-coded DOM assignments.
+20. `modules/status.js` now owns state and status view-model derivation, while DOM rendering is isolated in `modules/status-view.js`.
+21. Dirty-check evaluation in `dashboard.js` is registry-driven to reduce per-pane drift and keep save-button semantics consistent.
 
 ## 🐙 Local Asset Provenance
 

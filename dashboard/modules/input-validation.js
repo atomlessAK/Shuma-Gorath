@@ -274,7 +274,7 @@ export const create = (options = {}) => {
 
     input.addEventListener('input', () => {
       apply(true);
-      onFieldInteraction();
+      onFieldInteraction(id);
     });
     input.addEventListener('blur', () => {
       if (!input.value) {
@@ -284,7 +284,7 @@ export const create = (options = {}) => {
       if (parsed !== null && parsed < rules.min) input.value = String(rules.min);
       if (parsed !== null && parsed > rules.max) input.value = String(rules.max);
       apply(true);
-      onFieldInteraction();
+      onFieldInteraction(id);
     });
     apply(false);
   };
@@ -297,11 +297,11 @@ export const create = (options = {}) => {
     };
     input.addEventListener('input', () => {
       apply(true);
-      onFieldInteraction();
+      onFieldInteraction(id);
     });
     input.addEventListener('blur', () => {
       apply(true);
-      onFieldInteraction();
+      onFieldInteraction(id);
     });
     apply(false);
   };

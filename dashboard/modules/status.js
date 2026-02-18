@@ -1,7 +1,7 @@
 // @ts-check
 
-import { escapeHtml } from './core/format.js';
 import { writableStatusVarPaths } from './config-schema.js';
+import * as statusView from './status-view.js';
 
   const INITIAL_STATE = Object.freeze({
     failMode: 'unknown',
@@ -437,9 +437,65 @@ import { writableStatusVarPaths } from './config-schema.js';
     }
   ];
 
-  export const create = (options = {}) => {
-    const doc = options.document || document;
-    const state = createInitialState();
+  function buildFeatureStatusItems(snapshot) {
+    return STATUS_DEFINITIONS.map((definition) => ({
+      title: definition.title,
+      description: definition.description(snapshot),
+      status: definition.status(snapshot)
+    }));
+  }
+
+  function buildVariableInventoryGroups(snapshot) {
+    const flattened = flattenConfigEntries(snapshot.configSnapshot || {})
+      .filter((entry) => entry.path && entry.path.length > 0)
+      .map((entry) => {
+        const valueClass = classifyVarPath(entry.path);
+        return {
+          path: entry.path,
+          valueClass,
+          group: classifyVarGroup(entry.path),
+          valueText: formatVarValue(entry.value),
+          meaning: meaningForVarPath(entry.path),
+          isAdminWrite: valueClass === 'ADMIN_WRITE'
+        };
+      })
+      .sort((a, b) => {
+        if (a.group.key !== b.group.key) {
+          const groupOrder = VAR_GROUP_DEFINITIONS.map((group) => group.key).concat(['other']);
+          return groupOrder.indexOf(a.group.key) - groupOrder.indexOf(b.group.key);
+        }
+        if (a.valueClass !== b.valueClass) {
+          return a.valueClass === 'ADMIN_WRITE' ? -1 : 1;
+        }
+        return a.path.localeCompare(b.path);
+      });
+
+    if (flattened.length === 0) {
+      return [];
+    }
+
+    const grouped = new Map();
+    flattened.forEach((entry) => {
+      if (!grouped.has(entry.group.key)) {
+        grouped.set(entry.group.key, {
+          key: entry.group.key,
+          title: entry.group.title,
+          entries: []
+        });
+      }
+      grouped.get(entry.group.key).entries.push(entry);
+    });
+
+    const orderedGroupKeys = VAR_GROUP_DEFINITIONS
+      .map((group) => group.key)
+      .concat(['other'])
+      .filter((key) => grouped.has(key));
+    return orderedGroupKeys.map((key) => grouped.get(key));
+  }
+
+export const create = (options = {}) => {
+  const doc = options.document || document;
+  const state = createInitialState();
 
     const getState = () => ({
       ...state,
@@ -467,123 +523,23 @@ import { writableStatusVarPaths } from './config-schema.js';
       return getState();
     };
 
-    const renderFeatureStatus = (snapshot) => {
-      const container = doc.getElementById('status-items');
-      if (!container) return;
-      container.innerHTML = STATUS_DEFINITIONS.map(definition => `
-      <div class="status-item">
-        <h3>${definition.title}</h3>
-        <p class="control-desc text-muted">${definition.description(snapshot)}</p>
-        <div class="status-rows">
-          <div class="info-row">
-            <span class="info-label text-muted">Status:</span>
-            <span class="status-value">${definition.status(snapshot)}</span>
-          </div>
-        </div>
-      </div>
-    `).join('');
-    };
-
-    const renderVariableInventory = (snapshot) => {
-      const groupsContainer = doc.getElementById('status-vars-groups');
-      if (!groupsContainer) return;
-      const flattened = flattenConfigEntries(snapshot.configSnapshot || {})
-        .filter(entry => entry.path && entry.path.length > 0)
-        .map((entry) => {
-          const valueClass = classifyVarPath(entry.path);
-          return {
-            ...entry,
-            valueClass,
-            group: classifyVarGroup(entry.path)
-          };
-        })
-        .sort((a, b) => {
-          if (a.group.key !== b.group.key) {
-            const groupOrder = VAR_GROUP_DEFINITIONS
-              .map(group => group.key)
-              .concat(['other']);
-            return groupOrder.indexOf(a.group.key) - groupOrder.indexOf(b.group.key);
-          }
-          if (a.valueClass !== b.valueClass) {
-            return a.valueClass === 'ADMIN_WRITE' ? -1 : 1;
-          }
-          return a.path.localeCompare(b.path);
-        });
-
-      if (flattened.length === 0) {
-        groupsContainer.innerHTML = `
-        <p class="text-muted">No configuration snapshot loaded yet.</p>
-      `;
-        return;
-      }
-
-      const grouped = new Map();
-      flattened.forEach((entry) => {
-        if (!grouped.has(entry.group.key)) {
-          grouped.set(entry.group.key, {
-            title: entry.group.title,
-            entries: []
-          });
-        }
-        grouped.get(entry.group.key).entries.push(entry);
-      });
-
-      const orderedGroupKeys = VAR_GROUP_DEFINITIONS
-        .map(group => group.key)
-        .concat(['other'])
-        .filter(key => grouped.has(key));
-
-      groupsContainer.innerHTML = orderedGroupKeys.map((groupKey) => {
-        const group = grouped.get(groupKey);
-        const rows = group.entries.map(entry => `
-        <tr class="status-var-row ${entry.valueClass === 'ADMIN_WRITE' ? 'status-var-row--admin-write' : ''}">
-          <td><code>${escapeHtml(entry.path)}</code></td>
-          <td><code>${escapeHtml(formatVarValue(entry.value))}</code></td>
-          <td>${escapeHtml(meaningForVarPath(entry.path))}</td>
-        </tr>
-      `).join('');
-        return `
-        <section class="status-var-group">
-          <h4 class="status-var-group-title">${escapeHtml(group.title)}</h4>
-          <table class="status-vars-table">
-            <colgroup>
-              <col class="status-vars-col status-vars-col--variable" />
-              <col class="status-vars-col status-vars-col--value" />
-              <col class="status-vars-col status-vars-col--meaning" />
-            </colgroup>
-            <thead>
-              <tr>
-                <th scope="col">Variable</th>
-                <th scope="col">Current Value</th>
-                <th scope="col">Meaning</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows}
-            </tbody>
-          </table>
-        </section>
-      `;
-      }).join('');
-    };
-
-    const render = () => {
-      const snapshot = getState();
-      renderFeatureStatus(snapshot);
-      renderVariableInventory(snapshot);
-    };
-
-    const applyPatch = (patch = {}) => {
-      update(patch);
-      render();
-      return getState();
-    };
-
-    return {
-      normalizeFailMode,
-      update,
-      applyPatch,
-      getState,
-      render
-    };
+  const render = () => {
+    const snapshot = getState();
+    statusView.renderFeatureStatus(doc, buildFeatureStatusItems(snapshot));
+    statusView.renderVariableInventory(doc, buildVariableInventoryGroups(snapshot));
   };
+
+  const applyPatch = (patch = {}) => {
+    update(patch);
+    render();
+    return getState();
+  };
+
+  return {
+    normalizeFailMode,
+    update,
+    applyPatch,
+    getState,
+    render
+  };
+};

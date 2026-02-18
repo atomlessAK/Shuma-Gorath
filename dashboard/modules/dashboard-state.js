@@ -74,6 +74,18 @@ export const createInitialState = (initialTab = DEFAULT_TAB) => ({
 
 const timestampNow = () => new Date().toISOString();
 
+export const actions = Object.freeze({
+  setActiveTab: (tab) => ({ type: 'set-active-tab', tab }),
+  setSession: (session) => ({ type: 'set-session', session }),
+  setSnapshot: (key, value) => ({ type: 'set-snapshot', key, value }),
+  setTabLoading: (tab, loading) => ({ type: 'set-tab-loading', tab, loading }),
+  setTabError: (tab, message) => ({ type: 'set-tab-error', tab, message }),
+  clearTabError: (tab) => ({ type: 'clear-tab-error', tab }),
+  setTabEmpty: (tab, empty) => ({ type: 'set-tab-empty', tab, empty }),
+  markTabUpdated: (tab) => ({ type: 'mark-tab-updated', tab }),
+  invalidate: (scope = 'all') => ({ type: 'invalidate', scope })
+});
+
 export const reduceState = (prevState, event = {}) => {
   const prev = prevState || createInitialState();
   const type = String(event.type || 'noop');
@@ -209,6 +221,30 @@ const deriveMonitoringEmpty = (state) => {
   );
 };
 
+export const selectors = Object.freeze({
+  activeTab: (state) => state.activeTab,
+  session: (state) => ({
+    authenticated: state.session.authenticated,
+    csrfToken: state.session.csrfToken
+  }),
+  snapshot: (state, key) => (Object.prototype.hasOwnProperty.call(state.snapshots, key)
+    ? state.snapshots[key]
+    : null),
+  tabStatus: (state, tabName) => {
+    const tab = normalizeTab(tabName);
+    return {
+      loading: state.tabStatus[tab].loading,
+      error: state.tabStatus[tab].error,
+      empty: state.tabStatus[tab].empty,
+      updatedAt: state.tabStatus[tab].updatedAt,
+      stale: state.stale[tab] === true
+    };
+  },
+  tabIsStale: (state, tabName) => state.stale[normalizeTab(tabName)] === true,
+  monitoringEmpty: (state) => deriveMonitoringEmpty(state),
+  hasConfigSnapshot: (state) => Boolean(state.snapshots.config)
+});
+
 export const create = (options = {}) => {
   let state = createInitialState(options.initialTab || DEFAULT_TAB);
 
@@ -220,73 +256,61 @@ export const create = (options = {}) => {
   const getState = () => state;
 
   const setActiveTab = (tabName) => {
-    apply({ type: 'set-active-tab', tab: tabName });
+    apply(actions.setActiveTab(tabName));
   };
 
-  const getActiveTab = () => state.activeTab;
+  const getActiveTab = () => selectors.activeTab(state);
 
   const setSession = (nextSession = {}) => {
-    apply({ type: 'set-session', session: nextSession });
+    apply(actions.setSession(nextSession));
   };
 
-  const getSession = () => ({
-    authenticated: state.session.authenticated,
-    csrfToken: state.session.csrfToken
-  });
+  const getSession = () => selectors.session(state);
 
   const setSnapshot = (key, value) => {
-    apply({ type: 'set-snapshot', key, value });
+    apply(actions.setSnapshot(key, value));
   };
 
   const getSnapshot = (key) => {
-    if (!Object.prototype.hasOwnProperty.call(state.snapshots, key)) return null;
-    return state.snapshots[key];
+    return selectors.snapshot(state, key);
   };
 
   const setTabLoading = (tabName, loading) => {
-    apply({ type: 'set-tab-loading', tab: tabName, loading });
+    apply(actions.setTabLoading(tabName, loading));
   };
 
   const setTabError = (tabName, message) => {
-    apply({ type: 'set-tab-error', tab: tabName, message });
+    apply(actions.setTabError(tabName, message));
   };
 
   const clearTabError = (tabName) => {
-    apply({ type: 'clear-tab-error', tab: tabName });
+    apply(actions.clearTabError(tabName));
   };
 
   const setTabEmpty = (tabName, empty) => {
-    apply({ type: 'set-tab-empty', tab: tabName, empty });
+    apply(actions.setTabEmpty(tabName, empty));
   };
 
   const markTabUpdated = (tabName) => {
-    apply({ type: 'mark-tab-updated', tab: tabName });
+    apply(actions.markTabUpdated(tabName));
   };
 
   const invalidate = (scope = 'all') => {
-    apply({ type: 'invalidate', scope });
+    apply(actions.invalidate(scope));
   };
 
   const isTabStale = (tabName) => {
-    const tab = normalizeTab(tabName);
-    return state.stale[tab] === true;
+    return selectors.tabIsStale(state, tabName);
   };
 
   const getTabStatus = (tabName) => {
-    const tab = normalizeTab(tabName);
-    return {
-      loading: state.tabStatus[tab].loading,
-      error: state.tabStatus[tab].error,
-      empty: state.tabStatus[tab].empty,
-      updatedAt: state.tabStatus[tab].updatedAt,
-      stale: state.stale[tab] === true
-    };
+    return selectors.tabStatus(state, tabName);
   };
 
   const getDerivedState = () => ({
-    monitoringEmpty: deriveMonitoringEmpty(state),
-    hasConfigSnapshot: Boolean(state.snapshots.config),
-    activeTab: state.activeTab
+    monitoringEmpty: selectors.monitoringEmpty(state),
+    hasConfigSnapshot: selectors.hasConfigSnapshot(state),
+    activeTab: selectors.activeTab(state)
   });
 
   return {
@@ -294,6 +318,8 @@ export const create = (options = {}) => {
     DEFAULT_TAB,
     normalizeTab,
     createInitialState,
+    actions,
+    selectors,
     reduceState,
     getState,
     setActiveTab,

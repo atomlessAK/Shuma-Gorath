@@ -179,14 +179,22 @@ Reference plan: `docs/plans/2026-02-17-dashboard-lit-full-cutover.md`
 
 #### State, effects, and data flow architecture
 - [ ] DSH-LIT-STATE1 Add centralized immutable dashboard store (`state + reducer + action creators + selectors`) and remove ad-hoc mutable orchestration globals.
+- [x] DSH-LIT-STATE1.a Exported canonical state action creators/selectors from `dashboard/modules/dashboard-state.js` and covered reducer/selectors behavior in module unit tests.
 - [ ] DSH-LIT-STATE2 Move all API and side effects into explicit service/effect adapters (network, timers, clipboard, history/hash) injected into feature controllers/components.
+- [x] DSH-LIT-STATE2.a Added hash/history/animation-frame effect adapters in `runtime-effects` and routed tab lifecycle through injected effects instead of direct `window` access.
 - [ ] DSH-LIT-STATE3 Replace broad `refreshCoreActionButtonsState()` fan-out with selector-driven recomputation scoped to affected controls/sections only.
+- [x] DSH-LIT-STATE3.a Removed broad dirty-check fan-out and introduced tab/section-scoped dirty recomputation (`DIRTY_SECTIONS_BY_TAB` + targeted input-triggered refresh paths).
+- [x] DSH-LIT-STATE3.b Made validation interaction callbacks field-aware (`onFieldInteraction(fieldId)`) and routed dirty/action recomputation through field-scoped selectors.
 - [ ] DSH-LIT-STATE4 Remove wrapper/null-guard bridge functions caused by init-order coupling by making init order explicit in app shell lifecycle.
+- [x] DSH-LIT-STATE4.a Removed null-guard bridge wrappers around validation/duration helpers and now rely on explicit initialization order.
 
 #### Config domain redesign (addresses `config-controls.js` + `config-ui-state.js` review findings)
 - [ ] DSH-LIT-CFG1 Replace procedural config save handlers with a declarative save registry (`buttonId`, validator set, patch builder, draft key, success reducer, post-save hooks).
 - [ ] DSH-LIT-CFG2 Build a generic config save pipeline from the registry (`authorize -> validate -> save -> commit draft -> emit UI status`) and remove duplicated handler flow code.
 - [ ] DSH-LIT-CFG3 Replace monolithic config response->DOM updater logic with declarative config-to-form binding specs + coercion adapters.
+- [x] DSH-LIT-CFG1.a Replaced per-button procedural save handlers in `dashboard/modules/config-controls.js` with a registry-driven save spec list.
+- [x] DSH-LIT-CFG2.a Added a single generic save pipeline (`prepare -> patch -> save -> success/error handlers`) and covered it with module tests.
+- [x] DSH-LIT-CFG3.a Introduced declarative control-binding helpers in `dashboard/modules/config-ui-state.js` and moved section hydration onto binding specs.
 - [ ] DSH-LIT-CFG4 Split Config tab into section-scoped Lit components (maze, robots+ai-policy, geo, honeypot, browser policy, bypass lists, challenge+pow, botness, cdp, edge mode, advanced patch editor).
 - [ ] DSH-LIT-CFG5 Implement section-local dirty state selectors and save-button enablement; remove whole-page dirty rechecks on every field input.
 - [ ] DSH-LIT-CFG6 Keep shared schema as single source of truth for writable paths, section grouping, defaults, coercions, validation bounds, and status meaning references.
@@ -195,11 +203,13 @@ Reference plan: `docs/plans/2026-02-17-dashboard-lit-full-cutover.md`
 - [ ] DSH-LIT-STS1 Split status module into domain state/classification data and Lit rendering components; remove mixed state/render responsibilities from one module.
 - [ ] DSH-LIT-STS2 Render runtime variable inventory with declarative Lit templates (no string-built nested `innerHTML` tables) and preserve grouped table semantics.
 - [ ] DSH-LIT-STS3 Keep admin-write highlighting and meaning metadata centralized in shared schema/data modules to avoid drift with Config tab.
+- [x] DSH-LIT-STS1.a Extracted status rendering into `dashboard/modules/status-view.js` so `dashboard/modules/status.js` now owns state/classification while view rendering is isolated.
 
 #### Rendering and component system excellence
 - [ ] DSH-LIT-UI1 Replace remaining string-template `innerHTML` rendering in dashboard modules with Lit templates/directives (`repeat`, keyed rows, conditionals).
 - [ ] DSH-LIT-UI2 Add shared presentational primitives (stat cards, offender card, table shell, empty/loading/error state blocks, form field rows) used across all tabs.
 - [ ] DSH-LIT-UI3 Enforce safe rendering rules: no unvetted `unsafeHTML`, no manual HTML concatenation paths for data-bearing UI, and centralized escaping/formatting utilities where text conversion is required.
+- [x] DSH-LIT-UI3.a Replaced status runtime-variable inventory string-concatenation rendering with explicit DOM node construction in `status-view`.
 
 #### Full-tab Lit migration (all-in scope, not monitoring-only)
 - [ ] DSH-LIT-TAB1 Migrate Monitoring tab completely to Lit components, preserving chart/event behavior contracts and telemetry helper UX.

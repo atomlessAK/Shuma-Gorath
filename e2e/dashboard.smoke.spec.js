@@ -132,10 +132,19 @@ async function openDashboard(page, options = {}) {
   assertNoRuntimeFailures(page);
 }
 
-async function openTab(page, tab) {
+async function openTab(page, tab, options = {}) {
+  const waitForReady = options.waitForReady === true;
   await page.click(`#dashboard-tab-${tab}`);
   await expect(page).toHaveURL(new RegExp(`#${tab}$`));
   await assertActiveTabPanelVisibility(page, tab);
+  if (waitForReady && ADMIN_TABS.includes(tab)) {
+    await page.waitForFunction((tabName) => {
+      const state = document.querySelector(`[data-tab-state="${tabName}"]`);
+      if (!state) return true;
+      const text = (state.textContent || "").trim();
+      return !/^loading/i.test(text);
+    }, tab, { timeout: 15000 });
+  }
   assertNoRuntimeFailures(page);
 }
 
@@ -403,7 +412,7 @@ test("ban form enforces IP validity and submit state", async ({ page }) => {
 
 test("maze and duration save buttons use shared dirty-state behavior", async ({ page }) => {
   await openDashboard(page);
-  await openTab(page, "config");
+  await openTab(page, "config", { waitForReady: true });
 
   const mazeSave = page.locator("#save-maze-config");
   const durationsSave = page.locator("#save-durations-btn");

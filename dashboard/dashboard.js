@@ -224,25 +224,23 @@ function setFieldError(input, message, showInline = true) {
   errorEl.classList.remove('visible');
 }
 
-const parseIntegerLoose = (id) => (inputValidation ? inputValidation.parseIntegerLoose(id) : null);
+const parseIntegerLoose = (id) => inputValidation.parseIntegerLoose(id);
 const validateIntegerFieldById = (id, showInline = false) =>
-  (inputValidation ? inputValidation.validateIntegerFieldById(id, showInline) : false);
+  inputValidation.validateIntegerFieldById(id, showInline);
 const readIntegerFieldValue = (id, messageTarget) =>
-  (inputValidation ? inputValidation.readIntegerFieldValue(id, messageTarget) : null);
+  inputValidation.readIntegerFieldValue(id, messageTarget);
 const validateIpFieldById = (id, required, label, showInline = false) =>
-  (inputValidation ? inputValidation.validateIpFieldById(id, required, label, showInline) : false);
+  inputValidation.validateIpFieldById(id, required, label, showInline);
 const readIpFieldValue = (id, required, messageTarget, label) =>
-  (inputValidation ? inputValidation.readIpFieldValue(id, required, messageTarget, label) : null);
-const setBanDurationInputFromSeconds = (durationKey, totalSeconds) => {
-  if (!inputValidation) return;
+  inputValidation.readIpFieldValue(id, required, messageTarget, label);
+const setBanDurationInputFromSeconds = (durationKey, totalSeconds) =>
   inputValidation.setBanDurationInputFromSeconds(durationKey, totalSeconds);
-};
 const readBanDurationFromInputs = (durationKey, showInline = false) =>
-  (inputValidation ? inputValidation.readBanDurationFromInputs(durationKey, showInline) : null);
+  inputValidation.readBanDurationFromInputs(durationKey, showInline);
 const readBanDurationSeconds = (durationKey) =>
-  (inputValidation ? inputValidation.readBanDurationSeconds(durationKey) : null);
+  inputValidation.readBanDurationSeconds(durationKey);
 const readManualBanDurationSeconds = (showInline = false) =>
-  (inputValidation ? inputValidation.readManualBanDurationSeconds(showInline) : null);
+  inputValidation.readManualBanDurationSeconds(showInline);
 
 function hasValidApiContext() {
   return adminSessionController ? adminSessionController.hasValidApiContext() : false;
@@ -312,50 +310,6 @@ function refreshCoreActionButtonsState() {
     apiValid,
     validateIpFieldById('unban-ip', true, 'Unban IP')
   );
-
-  if (typeof checkBanDurationsChanged === 'function') {
-    checkBanDurationsChanged();
-  }
-  if (typeof checkMazeConfigChanged === 'function') {
-    checkMazeConfigChanged();
-  }
-
-  if (typeof checkRobotsConfigChanged === 'function') {
-    checkRobotsConfigChanged();
-  }
-  if (typeof checkGeoConfigChanged === 'function') {
-    checkGeoConfigChanged();
-  }
-  if (typeof checkHoneypotConfigChanged === 'function') {
-    checkHoneypotConfigChanged();
-  }
-  if (typeof checkBrowserPolicyConfigChanged === 'function') {
-    checkBrowserPolicyConfigChanged();
-  }
-  if (typeof checkBypassAllowlistsConfigChanged === 'function') {
-    checkBypassAllowlistsConfigChanged();
-  }
-  if (typeof checkPowConfigChanged === 'function') {
-    checkPowConfigChanged();
-  }
-  if (typeof checkChallengePuzzleConfigChanged === 'function') {
-    checkChallengePuzzleConfigChanged();
-  }
-  if (typeof checkBotnessConfigChanged === 'function') {
-    checkBotnessConfigChanged();
-  }
-  if (typeof checkCdpConfigChanged === 'function') {
-    checkCdpConfigChanged();
-  }
-  if (typeof checkRateLimitConfigChanged === 'function') {
-    checkRateLimitConfigChanged();
-  }
-  if (typeof checkJsRequiredConfigChanged === 'function') {
-    checkJsRequiredConfigChanged();
-  }
-  if (typeof checkAdvancedConfigChanged === 'function') {
-    checkAdvancedConfigChanged();
-  }
 }
 
 function getAdminContext(messageTarget) {
@@ -369,6 +323,7 @@ function initInputValidation() {
   inputValidation.bindIpFieldValidation('ban-ip', true, 'Ban IP');
   inputValidation.bindIpFieldValidation('unban-ip', true, 'Unban IP');
   refreshCoreActionButtonsState();
+  refreshAllDirtySections();
 }
 
 function envVar(name) {
@@ -978,6 +933,99 @@ function checkAdvancedConfigChanged() {
   setDirtySaveButtonState('save-advanced-config', changed, apiValid, valid);
 }
 
+const DIRTY_SECTIONS_BY_TAB = Object.freeze({
+  monitoring: [],
+  'ip-bans': [],
+  status: [],
+  config: [
+    'maze',
+    'robots',
+    'aiPolicy',
+    'geo',
+    'honeypot',
+    'browserPolicy',
+    'bypassAllowlists',
+    'edgeMode',
+    'advancedConfig'
+  ],
+  tuning: [
+    'banDurations',
+    'pow',
+    'challengePuzzle',
+    'botness',
+    'cdp',
+    'rateLimit',
+    'jsRequired'
+  ]
+});
+
+const CORE_ACTION_FIELD_IDS = new Set([
+  'ban-ip',
+  'unban-ip',
+  'ban-duration-days',
+  'ban-duration-hours',
+  'ban-duration-minutes'
+]);
+
+const DIRTY_SECTIONS_BY_FIELD_ID = Object.freeze({
+  'robots-crawl-delay': ['robots'],
+  'maze-threshold': ['maze'],
+  'dur-honeypot-days': ['banDurations'],
+  'dur-honeypot-hours': ['banDurations'],
+  'dur-honeypot-minutes': ['banDurations'],
+  'dur-rate-limit-days': ['banDurations'],
+  'dur-rate-limit-hours': ['banDurations'],
+  'dur-rate-limit-minutes': ['banDurations'],
+  'dur-browser-days': ['banDurations'],
+  'dur-browser-hours': ['banDurations'],
+  'dur-browser-minutes': ['banDurations'],
+  'dur-cdp-days': ['banDurations'],
+  'dur-cdp-hours': ['banDurations'],
+  'dur-cdp-minutes': ['banDurations'],
+  'dur-admin-days': ['banDurations'],
+  'dur-admin-hours': ['banDurations'],
+  'dur-admin-minutes': ['banDurations'],
+  'pow-difficulty': ['pow'],
+  'pow-ttl': ['pow'],
+  'challenge-puzzle-transform-count': ['challengePuzzle'],
+  'challenge-puzzle-threshold': ['botness'],
+  'maze-threshold-score': ['botness'],
+  'weight-js-required': ['botness'],
+  'weight-geo-risk': ['botness'],
+  'weight-rate-medium': ['botness'],
+  'weight-rate-high': ['botness'],
+  'rate-limit-threshold': ['rateLimit']
+});
+
+function refreshDirtySections(sectionKeys = []) {
+  sectionKeys.forEach((sectionKey) => {
+    if (sectionKey === 'geo') {
+      checkGeoConfigChanged();
+      return;
+    }
+    if (sectionKey === 'advancedConfig') {
+      checkAdvancedConfigChanged();
+      return;
+    }
+    const spec = DIRTY_CHECK_REGISTRY[sectionKey];
+    if (spec) {
+      runDirtySaveCheck(spec);
+    }
+  });
+}
+
+function refreshAllDirtySections() {
+  const allKeys = Object.keys(DIRTY_CHECK_REGISTRY);
+  refreshDirtySections([...allKeys, 'geo', 'advancedConfig']);
+}
+
+function refreshDirtySectionsForField(fieldId) {
+  if (!fieldId) return;
+  const sections = DIRTY_SECTIONS_BY_FIELD_ID[fieldId];
+  if (!Array.isArray(sections) || sections.length === 0) return;
+  refreshDirtySections(sections);
+}
+
 function bindDashboardFieldEvents() {
   [
     { ids: ['robots-enabled-toggle'], event: 'change', handler: checkRobotsConfigChanged },
@@ -988,6 +1036,8 @@ function bindDashboardFieldEvents() {
       handler: checkAiPolicyConfigChanged
     },
     { ids: ['maze-enabled-toggle', 'maze-auto-ban-toggle'], event: 'change', handler: checkMazeConfigChanged },
+    { ids: ['maze-threshold'], event: 'input', handler: checkMazeConfigChanged },
+    { ids: ['maze-threshold'], event: 'blur', handler: checkMazeConfigChanged },
     { ids: ['honeypot-enabled-toggle'], event: 'change', handler: checkHoneypotConfigChanged },
     { ids: ['challenge-puzzle-transform-count'], event: 'input', handler: checkChallengePuzzleConfigChanged },
     { ids: ['challenge-puzzle-enabled-toggle'], event: 'change', handler: checkChallengePuzzleConfigChanged }
@@ -998,21 +1048,18 @@ function bindDashboardFieldEvents() {
   bindInputAndBlur('honeypot-paths', () => {
     validateHoneypotPathsField(true);
     checkHoneypotConfigChanged();
-    refreshCoreActionButtonsState();
   });
 
   ['browser-block-rules', 'browser-whitelist-rules'].forEach((id) => {
     bindInputAndBlur(id, () => {
       validateBrowserRulesField(id, true);
       checkBrowserPolicyConfigChanged();
-      refreshCoreActionButtonsState();
     });
   });
 
   ['network-whitelist', 'path-whitelist'].forEach((id) => {
     bindInputAndBlur(id, () => {
       checkBypassAllowlistsConfigChanged();
-      refreshCoreActionButtonsState();
     });
   });
 
@@ -1067,12 +1114,10 @@ function bindDashboardFieldEvents() {
       }
       validateGeoFieldById(id, true);
       checkGeoConfigChanged();
-      refreshCoreActionButtonsState();
     });
     bindFieldEvent(id, 'blur', () => {
       validateGeoFieldById(id, true);
       checkGeoConfigChanged();
-      refreshCoreActionButtonsState();
     });
   });
 
@@ -1081,7 +1126,6 @@ function bindDashboardFieldEvents() {
 
   bindInputAndBlur('advanced-config-json', () => {
     checkAdvancedConfigChanged();
-    refreshCoreActionButtonsState();
   });
 
   bindFieldEvent('cdp-threshold-slider', 'input', function onCdpSliderInput() {
@@ -1199,7 +1243,7 @@ async function refreshSharedConfig(reason = 'manual') {
     updateConfigModeUi(config, { configSnapshot: config });
     CONFIG_UI_REFRESH_METHODS.forEach((methodName) => invokeConfigUiState(methodName, config));
     invokeConfigUiState('setAdvancedConfigEditorFromConfig', config, true);
-    checkAdvancedConfigChanged();
+    refreshAllDirtySections();
   });
   return config;
 }
@@ -1335,6 +1379,7 @@ async function refreshDashboardForTab(tab, reason = 'manual') {
     await handler(reason);
     if (dashboardState) dashboardState.markTabUpdated(activeTab);
     refreshCoreActionButtonsState();
+    refreshDirtySections(DIRTY_SECTIONS_BY_TAB[activeTab] || []);
     updateLastUpdatedTimestamp();
   } catch (error) {
     const message = error && error.message ? error.message : 'Refresh failed';
@@ -1524,7 +1569,12 @@ function initializeDashboardRuntime() {
     banDurationBoundsSeconds: BAN_DURATION_BOUNDS_SECONDS,
     banDurationFields: BAN_DURATION_FIELDS,
     manualBanDurationField: MANUAL_BAN_DURATION_FIELD,
-    onFieldInteraction: refreshCoreActionButtonsState
+    onFieldInteraction: (fieldId) => {
+      if (fieldId && CORE_ACTION_FIELD_IDS.has(fieldId)) {
+        refreshCoreActionButtonsState();
+      }
+      refreshDirtySectionsForField(fieldId);
+    }
   });
 
   configUiState = configUiStateModule.create({
@@ -1551,7 +1601,8 @@ function initializeDashboardRuntime() {
     onActiveTabChange: (nextTab) => {
       if (dashboardState) dashboardState.setActiveTab(nextTab);
       scheduleAutoRefresh();
-    }
+    },
+    effects: runtimeEffects
   });
   dashboardTabCoordinator.init();
   initInputValidation();

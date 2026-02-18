@@ -14,6 +14,16 @@ export const createRuntimeEffects = (options = {}) => {
     typeof options.clearTimeout === 'function'
       ? options.clearTimeout
       : win.clearTimeout.bind(win);
+  const requestAnimationFrameFn =
+    typeof options.requestAnimationFrame === 'function'
+      ? options.requestAnimationFrame
+      : win.requestAnimationFrame.bind(win);
+  const cancelAnimationFrameFn =
+    typeof options.cancelAnimationFrame === 'function'
+      ? options.cancelAnimationFrame
+      : (typeof win.cancelAnimationFrame === 'function'
+        ? win.cancelAnimationFrame.bind(win)
+        : (() => {}));
 
   const copyText = async (text = '') => {
     const value = String(text || '');
@@ -32,11 +42,39 @@ export const createRuntimeEffects = (options = {}) => {
 
   const setTimer = (task, ms = 0) => setTimeoutFn(task, ms);
   const clearTimer = (id) => clearTimeoutFn(id);
+  const requestFrame = (task) => requestAnimationFrameFn(task);
+  const cancelFrame = (id) => cancelAnimationFrameFn(id);
+
+  const readHash = () => String((win.location && win.location.hash) || '');
+  const setHash = (value = '') => {
+    const normalized = String(value || '').replace(/^#/, '');
+    win.location.hash = `#${normalized}`;
+  };
+  const replaceHash = (value = '') => {
+    const normalized = String(value || '').replace(/^#/, '');
+    const nextHash = `#${normalized}`;
+    win.history.replaceState(
+      null,
+      '',
+      `${win.location.pathname}${win.location.search}${nextHash}`
+    );
+  };
+  const onHashChange = (handler) => {
+    if (typeof handler !== 'function') return () => {};
+    win.addEventListener('hashchange', handler);
+    return () => win.removeEventListener('hashchange', handler);
+  };
 
   return {
     request,
     copyText,
     setTimer,
-    clearTimer
+    clearTimer,
+    requestFrame,
+    cancelFrame,
+    readHash,
+    setHash,
+    replaceHash,
+    onHashChange
   };
 };
