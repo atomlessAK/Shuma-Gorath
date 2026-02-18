@@ -189,16 +189,13 @@ Implementation rule: when internal feature work touches provider-managed capabil
   - terminal B: `make test`
   - required outcome: Rust unit + maze benchmark + integration + dashboard e2e all green.
   - Completed on 2026-02-18 after commit `86b42bf`; `make test` passed end-to-end (including dashboard e2e).
-- [ ] HND-SVLT-3 If verification is green, open/update PR from `codex/dashboard-sveltekit-port` into `main` and include:
+- [x] HND-SVLT-3 If verification is green, open/update PR from `codex/dashboard-sveltekit-port` into `main` and include:
   - SvelteKit migration summary (`dashboard/legacy/*` retained only as archived fallback assets),
   - Makefile-only workflow enforcement updates (`AGENTS.md`, `CONTRIBUTING.md`, `Makefile`),
   - dashboard runtime/perf guardrails (`e2e` remount fan-out + bundle budget gate).
-  - Remaining blocker to troubleshoot: Codex runtime DNS cannot resolve `api.github.com` (`lookup api.github.com: no such host`) even though host terminal networking works (for example, `ping api.github.com` resolves successfully).
-  - Resume troubleshooting with:
-    - `curl -I https://api.github.com`
-    - `gh api rate_limit`
-    - `gh pr list --head codex/dashboard-sveltekit-port --base main`
-    - If Codex DNS remains broken, run PR/CI commands from host terminal and paste outputs back into session.
+  - Completed on 2026-02-18: PR opened as `https://github.com/atomless/Shuma-Gorath/pull/1` with required handoff summary.
+  - DNS troubleshooting outcome in Codex runtime: resolved (`curl -I https://api.github.com` returned `HTTP/2 200`; `gh api rate_limit` succeeded).
+  - Current blocker moved to merge/readiness state: PR currently reports `mergeStateStatus=DIRTY` and no GitHub Actions checks have reported yet for branch `codex/dashboard-sveltekit-port`.
 - [ ] HND-SVLT-4 Merge to `main` after CI is green; then continue Round 4 items (`DSH-SVLT-EX18..EX22`) on a fresh `codex/*` branch.
 
 #### Next Session Pickup Point (SvelteKit)
