@@ -1,12 +1,41 @@
 <script>
   import { base } from '$app/paths';
-  import { onMount } from 'svelte';
-  import { mountDashboardRuntime } from '$lib/bridges/dashboard-runtime.js';
-  import dashboardShell from '$lib/shell/dashboard-body.html?raw';
+  import { onDestroy, onMount } from 'svelte';
+  import ConfigTab from '$lib/components/dashboard/ConfigTab.svelte';
+  import IpBansTab from '$lib/components/dashboard/IpBansTab.svelte';
+  import MonitoringTab from '$lib/components/dashboard/MonitoringTab.svelte';
+  import StatusTab from '$lib/components/dashboard/StatusTab.svelte';
+  import TuningTab from '$lib/components/dashboard/TuningTab.svelte';
+  import { resolveDashboardRuntimeMode } from '$lib/runtime/dashboard-runtime-mode.js';
+  import { createDashboardActions } from '$lib/runtime/dashboard-actions.js';
+  import { createDashboardEffects } from '$lib/runtime/dashboard-effects.js';
+  import {
+    getDashboardSessionState,
+    logoutDashboardSession,
+    mountDashboardRuntime,
+    refreshDashboardTab,
+    restoreDashboardSession,
+    setDashboardActiveTab,
+    unmountDashboardRuntime
+  } from '$lib/runtime/dashboard-runtime.js';
+  import {
+    createDashboardStore,
+    DASHBOARD_TABS,
+    normalizeTab
+  } from '$lib/state/dashboard-store.js';
 
   const chartLiteSrc = `${base}/assets/vendor/chart-lite-1.0.0.min.js`;
-
   const pendingScripts = new Map();
+
+  const dashboardStore = createDashboardStore({ initialTab: 'monitoring' });
+
+  let dashboardState = dashboardStore.getState();
+  let storeUnsubscribe = () => {};
+  let dashboardActions = null;
+  let runtimeMode = 'native';
+  let runtimeReady = false;
+  let runtimeError = '';
+  let loggingOut = false;
 
   function ensureScript(src, dataKey) {
     if (pendingScripts.has(src)) {
@@ -33,14 +62,152 @@
     return promise;
   }
 
+  async function bootstrapNativeRuntime() {
+    await mountDashboardRuntime({
+      useExternalTabPipeline: true,
+      useExternalPollingPipeline: true,
+      useExternalSessionPipeline: true,
+      bindLogoutButton: false,
+      initialTab: normalizeTab(window.location.hash.replace(/^#/, ''))
+    });
+
+    const effects = createDashboardEffects();
+    dashboardActions = createDashboardActions({
+      store: dashboardStore,
+      effects,
+      runtime: {
+        refreshTab: refreshDashboardTab,
+        setActiveTab: setDashboardActiveTab,
+        restoreSession: restoreDashboardSession,
+        getSessionState: getDashboardSessionState,
+        logout: logoutDashboardSession
+      }
+    });
+
+    dashboardActions.init();
+    const authenticated = await dashboardActions.bootstrapSession();
+    if (!authenticated) return;
+    runtimeReady = true;
+  }
+
   onMount(async () => {
-    await ensureScript(chartLiteSrc, 'data-shuma-runtime-script');
-    await mountDashboardRuntime();
+    storeUnsubscribe = dashboardStore.subscribe((value) => {
+      dashboardState = value;
+    });
+
+    try {
+      await ensureScript(chartLiteSrc, 'data-shuma-runtime-script');
+      runtimeMode = resolveDashboardRuntimeMode(import.meta.env);
+
+      if (runtimeMode === 'legacy') {
+        await mountDashboardRuntime();
+        runtimeReady = true;
+        return;
+      }
+
+      await bootstrapNativeRuntime();
+    } catch (error) {
+      runtimeError = error && error.message ? error.message : 'Dashboard bootstrap failed.';
+    }
   });
+
+  onDestroy(() => {
+    if (dashboardActions) {
+      dashboardActions.destroy();
+      dashboardActions = null;
+    }
+    storeUnsubscribe();
+    unmountDashboardRuntime();
+  });
+
+  function onTabClick(event, tab) {
+    if (runtimeMode !== 'native' || !dashboardActions) return;
+    dashboardActions.onTabClick(event, tab);
+  }
+
+  function onTabKeydown(event, tab) {
+    if (runtimeMode !== 'native' || !dashboardActions) return;
+    dashboardActions.onTabKeydown(event, tab);
+  }
+
+  async function onLogoutClick(event) {
+    if (runtimeMode !== 'native' || !dashboardActions) return;
+    event.preventDefault();
+    if (loggingOut) return;
+    loggingOut = true;
+    try {
+      await dashboardActions.logout();
+    } finally {
+      loggingOut = false;
+    }
+  }
+
+  const isNative = () => runtimeMode === 'native';
+  const isTabActive = (tab) => normalizeTab(dashboardState.activeTab) === normalizeTab(tab);
 </script>
 
 <svelte:head>
   <title>Shuma-Gorath Dashboard</title>
 </svelte:head>
 
-{@html dashboardShell}
+<span id="last-updated" class="text-muted"></span>
+<div class="container panel panel-border" data-dashboard-runtime-mode={runtimeMode}>
+  <header>
+    <div class="shuma-image-wrapper">
+      <img src="assets/shuma-gorath-white.png" alt="Shuma-Gorath" class="shuma-gorath-img">
+    </div>
+    <h1>Shuma-Gorath</h1>
+    <p class="subtitle text-muted">Multi-Dimensional Bot Defence</p>
+    <button
+      id="logout-btn"
+      class="btn btn-subtle dashboard-logout"
+      aria-label="Log out of admin session"
+      disabled={isNative() ? (loggingOut || dashboardState.session.authenticated !== true) : false}
+      on:click={onLogoutClick}
+    >Logout</button>
+    <nav class="dashboard-tabs" aria-label="Dashboard sections">
+      {#each DASHBOARD_TABS as tab}
+        <a
+          id={`dashboard-tab-${tab}`}
+          class="dashboard-tab-link"
+          class:active={isNative() ? isTabActive(tab) : false}
+          data-dashboard-tab-link={tab}
+          href={`#${tab}`}
+          role="tab"
+          aria-selected={isNative() ? (isTabActive(tab) ? 'true' : 'false') : 'false'}
+          aria-controls={`dashboard-panel-${tab}`}
+          tabindex={isNative() ? (isTabActive(tab) ? 0 : -1) : -1}
+          on:click={(event) => onTabClick(event, tab)}
+          on:keydown={(event) => onTabKeydown(event, tab)}
+        >
+          {tab === 'ip-bans' ? 'IP Bans' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+        </a>
+      {/each}
+    </nav>
+  </header>
+  <div id="test-mode-banner" class="test-mode-banner hidden">TEST MODE ACTIVE - Logging only, no blocking</div>
+
+  <MonitoringTab managed={isNative()} isActive={isTabActive('monitoring')} />
+
+  <div
+    id="dashboard-admin-section"
+    class="section admin-section"
+    hidden={isNative() && isTabActive('monitoring')}
+    aria-hidden={isNative() ? (isTabActive('monitoring') ? 'true' : 'false') : 'true'}
+  >
+    <div class="admin-groups">
+      <IpBansTab managed={isNative()} isActive={isTabActive('ip-bans')} />
+      <StatusTab managed={isNative()} isActive={isTabActive('status')} />
+      <ConfigTab managed={isNative()} isActive={isTabActive('config')} />
+      <TuningTab managed={isNative()} isActive={isTabActive('tuning')} />
+    </div>
+    <div id="admin-msg" class="message"></div>
+  </div>
+
+  {#if runtimeError}
+    <p class="message error">{runtimeError}</p>
+  {/if}
+  {#if isNative() && !runtimeReady && !runtimeError}
+    <p class="message info">Loading dashboard runtime...</p>
+  {/if}
+</div>

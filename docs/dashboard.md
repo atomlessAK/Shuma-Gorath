@@ -33,7 +33,10 @@ Refresh model:
 - `/dashboard/index.html`
 - `/dashboard/login.html`
 - Existing tab hash routes (`#monitoring`, `#ip-bans`, `#status`, `#config`, `#tuning`).
-- Legacy dashboard behavior modules remain as a compatibility runtime mounted from Svelte route lifecycle bridges.
+- The page is now a Svelte component tree (`Monitoring`, `IP Bans`, `Status`, `Config`, `Tuning`) instead of shell-fragment injection.
+- Runtime behavior mounts through `src/lib/runtime/dashboard-runtime.js` (`mount`/`unmount`) with explicit lifecycle cleanup.
+- Default runtime mode is now Svelte-native orchestration (`src/lib/state/dashboard-store.js`, `src/lib/runtime/dashboard-effects.js`, `src/lib/runtime/dashboard-actions.js`) for tab lifecycle, hash sync, polling, and auth/session flow.
+- Runtime mode is now config-driven at dashboard build time via `DASHBOARD_RUNTIME_MODE` (`native` or `legacy`), passed to Svelte as `PUBLIC_SHUMA_DASHBOARD_RUNTIME_MODE`.
 - `dashboard/package.json` still sets `"type": "module"` so existing dashboard module unit tests run via native ESM in Node.
 
 ## 🐙 Features
@@ -108,6 +111,9 @@ Development:
 - `http://127.0.0.1:3000/dashboard/index.html`
 - `http://127.0.0.1:3000/dashboard` (canonical redirect to `/dashboard/index.html`)
 - Dashboard assets are built via `pnpm run build:dashboard` and emitted to `dist/dashboard` (wired into `make dev`, `make run`, and `make build`).
+- Runtime mode toggle for local rollout/rollback:
+- `DASHBOARD_RUNTIME_MODE=native make dev` (default)
+- `DASHBOARD_RUNTIME_MODE=legacy make dev` (legacy orchestration fallback)
 - API key source: `SHUMA_API_KEY` from environment (local dev commonly loads this from `.env.local`)
 - Login flow: unauthenticated visits to `/dashboard/index.html` are redirected to `/dashboard/login.html`; enter API key once to create a short-lived same-origin admin session cookie
 - Admin API endpoint is inferred from the page origin (same-origin only)
@@ -149,15 +155,23 @@ dashboard/
   src/app.css
   src/routes/+page.svelte
   src/routes/login.html/+page.svelte
-  src/lib/shell/dashboard-body.html
-  src/lib/shell/login-body.html
-  src/lib/bridges/dashboard-runtime.js
-  src/lib/bridges/login-runtime.js
+  src/lib/components/dashboard/MonitoringTab.svelte
+  src/lib/components/dashboard/IpBansTab.svelte
+  src/lib/components/dashboard/StatusTab.svelte
+  src/lib/components/dashboard/ConfigTab.svelte
+  src/lib/components/dashboard/TuningTab.svelte
+  src/lib/components/dashboard/primitives/TabStateMessage.svelte
+  src/lib/components/dashboard/primitives/StatCard.svelte
+  src/lib/components/dashboard/primitives/TableWrapper.svelte
+  src/lib/state/dashboard-store.js
+  src/lib/runtime/dashboard-effects.js
+  src/lib/runtime/dashboard-actions.js
+  src/lib/runtime/dashboard-runtime.js
   static/assets/vendor/chart-lite-1.0.0.min.js
   package.json
-  login.html            # legacy shell source (not served directly)
-  login.js              # legacy login runtime mounted by Svelte bridge
-  index.html            # legacy shell source (not served directly)
+  legacy/login.html     # archived pre-Svelte entry shell
+  legacy/index.html     # archived pre-Svelte entry shell
+  legacy/login.js       # archived legacy login runtime (not active path)
   dashboard.js
   assets/               # legacy/source assets copied into static/
   modules/core/format.js
@@ -185,12 +199,12 @@ dist/
 
 ## 🐙 Data Flow (High Level)
 
-1. SvelteKit renders the dashboard route shell from `src/routes/+page.svelte`.
-2. The route injects preserved dashboard body markup from `src/lib/shell/dashboard-body.html`.
-3. On route mount, `src/lib/bridges/dashboard-runtime.js` loads the legacy dashboard runtime (`dashboard.js`) and starts behavior orchestration.
-4. The legacy runtime continues to use `modules/tab-lifecycle.js` for hash-tab lifecycle (`init`, `mount`, `unmount`, `refresh`).
-5. API/state/view modules (`modules/api-client.js`, `modules/dashboard-state.js`, `modules/monitoring-view.js`, `modules/tables-view.js`, `modules/config-controls.js`, etc.) continue to enforce behavior contracts unchanged.
-6. Login route follows the same pattern via `src/routes/login.html/+page.svelte` + `src/lib/bridges/login-runtime.js`.
+1. SvelteKit renders the dashboard page from `src/routes/+page.svelte` with dedicated tab components.
+2. On route mount, `src/lib/runtime/dashboard-runtime.js` mounts `dashboard.js` with external orchestration enabled by default.
+3. Svelte-native orchestrators (`src/lib/state/dashboard-store.js`, `src/lib/runtime/dashboard-effects.js`, `src/lib/runtime/dashboard-actions.js`) own active-tab state, hash/keyboard navigation, session bootstrap, logout, and polling cadence.
+4. `dashboard.js` provides reusable runtime adapters (refresh/session/config wiring) and explicit lifecycle entrypoints (`mountDashboardApp()` / `unmountDashboardApp()`).
+5. Domain modules (`modules/api-client.js`, `modules/dashboard-state.js`, `modules/monitoring-view.js`, `modules/tables-view.js`, `modules/config-controls.js`, etc.) continue to enforce behavior contracts.
+6. Login is Svelte-native in `src/routes/login.html/+page.svelte` (no shell injection/bridge).
 7. `adapter-static` writes final static assets to `dist/dashboard`, which Spin serves for `/dashboard/...`.
 
 ## 🐙 Local Asset Provenance
@@ -206,10 +220,12 @@ Chart runtime is vendored locally to avoid runtime CDN dependency and supply-cha
 
 If a regression appears in the tabbed SPA shell, use this rollback sequence:
 
-1. Repoint `spin.toml` dashboard static source from `dist/dashboard` back to `dashboard`.
-2. Restore direct static entrypoint serving for `dashboard/index.html` and `dashboard/login.html` if needed.
-3. Remove `make` dashboard-build hook calls introduced for SvelteKit output.
-4. Run `make test` and `make build` before deploy rollback.
+1. First-line runtime rollback: rebuild dashboard assets with legacy orchestration enabled (`DASHBOARD_RUNTIME_MODE=legacy make build`) and deploy that artifact.
+2. To roll forward again, rebuild with native mode (`DASHBOARD_RUNTIME_MODE=native make build`) and redeploy.
+3. If runtime-mode rollback is insufficient, repoint `spin.toml` dashboard static source from `dist/dashboard` back to `dashboard`.
+4. Restore direct static entrypoint serving from `dashboard/legacy/index.html` and `dashboard/legacy/login.html` if needed.
+5. Remove `make` dashboard-build hook calls introduced for SvelteKit output.
+6. Run `make test` and `make build` before deploy rollback.
 
 Note: `SHUMA_KV_STORE_FAIL_OPEN` is an environment-level policy and is shown read-only in the dashboard.
 Note: Admin config panes are editable only when `SHUMA_ADMIN_CONFIG_WRITE_ENABLED=true`.

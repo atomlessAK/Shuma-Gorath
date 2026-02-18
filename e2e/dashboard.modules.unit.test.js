@@ -1861,7 +1861,35 @@ test('svelte route guardrails forbid shell injection and bridge-era imports', ()
   assert.equal(mainSource.includes('$lib/bridges/'), false);
   assert.equal(loginSource.includes('$lib/bridges/'), false);
   assert.match(mainSource, /mountDashboardRuntime/);
+  assert.match(mainSource, /resolveDashboardRuntimeMode/);
+  assert.equal(mainSource.includes('dashboard_runtime'), false);
   assert.equal(mainSource.includes("import('../../../dashboard.js')"), false);
+});
+
+test('dashboard runtime mode resolver is config-driven and defaults to native', { concurrency: false }, async () => {
+  const runtimeModeModule = await importBrowserModule(
+    'dashboard/src/lib/runtime/dashboard-runtime-mode.js'
+  );
+
+  assert.equal(runtimeModeModule.resolveDashboardRuntimeMode(), 'native');
+  assert.equal(
+    runtimeModeModule.resolveDashboardRuntimeMode({
+      PUBLIC_SHUMA_DASHBOARD_RUNTIME_MODE: 'legacy'
+    }),
+    'legacy'
+  );
+  assert.equal(
+    runtimeModeModule.resolveDashboardRuntimeMode({
+      PUBLIC_SHUMA_DASHBOARD_RUNTIME_MODE: 'NATIVE'
+    }),
+    'native'
+  );
+  assert.equal(
+    runtimeModeModule.resolveDashboardRuntimeMode({
+      PUBLIC_SHUMA_DASHBOARD_RUNTIME_MODE: 'invalid'
+    }),
+    'native'
+  );
 });
 
 test('svelte tab semantics avoid interactive-role warnings for tablist and tabpanel', () => {
