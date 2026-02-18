@@ -119,6 +119,10 @@ function toPlain(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function waitForAsyncWork() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 function createMockCanvasContext() {
   const calls = {
     fillText: [],
@@ -393,6 +397,60 @@ test('admin session leaves global fetch unpatched and sends CSRF header on logou
   assert.equal(logoutCall.init && logoutCall.init.credentials, 'same-origin');
 });
 
+test('admin session bootstrap handles authenticated then expired transitions', { concurrency: false }, async () => {
+  let sessionCalls = 0;
+  const messageNode = {
+    textContent: '',
+    className: ''
+  };
+
+  await withBrowserGlobals({
+    fetch: async (url) => {
+      if (String(url).endsWith('/admin/session')) {
+        sessionCalls += 1;
+        if (sessionCalls === 1) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ authenticated: true, csrf_token: 'csrf-live' })
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ authenticated: false, csrf_token: '' })
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({})
+      };
+    }
+  }, async () => {
+    const adminSessionModule = await importBrowserModule('dashboard/modules/admin-session.js');
+    const controller = adminSessionModule.create({
+      resolveAdminApiEndpoint: () => ({ endpoint: 'http://example.test' }),
+      redirectToLogin: () => {}
+    });
+
+    const firstRestore = await controller.restoreAdminSession();
+    assert.equal(firstRestore, true);
+    assert.equal(controller.hasValidApiContext(), true);
+    const activeContext = controller.getAdminContext(messageNode);
+    assert.equal(Boolean(activeContext), true);
+    assert.equal(activeContext.csrfToken, 'csrf-live');
+
+    const secondRestore = await controller.restoreAdminSession();
+    assert.equal(secondRestore, false);
+    assert.equal(controller.hasValidApiContext(), false);
+    const expiredContext = controller.getAdminContext(messageNode);
+    assert.equal(expiredContext, null);
+    assert.equal(messageNode.className, 'message warning');
+    assert.equal(messageNode.textContent.includes('Login required'), true);
+  });
+});
+
 test('chart-lite renders doughnut legend labels', () => {
   const browser = loadClassicBrowserScript(CHART_LITE_PATH, {
     matchMedia: () => ({ matches: false })
@@ -489,6 +547,412 @@ test('tab lifecycle normalizes unknown tabs to monitoring default', { concurrenc
   });
 });
 
+test('tab lifecycle init is single-mount and destroy cleans listeners/timers', { concurrency: false }, async () => {
+  const createMockLink = (tab) => {
+    const attributes = new Map();
+    const listeners = new Map();
+    const addCounts = new Map();
+    const removeCounts = new Map();
+    const classes = new Set();
+    return {
+      dataset: { dashboardTabLink: tab },
+      tabIndex: -1,
+      classList: {
+        toggle: (className, enabled) => {
+          if (enabled) {
+            classes.add(className);
+          } else {
+            classes.delete(className);
+          }
+        }
+      },
+      setAttribute: (name, value) => {
+        attributes.set(name, String(value));
+      },
+      getAttribute: (name) => attributes.get(name) || null,
+      addEventListener: (name, handler) => {
+        listeners.set(name, handler);
+        addCounts.set(name, (addCounts.get(name) || 0) + 1);
+      },
+      removeEventListener: (name, handler) => {
+        if (listeners.get(name) === handler) {
+          listeners.delete(name);
+        }
+        removeCounts.set(name, (removeCounts.get(name) || 0) + 1);
+      },
+      focus: () => {},
+      emit: (name, event) => {
+        const handler = listeners.get(name);
+        if (handler) handler(event);
+      },
+      getAddCount: (name) => addCounts.get(name) || 0,
+      getRemoveCount: (name) => removeCounts.get(name) || 0
+    };
+  };
+
+  const createMockPanel = (tab) => ({
+    dataset: { dashboardTabPanel: tab },
+    hidden: true,
+    tabIndex: -1,
+    setAttribute: () => {},
+    focus: () => {}
+  });
+
+  const links = ['monitoring', 'ip-bans', 'status', 'config', 'tuning'].map(createMockLink);
+  const adminPanels = ['ip-bans', 'status', 'config', 'tuning'].map(createMockPanel);
+  const monitoringPanel = {
+    hidden: false,
+    tabIndex: 0,
+    setAttribute: () => {},
+    focus: () => {}
+  };
+  const adminSection = {
+    hidden: true,
+    setAttribute: () => {}
+  };
+
+  const windowListeners = { hashchange: [] };
+  let hashValue = '';
+  let historyReplaceCalls = 0;
+  const location = {
+    pathname: '/dashboard/index.html',
+    search: '',
+    get hash() {
+      return hashValue;
+    },
+    set hash(value) {
+      const text = String(value || '');
+      hashValue = text.startsWith('#') ? text : `#${text}`;
+    }
+  };
+  const history = {
+    replaceState: (_state, _title, url) => {
+      const hashIndex = String(url || '').indexOf('#');
+      hashValue = hashIndex >= 0 ? String(url).slice(hashIndex) : '';
+      historyReplaceCalls += 1;
+    }
+  };
+
+  await withBrowserGlobals({
+    window: {
+      location,
+      history,
+      requestAnimationFrame: (task) => task(),
+      addEventListener: (name, handler) => {
+        if (name === 'hashchange') {
+          windowListeners.hashchange.push(handler);
+        }
+      },
+      removeEventListener: (name, handler) => {
+        if (name !== 'hashchange') return;
+        windowListeners.hashchange = windowListeners.hashchange.filter((entry) => entry !== handler);
+      }
+    },
+    location,
+    history,
+    document: {
+      getElementById: (id) => {
+        if (id === 'dashboard-panel-monitoring') return monitoringPanel;
+        if (id === 'dashboard-admin-section') return adminSection;
+        return null;
+      },
+      querySelector: (selector) => {
+        if (selector === '#dashboard-panel-monitoring') return monitoringPanel;
+        const match = String(selector).match(/data-dashboard-tab-panel=\"([^\"]+)\"/);
+        if (!match) return null;
+        return adminPanels.find((panel) => panel.dataset.dashboardTabPanel === match[1]) || null;
+      },
+      querySelectorAll: (selector) => {
+        if (selector === '[data-dashboard-tab-link]') return links;
+        if (selector === '#dashboard-admin-section [data-dashboard-tab-panel]') return adminPanels;
+        return [];
+      }
+    }
+  }, async () => {
+    const lifecycle = await importBrowserModule('dashboard/modules/tab-lifecycle.js');
+    const mounts = [];
+    const unmounts = [];
+
+    const coordinator = lifecycle.createTabLifecycleCoordinator({
+      controllers: {
+        monitoring: { mount: () => mounts.push('monitoring'), unmount: () => unmounts.push('monitoring') },
+        'ip-bans': { mount: () => mounts.push('ip-bans'), unmount: () => unmounts.push('ip-bans') },
+        status: { mount: () => mounts.push('status'), unmount: () => unmounts.push('status') },
+        config: { mount: () => mounts.push('config'), unmount: () => unmounts.push('config') },
+        tuning: { mount: () => mounts.push('tuning'), unmount: () => unmounts.push('tuning') }
+      }
+    });
+
+    coordinator.init();
+    coordinator.init();
+    assert.equal(windowListeners.hashchange.length, 1);
+    links.forEach((link) => {
+      assert.equal(link.getAddCount('click'), 1);
+      assert.equal(link.getAddCount('keydown'), 1);
+    });
+    assert.equal(mounts.length <= 1, true);
+    assert.equal(historyReplaceCalls >= 1, true);
+
+    links[0].emit('keydown', { key: 'ArrowRight', preventDefault: () => {} });
+    assert.equal(location.hash, '#ip-bans');
+    windowListeners.hashchange.forEach((handler) => handler());
+    assert.equal(links[1].getAttribute('aria-selected'), 'true');
+
+    coordinator.destroy();
+    assert.equal(windowListeners.hashchange.length, 0);
+    assert.equal(unmounts.length >= 1, true);
+    links.forEach((link) => {
+      assert.equal(link.getRemoveCount('click') >= 1, true);
+      assert.equal(link.getRemoveCount('keydown') >= 1, true);
+    });
+  });
+});
+
+test('svelte dashboard store exposes centralized state/actions/selectors', { concurrency: false }, async () => {
+  await withBrowserGlobals({}, async () => {
+    const storeModule = await importBrowserModule('dashboard/src/lib/state/dashboard-store.js');
+    assert.ok(storeModule);
+
+    const store = storeModule.createDashboardStore({ initialTab: 'monitoring' });
+    assert.equal(store.getState().activeTab, 'monitoring');
+
+    store.setActiveTab('status');
+    assert.equal(store.getState().activeTab, 'status');
+
+    store.setSession({ authenticated: true, csrfToken: 'csrf-native' });
+    assert.equal(store.getState().session.authenticated, true);
+    assert.equal(store.getState().session.csrfToken, 'csrf-native');
+
+    store.setTabLoading('status', true);
+    const statusStore = store.tabStatus('status');
+    let latestStatus = null;
+    const unsubStatus = statusStore.subscribe((value) => {
+      latestStatus = value;
+    });
+    assert.equal(latestStatus.loading, true);
+    unsubStatus();
+
+    store.setDraftBaseline('maze', { enabled: true, threshold: 50 });
+    store.setDraft('maze', { enabled: true, threshold: 60 });
+    assert.equal(store.isDraftDirty('maze'), true);
+  });
+});
+
+test('svelte dashboard actions orchestrate session bootstrap and keyboard/hash tab pipeline', { concurrency: false }, async () => {
+  const listeners = {
+    hashchange: [],
+    visibilitychange: []
+  };
+  const hashWrites = [];
+  const redirectCalls = [];
+  const clearCalls = [];
+  const setActiveCalls = [];
+  const refreshCalls = [];
+  let sessionState = { authenticated: true, csrfToken: 'csrf-native' };
+  const timerIds = [];
+
+  await withBrowserGlobals({
+    window: {
+      location: {
+        pathname: '/dashboard/index.html',
+        search: '',
+        hash: '#monitoring'
+      }
+    },
+    document: {
+      getElementById: (id) => {
+        if (!String(id).startsWith('dashboard-tab-')) return null;
+        return { focus: () => {} };
+      },
+      querySelector: () => null,
+      querySelectorAll: () => []
+    }
+  }, async () => {
+    const storeModule = await importBrowserModule('dashboard/src/lib/state/dashboard-store.js');
+    const actionsModule = await importBrowserModule('dashboard/src/lib/runtime/dashboard-actions.js');
+    const store = storeModule.createDashboardStore({ initialTab: 'monitoring' });
+
+    const effects = {
+      setTimer: (_task, _ms) => {
+        const id = Symbol('timer');
+        timerIds.push(id);
+        return id;
+      },
+      clearTimer: (id) => clearCalls.push(id),
+      requestFrame: (task) => task(),
+      readHashTab: () => String(window.location.hash || '').replace(/^#/, ''),
+      writeHashTab: (tab) => {
+        const normalized = String(tab || '').replace(/^#/, '');
+        hashWrites.push(normalized);
+        window.location.hash = `#${normalized}`;
+      },
+      onHashChange: (handler) => {
+        listeners.hashchange.push(handler);
+        return () => {
+          listeners.hashchange = listeners.hashchange.filter((entry) => entry !== handler);
+        };
+      },
+      onVisibilityChange: (handler) => {
+        listeners.visibilitychange.push(handler);
+        return () => {
+          listeners.visibilitychange = listeners.visibilitychange.filter((entry) => entry !== handler);
+        };
+      },
+      isPageVisible: () => true,
+      redirect: (path) => redirectCalls.push(String(path))
+    };
+
+    let restoreCount = 0;
+    const runtime = {
+      refreshTab: async (tab, reason) => {
+        refreshCalls.push({ tab, reason });
+      },
+      setActiveTab: (tab) => {
+        setActiveCalls.push(tab);
+      },
+      restoreSession: async () => {
+        restoreCount += 1;
+        if (restoreCount === 1) {
+          sessionState = { authenticated: true, csrfToken: 'csrf-native' };
+          return true;
+        }
+        sessionState = { authenticated: false, csrfToken: '' };
+        return false;
+      },
+      getSessionState: () => ({ ...sessionState }),
+      logout: async () => {}
+    };
+
+    const actions = actionsModule.createDashboardActions({
+      store,
+      effects,
+      runtime
+    });
+
+    actions.init();
+    assert.equal(listeners.hashchange.length, 1);
+    assert.equal(listeners.visibilitychange.length, 1);
+
+    const firstBootstrap = await actions.bootstrapSession();
+    assert.equal(firstBootstrap, true);
+    assert.equal(store.getState().session.authenticated, true);
+    assert.equal(refreshCalls.length >= 1, true);
+
+    actions.onTabKeydown({ key: 'ArrowRight', preventDefault: () => {} }, 'monitoring');
+    await waitForAsyncWork();
+    assert.equal(hashWrites.includes('ip-bans'), true);
+    assert.equal(setActiveCalls.includes('ip-bans'), true);
+
+    const secondBootstrap = await actions.bootstrapSession();
+    assert.equal(secondBootstrap, false);
+    assert.equal(store.getState().session.authenticated, false);
+    assert.equal(redirectCalls.length >= 1, true);
+
+    actions.destroy();
+    assert.equal(listeners.hashchange.length, 0);
+    assert.equal(listeners.visibilitychange.length, 0);
+    assert.equal(clearCalls.length >= 1, true);
+  });
+});
+
+test('svelte dashboard actions abort in-flight refresh when tab switches', { concurrency: false }, async () => {
+  await withBrowserGlobals({
+    window: {
+      location: {
+        pathname: '/dashboard/index.html',
+        search: '',
+        hash: '#monitoring'
+      }
+    },
+    document: {
+      getElementById: () => null,
+      querySelector: () => null,
+      querySelectorAll: () => []
+    }
+  }, async () => {
+    const storeModule = await importBrowserModule('dashboard/src/lib/state/dashboard-store.js');
+    const actionsModule = await importBrowserModule('dashboard/src/lib/runtime/dashboard-actions.js');
+    const store = storeModule.createDashboardStore({ initialTab: 'monitoring' });
+    store.setSession({ authenticated: true, csrfToken: 'csrf-live' });
+
+    const hashListeners = [];
+    const visibilityListeners = [];
+    let firstRefreshSignal = null;
+    let firstRefreshAborted = false;
+    let refreshCalls = 0;
+
+    const effects = {
+      setTimer: () => null,
+      clearTimer: () => {},
+      requestFrame: (task) => task(),
+      readHashTab: () => String(window.location.hash || '').replace(/^#/, ''),
+      writeHashTab: (tab) => {
+        window.location.hash = `#${String(tab || '').replace(/^#/, '')}`;
+      },
+      onHashChange: (handler) => {
+        hashListeners.push(handler);
+        return () => {
+          const idx = hashListeners.indexOf(handler);
+          if (idx >= 0) hashListeners.splice(idx, 1);
+        };
+      },
+      onVisibilityChange: (handler) => {
+        visibilityListeners.push(handler);
+        return () => {
+          const idx = visibilityListeners.indexOf(handler);
+          if (idx >= 0) visibilityListeners.splice(idx, 1);
+        };
+      },
+      isPageVisible: () => true,
+      redirect: () => {}
+    };
+
+    const runtime = {
+      refreshTab: (_tab, _reason, opts = {}) => {
+        refreshCalls += 1;
+        const signal = opts.signal || null;
+        if (refreshCalls === 1) {
+          firstRefreshSignal = signal;
+          return new Promise((resolve, reject) => {
+            if (!signal) {
+              resolve();
+              return;
+            }
+            signal.addEventListener('abort', () => {
+              firstRefreshAborted = true;
+              reject(new DOMException('Aborted', 'AbortError'));
+            }, { once: true });
+          });
+        }
+        return Promise.resolve();
+      },
+      setActiveTab: () => {},
+      restoreSession: async () => true,
+      getSessionState: () => ({ authenticated: true, csrfToken: 'csrf-live' }),
+      logout: async () => {}
+    };
+
+    const actions = actionsModule.createDashboardActions({
+      store,
+      effects,
+      runtime
+    });
+
+    actions.init();
+    const firstRefresh = actions.applyActiveTab('monitoring', 'manual', { force: true });
+    await waitForAsyncWork();
+    await actions.applyActiveTab('status', 'click', { syncHash: true });
+    await firstRefresh;
+
+    assert.equal(Boolean(firstRefreshSignal), true);
+    assert.equal(firstRefreshSignal.aborted, true);
+    assert.equal(firstRefreshAborted, true);
+    actions.destroy();
+    assert.equal(hashListeners.length, 0);
+    assert.equal(visibilityListeners.length, 0);
+  });
+});
+
 test('monitoring view consumes prometheus helper payload as single-source contract', { concurrency: false }, async () => {
   const elements = {
     'monitoring-prometheus-example': createMockElement(),
@@ -541,6 +1005,69 @@ test('monitoring view consumes prometheus helper payload as single-source contra
   );
   assert.equal(elements['monitoring-prometheus-observability-link'].href, 'https://example.test/observability');
   assert.equal(elements['monitoring-prometheus-api-link'].href, 'https://example.test/api');
+});
+
+test('monitoring view teardown removes copy listeners safely', { concurrency: false }, async () => {
+  const makeButton = () => {
+    const listeners = new Map();
+    let addCount = 0;
+    let removeCount = 0;
+    return {
+      textContent: '',
+      dataset: {},
+      get addCount() {
+        return addCount;
+      },
+      get removeCount() {
+        return removeCount;
+      },
+      addEventListener: (name, handler) => {
+        listeners.set(name, handler);
+        addCount += 1;
+      },
+      removeEventListener: (name, handler) => {
+        if (listeners.get(name) === handler) {
+          listeners.delete(name);
+        }
+        removeCount += 1;
+      }
+    };
+  };
+  const copyButton = makeButton();
+  const copyCurlButton = makeButton();
+  const elements = {
+    'monitoring-prometheus-example': { textContent: 'const metricsText = ...' },
+    'monitoring-prometheus-copy': copyButton,
+    'monitoring-prometheus-copy-curl': copyCurlButton,
+    'monitoring-prometheus-facts': createMockElement(),
+    'monitoring-prometheus-output': createMockElement(),
+    'monitoring-prometheus-stats': createMockElement(),
+    'monitoring-prometheus-windowed': createMockElement(),
+    'monitoring-prometheus-summary-stats': createMockElement(),
+    'monitoring-prometheus-observability-link': createMockElement(),
+    'monitoring-prometheus-api-link': createMockElement()
+  };
+
+  await withBrowserGlobals({
+    document: {
+      getElementById: (id) => elements[id] || null,
+      querySelector: () => null,
+      querySelectorAll: () => []
+    }
+  }, async () => {
+    const monitoringViewModule = await importBrowserModule('dashboard/modules/monitoring-view.js');
+    const monitoringView = monitoringViewModule.create({
+      effects: {
+        copyText: async () => {},
+        setTimer: (task) => task()
+      }
+    });
+    monitoringView.bindPrometheusCopyButtons();
+    monitoringView.destroy();
+  });
+
+  assert.equal(copyButton.removeCount >= 1, true);
+  assert.equal(copyCurlButton.removeCount >= 1, true);
 });
 
 test('monitoring view normalizes hashed offender labels in top offender cards', { concurrency: false }, async () => {
@@ -1278,10 +1805,22 @@ test('dashboard main wires config UI state through module factory', () => {
   );
 });
 
-test('dashboard main guards optional control bindings before assigning handlers', () => {
+test('dashboard main uses mount-scoped control bindings with explicit teardown', () => {
   const dashboardPath = path.resolve(__dirname, '..', 'dashboard', 'dashboard.js');
   const source = fs.readFileSync(dashboardPath, 'utf8');
 
+  assert.match(
+    source,
+    /function bindMountScopedDomEvents\(\)/
+  );
+  assert.match(
+    source,
+    /teardownControlBindings = bindMountScopedDomEvents\(\);/
+  );
+  assert.match(
+    source,
+    /if \(teardownControlBindings\) \{\s*teardownControlBindings\(\);\s*teardownControlBindings = null;\s*\}/m
+  );
   assert.match(
     source,
     /const previewRobotsButton = getById\('preview-robots'\);\s*if \(previewRobotsButton\)/m
@@ -1296,8 +1835,74 @@ test('dashboard main guards optional control bindings before assigning handlers'
   );
   assert.match(
     source,
-    /\]\.forEach\(id => \{\s*const field = getById\(id\);\s*if \(!field\) return;\s*field\.addEventListener\('input', checkBotnessConfigChanged\);/m
+    /\]\.forEach\(\(id\) => \{\s*bindFieldEvent\(id, 'input', checkBotnessConfigChanged\);/m
   );
+  assert.equal(
+    source.includes('banButton.onclick ='),
+    false,
+    'ban button handler should be bound at mount via addEventListener, not import-time onclick'
+  );
+  assert.equal(
+    source.includes('unbanButton.onclick ='),
+    false,
+    'unban button handler should be bound at mount via addEventListener, not import-time onclick'
+  );
+});
+
+test('svelte route guardrails forbid shell injection and bridge-era imports', () => {
+  const dashboardRoot = path.resolve(__dirname, '..', 'dashboard');
+  const mainRoutePath = path.join(dashboardRoot, 'src', 'routes', '+page.svelte');
+  const loginRoutePath = path.join(dashboardRoot, 'src', 'routes', 'login.html', '+page.svelte');
+  const mainSource = fs.readFileSync(mainRoutePath, 'utf8');
+  const loginSource = fs.readFileSync(loginRoutePath, 'utf8');
+
+  assert.equal(mainSource.includes('{@html'), false);
+  assert.equal(loginSource.includes('{@html'), false);
+  assert.equal(mainSource.includes('$lib/bridges/'), false);
+  assert.equal(loginSource.includes('$lib/bridges/'), false);
+  assert.match(mainSource, /mountDashboardRuntime/);
+  assert.equal(mainSource.includes("import('../../../dashboard.js')"), false);
+});
+
+test('svelte tab semantics avoid interactive-role warnings for tablist and tabpanel', () => {
+  const dashboardRoot = path.resolve(__dirname, '..', 'dashboard');
+  const mainRoutePath = path.join(dashboardRoot, 'src', 'routes', '+page.svelte');
+  const componentPaths = [
+    path.join(dashboardRoot, 'src', 'lib', 'components', 'dashboard', 'MonitoringTab.svelte'),
+    path.join(dashboardRoot, 'src', 'lib', 'components', 'dashboard', 'IpBansTab.svelte'),
+    path.join(dashboardRoot, 'src', 'lib', 'components', 'dashboard', 'StatusTab.svelte'),
+    path.join(dashboardRoot, 'src', 'lib', 'components', 'dashboard', 'ConfigTab.svelte'),
+    path.join(dashboardRoot, 'src', 'lib', 'components', 'dashboard', 'TuningTab.svelte')
+  ];
+
+  const mainSource = fs.readFileSync(mainRoutePath, 'utf8');
+  assert.equal(mainSource.includes('role="tablist"'), false);
+
+  componentPaths.forEach((filePath) => {
+    const source = fs.readFileSync(filePath, 'utf8');
+    assert.equal(source.includes('role="tabpanel"'), false);
+    assert.equal(source.includes('tabindex={'), false);
+  });
+});
+
+test('dashboard runtime adapter enforces single-mount and explicit teardown hooks', () => {
+  const runtimePath = path.resolve(
+    __dirname,
+    '..',
+    'dashboard',
+    'src',
+    'lib',
+    'runtime',
+    'dashboard-runtime.js'
+  );
+  const source = fs.readFileSync(runtimePath, 'utf8');
+  assert.match(source, /if \(mounted\) return;/);
+  assert.match(source, /if \(mountingPromise\) return mountingPromise;/);
+  assert.match(source, /module\.mountDashboardApp\(options \|\| \{\}\)/);
+  assert.match(source, /runtimeModule\.unmountDashboardApp\(\)/);
+  assert.match(source, /restoreDashboardSession/);
+  assert.match(source, /refreshDashboardTab/);
+  assert.match(source, /setDashboardActiveTab/);
 });
 
 test('dashboard module graph is layered (core -> services -> features -> main) with no cycles', () => {

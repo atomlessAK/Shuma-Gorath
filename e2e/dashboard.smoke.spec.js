@@ -68,6 +68,14 @@ function assertNoRuntimeFailures(page) {
   throw new Error(`Unexpected dashboard runtime failures:\n${guard.failures.join("\n")}`);
 }
 
+function runtimeFailures(page) {
+  const guard = runtimeGuards.get(page);
+  if (!guard || !Array.isArray(guard.failures)) {
+    return [];
+  }
+  return [...guard.failures];
+}
+
 async function assertActiveTabPanelVisibility(page, activeTab) {
   for (const tab of DASHBOARD_TABS) {
     await expect(page.locator(`#dashboard-tab-${tab}`)).toHaveAttribute(
@@ -197,6 +205,51 @@ test("dashboard bare path redirects to canonical index route", async ({ request 
   const response = await request.get(`${BASE_URL}/dashboard`, { maxRedirects: 0 });
   expect(response.status()).toBe(308);
   expect(response.headers().location).toBe("/dashboard/index.html");
+});
+
+test("sveltekit assets resolve under /dashboard/_app and /dashboard/assets base paths", async ({ page }) => {
+  await openDashboard(page);
+  const assets = await page.evaluate(() => {
+    const modulePreloads = Array.from(document.querySelectorAll("link[rel='modulepreload'][href]"))
+      .map((node) => new URL(node.getAttribute("href"), window.location.href).pathname);
+    const scripts = Array.from(document.querySelectorAll("script[src]"))
+      .map((node) => new URL(node.getAttribute("src"), window.location.href).pathname);
+    const styles = Array.from(document.querySelectorAll("link[rel='stylesheet'][href]"))
+      .map((node) => new URL(node.getAttribute("href"), window.location.href).pathname);
+    return { modulePreloads, scripts, styles };
+  });
+
+  expect(assets.modulePreloads.some((path) => path.startsWith("/dashboard/_app/"))).toBe(true);
+  expect(assets.styles.some((path) => path.startsWith("/dashboard/_app/"))).toBe(true);
+  expect(
+    assets.scripts.some((path) => path.startsWith("/dashboard/assets/vendor/chart-lite-1.0.0.min.js"))
+  ).toBe(true);
+});
+
+test("dashboard login route remains functional after direct navigation and refresh", async ({ page }) => {
+  ensureRuntimeGuard(page);
+  await page.goto(`${BASE_URL}/dashboard/login.html?next=%2Fdashboard%2Findex.html`);
+  await expect(page.locator("#login-form")).toBeVisible();
+  await page.reload();
+  await expect(page.locator("#login-form")).toBeVisible();
+  await page.fill("#login-apikey", API_KEY);
+  await page.click("#login-submit");
+  await expect(page).toHaveURL(/\/dashboard\/index\.html/);
+  assertNoRuntimeFailures(page);
+});
+
+test("dashboard generated runtime has no missing script or stylesheet requests", async ({ page }) => {
+  await openDashboard(page);
+  await openTab(page, "status");
+  await openTab(page, "config");
+  await openTab(page, "tuning");
+  await openTab(page, "ip-bans");
+  await openTab(page, "monitoring");
+
+  const failures = runtimeFailures(page).filter((entry) =>
+    entry.includes("requestfailed") || entry.includes("asset-response")
+  );
+  expect(failures).toEqual([]);
 });
 
 test("dashboard clean-state renders explicit empty placeholders", async ({ page }) => {
@@ -599,6 +652,105 @@ test("session survives reload and time-range controls refresh chart data", async
     page.click('.time-btn[data-range="month"]')
   ]);
   await expect(page.locator('.time-btn[data-range="month"]')).toHaveClass(/active/);
+});
+
+test("route remount preserves keyboard navigation, ban/unban, config save, and polling", async ({ page }) => {
+  await page.addInitScript(() => {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    window.setTimeout = (handler, ms, ...args) => {
+      if (typeof ms === "number" && ms >= 30000) {
+        return nativeSetTimeout(handler, 50, ...args);
+      }
+      return nativeSetTimeout(handler, ms, ...args);
+    };
+  });
+
+  let eventsRequests = 0;
+  page.on("request", (request) => {
+    if (request.method() === "GET" && request.url().includes("/admin/events?hours=24")) {
+      eventsRequests += 1;
+    }
+  });
+
+  await openDashboard(page);
+  await page.goto("about:blank");
+  await openDashboard(page);
+
+  const monitoringTab = page.locator("#dashboard-tab-monitoring");
+  await monitoringTab.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page).toHaveURL(/#ip-bans$/);
+  await assertActiveTabPanelVisibility(page, "ip-bans");
+
+  const ip = "198.51.100.211";
+  await page.fill("#ban-ip", ip);
+  await page.dispatchEvent("#ban-ip", "input");
+  await expect(page.locator("#ban-btn")).toBeEnabled();
+  await Promise.all([
+    page.waitForResponse((resp) => (
+      resp.url().includes("/admin/ban") &&
+      resp.request().method() === "POST" &&
+      resp.status() >= 200 &&
+      resp.status() < 300
+    )),
+    page.click("#ban-btn")
+  ]);
+  await expect(page.locator("#admin-msg")).toContainText(`Banned ${ip}`);
+
+  await page.fill("#unban-ip", ip);
+  await page.dispatchEvent("#unban-ip", "input");
+  await expect(page.locator("#unban-btn")).toBeEnabled();
+  await Promise.all([
+    page.waitForResponse((resp) => (
+      resp.url().includes("/admin/unban") &&
+      resp.request().method() === "POST" &&
+      resp.status() >= 200 &&
+      resp.status() < 300
+    )),
+    page.click("#unban-btn")
+  ]);
+  await expect(page.locator("#admin-msg")).toContainText(`Unbanned ${ip}`);
+
+  await openTab(page, "config");
+  const jsRequiredToggle = page.locator("#js-required-enforced-toggle");
+  const jsRequiredSave = page.locator("#save-js-required-config");
+  if (await jsRequiredToggle.isVisible() && await jsRequiredToggle.isEnabled()) {
+    const initial = await jsRequiredToggle.isChecked();
+    await jsRequiredToggle.click();
+    await expect(jsRequiredSave).toBeEnabled();
+
+    await Promise.all([
+      page.waitForResponse((resp) => (
+        resp.url().includes("/admin/config") &&
+        resp.request().method() === "POST" &&
+        resp.status() >= 200 &&
+        resp.status() < 300
+      )),
+      jsRequiredSave.click()
+    ]);
+    await expect(jsRequiredSave).toBeDisabled();
+
+    if (initial !== await jsRequiredToggle.isChecked()) {
+      await jsRequiredToggle.click();
+      await expect(jsRequiredSave).toBeEnabled();
+      await Promise.all([
+        page.waitForResponse((resp) => (
+          resp.url().includes("/admin/config") &&
+          resp.request().method() === "POST" &&
+          resp.status() >= 200 &&
+          resp.status() < 300
+        )),
+        jsRequiredSave.click()
+      ]);
+      await expect(jsRequiredSave).toBeDisabled();
+    }
+  }
+
+  await openTab(page, "monitoring");
+  await page.waitForTimeout(120);
+  const beforePollWait = eventsRequests;
+  await page.waitForTimeout(260);
+  expect(eventsRequests).toBeGreaterThan(beforePollWait);
 });
 
 test("dashboard tables keep sticky headers", async ({ page }) => {

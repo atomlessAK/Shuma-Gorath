@@ -133,7 +133,17 @@ let configDraftStore = null;
 let runtimeEffects = null;
 let statusPanel = null;
 let autoRefreshTimer = null;
-let pageVisible = document.visibilityState !== 'hidden';
+let pageVisible = true;
+let visibilityChangeListener = null;
+let teardownControlBindings = null;
+let runtimeMounted = false;
+let runtimeMountOptions = {
+  useExternalTabPipeline: false,
+  useExternalPollingPipeline: false,
+  useExternalSessionPipeline: false,
+  bindLogoutButton: true,
+  initialTab: tabLifecycleModule.DEFAULT_DASHBOARD_TAB
+};
 const domCache = domModule.createCache({ document });
 const getById = domCache.byId;
 const query = domCache.query;
@@ -148,6 +158,19 @@ const TAB_REFRESH_INTERVAL_MS = Object.freeze({
   config: 60000,
   tuning: 60000
 });
+
+function normalizeRuntimeMountOptions(options = {}) {
+  const source = options || {};
+  return {
+    useExternalTabPipeline: source.useExternalTabPipeline === true,
+    useExternalPollingPipeline: source.useExternalPollingPipeline === true,
+    useExternalSessionPipeline: source.useExternalSessionPipeline === true,
+    bindLogoutButton: source.bindLogoutButton !== false,
+    initialTab: tabLifecycleModule.normalizeTab(
+      source.initialTab || tabLifecycleModule.DEFAULT_DASHBOARD_TAB
+    )
+  };
+}
 
 function runDomWriteBatch(task) {
   return new Promise((resolve) => {
@@ -842,55 +865,6 @@ function checkChallengePuzzleConfigChanged() {
   runDirtySaveCheck(DIRTY_CHECK_REGISTRY.challengePuzzle);
 }
 
-const bindFieldEvent = (id, eventName, handler) => {
-  const field = getById(id);
-  if (!field || typeof handler !== 'function') return;
-  field.addEventListener(eventName, handler);
-};
-
-const bindInputAndBlur = (id, handler) => {
-  bindFieldEvent(id, 'input', handler);
-  bindFieldEvent(id, 'blur', handler);
-};
-
-// Add change listeners for robots serving and AI-policy controls.
-[
-  { ids: ['robots-enabled-toggle'], event: 'change', handler: checkRobotsConfigChanged },
-  { ids: ['robots-crawl-delay'], event: 'input', handler: checkRobotsConfigChanged },
-  {
-    ids: ['robots-block-training-toggle', 'robots-block-search-toggle', 'robots-allow-search-toggle'],
-    event: 'change',
-    handler: checkAiPolicyConfigChanged
-  },
-  { ids: ['maze-enabled-toggle', 'maze-auto-ban-toggle'], event: 'change', handler: checkMazeConfigChanged },
-  { ids: ['honeypot-enabled-toggle'], event: 'change', handler: checkHoneypotConfigChanged },
-  { ids: ['challenge-puzzle-transform-count'], event: 'input', handler: checkChallengePuzzleConfigChanged },
-  { ids: ['challenge-puzzle-enabled-toggle'], event: 'change', handler: checkChallengePuzzleConfigChanged }
-].forEach(({ ids, event, handler }) => {
-  ids.forEach((id) => bindFieldEvent(id, event, handler));
-});
-
-bindInputAndBlur('honeypot-paths', () => {
-  validateHoneypotPathsField(true);
-  checkHoneypotConfigChanged();
-  refreshCoreActionButtonsState();
-});
-
-['browser-block-rules', 'browser-whitelist-rules'].forEach((id) => {
-  bindInputAndBlur(id, () => {
-    validateBrowserRulesField(id, true);
-    checkBrowserPolicyConfigChanged();
-    refreshCoreActionButtonsState();
-  });
-});
-
-['network-whitelist', 'path-whitelist'].forEach((id) => {
-  bindInputAndBlur(id, () => {
-    checkBypassAllowlistsConfigChanged();
-    refreshCoreActionButtonsState();
-  });
-});
-
 // Fetch and update robots.txt preview content
 async function refreshRobotsPreview() {
   if (!getAdminContext(getById('admin-msg'))) return;
@@ -906,28 +880,25 @@ async function refreshRobotsPreview() {
   }
 }
 
-// Toggle robots.txt preview visibility
-const previewRobotsButton = getById('preview-robots');
-if (previewRobotsButton) {
-  previewRobotsButton.onclick = async function toggleRobotsPreview() {
-    const preview = getById('robots-preview');
-    if (!preview) return;
-    const btn = this;
+async function handleToggleRobotsPreviewClick() {
+  const preview = getById('robots-preview');
+  if (!preview) return;
+  const btn = this;
 
-    if (preview.classList.contains('hidden')) {
-      // Show preview
-      btn.textContent = 'Loading...';
-      btn.disabled = true;
-      await refreshRobotsPreview();
-      preview.classList.remove('hidden');
-      btn.textContent = 'Hide robots.txt';
-      btn.disabled = false;
-    } else {
-      // Hide preview
-      preview.classList.add('hidden');
-      btn.textContent = 'Show robots.txt';
-    }
-  };
+  if (preview.classList.contains('hidden')) {
+    // Show preview
+    btn.textContent = 'Loading...';
+    btn.disabled = true;
+    await refreshRobotsPreview();
+    preview.classList.remove('hidden');
+    btn.textContent = 'Hide robots.txt';
+    btn.disabled = false;
+    return;
+  }
+
+  // Hide preview
+  preview.classList.add('hidden');
+  btn.textContent = 'Show robots.txt';
 }
 
 // Update CDP detection config controls from loaded config
@@ -949,26 +920,9 @@ function checkPowConfigChanged() {
   runDirtySaveCheck(DIRTY_CHECK_REGISTRY.pow);
 }
 
-bindFieldEvent('pow-enabled-toggle', 'change', checkPowConfigChanged);
-bindFieldEvent('pow-difficulty', 'input', checkPowConfigChanged);
-bindFieldEvent('pow-ttl', 'input', checkPowConfigChanged);
-
 function checkBotnessConfigChanged() {
   runDirtySaveCheck(DIRTY_CHECK_REGISTRY.botness);
 }
-
-[
-  'challenge-puzzle-threshold',
-  'maze-threshold-score',
-  'weight-js-required',
-  'weight-geo-risk',
-  'weight-rate-medium',
-  'weight-rate-high'
-].forEach(id => {
-  const field = getById(id);
-  if (!field) return;
-  field.addEventListener('input', checkBotnessConfigChanged);
-});
 
 function checkGeoConfigChanged() {
   const apiValid = hasValidApiContext();
@@ -1001,29 +955,27 @@ function checkGeoConfigChanged() {
   setDirtySaveButtonState('save-geo-routing-config', routingChanged, apiValid, routingValid);
 }
 
-GEO_FIELD_IDS.forEach(id => {
-  const field = getById(id);
-  field.addEventListener('input', () => {
-    const sanitized = sanitizeGeoTextareaValue(field.value);
-    if (field.value !== sanitized) {
-      const cursor = field.selectionStart;
-      const delta = field.value.length - sanitized.length;
-      field.value = sanitized;
-      if (typeof cursor === 'number') {
-        const next = Math.max(0, cursor - Math.max(0, delta));
-        field.setSelectionRange(next, next);
-      }
+function handleGeoFieldInput(id, field) {
+  const sanitized = sanitizeGeoTextareaValue(field.value);
+  if (field.value !== sanitized) {
+    const cursor = field.selectionStart;
+    const delta = field.value.length - sanitized.length;
+    field.value = sanitized;
+    if (typeof cursor === 'number') {
+      const next = Math.max(0, cursor - Math.max(0, delta));
+      field.setSelectionRange(next, next);
     }
-    validateGeoFieldById(id, true);
-    checkGeoConfigChanged();
-    refreshCoreActionButtonsState();
-  });
-  field.addEventListener('blur', () => {
-    validateGeoFieldById(id, true);
-    checkGeoConfigChanged();
-    refreshCoreActionButtonsState();
-  });
-});
+  }
+  validateGeoFieldById(id, true);
+  checkGeoConfigChanged();
+  refreshCoreActionButtonsState();
+}
+
+function handleGeoFieldBlur(id) {
+  validateGeoFieldById(id, true);
+  checkGeoConfigChanged();
+  refreshCoreActionButtonsState();
+}
 
 // Check if CDP config has changed from saved state
 function checkCdpConfigChanged() {
@@ -1038,13 +990,9 @@ function checkRateLimitConfigChanged() {
   runDirtySaveCheck(DIRTY_CHECK_REGISTRY.rateLimit);
 }
 
-bindFieldEvent('rate-limit-threshold', 'input', checkRateLimitConfigChanged);
-
 function checkJsRequiredConfigChanged() {
   runDirtySaveCheck(DIRTY_CHECK_REGISTRY.jsRequired);
 }
-
-bindFieldEvent('js-required-enforced-toggle', 'change', checkJsRequiredConfigChanged);
 
 function setAdvancedConfigEditorFromConfig(config, preserveDirty = true) {
   if (!configUiState) return;
@@ -1096,30 +1044,189 @@ function checkAdvancedConfigChanged() {
   setDirtySaveButtonState('save-advanced-config', changed, apiValid, valid);
 }
 
-const advancedConfigField = getById('advanced-config-json');
-if (advancedConfigField) {
-  advancedConfigField.addEventListener('input', () => {
-    checkAdvancedConfigChanged();
-    refreshCoreActionButtonsState();
-  });
-  advancedConfigField.addEventListener('blur', () => {
-    checkAdvancedConfigChanged();
-    refreshCoreActionButtonsState();
-  });
+async function handleBanIpAction() {
+  const msg = getById('admin-msg');
+  if (!msg || !getAdminContext(msg)) return;
+  const ip = readIpFieldValue('ban-ip', true, msg, 'Ban IP');
+  if (ip === null) return;
+  const duration = readManualBanDurationSeconds(true);
+  if (duration === null) return;
+
+  msg.textContent = `Banning ${ip}...`;
+  msg.className = 'message info';
+
+  try {
+    await dashboardApiClient.banIp(ip, duration);
+    msg.textContent = `Banned ${ip} for ${duration}s`;
+    msg.className = 'message success';
+    const banIpField = getById('ban-ip');
+    if (banIpField) banIpField.value = '';
+    if (dashboardState) dashboardState.invalidate('ip-bans');
+    runtimeEffects.setTimer(() => refreshActiveTab('ban-save'), 500);
+  } catch (e) {
+    msg.textContent = 'Error: ' + e.message;
+    msg.className = 'message error';
+  }
 }
 
-// Update threshold display when slider moves
-bindFieldEvent('cdp-threshold-slider', 'input', function() {
-  getById('cdp-threshold-value').textContent = parseFloat(this.value).toFixed(1);
-  checkCdpConfigChanged();
-});
+async function handleUnbanIpAction() {
+  const msg = getById('admin-msg');
+  if (!msg || !getAdminContext(msg)) return;
+  const ip = readIpFieldValue('unban-ip', true, msg, 'Unban IP');
+  if (ip === null) return;
 
-// Add change listeners for CDP config controls
-['cdp-enabled-toggle', 'cdp-auto-ban-toggle'].forEach(id => {
-  bindFieldEvent(id, 'change', checkCdpConfigChanged);
-});
+  msg.textContent = `Unbanning ${ip}...`;
+  msg.className = 'message info';
 
-bindFieldEvent('edge-integration-mode-select', 'change', checkEdgeIntegrationModeChanged);
+  try {
+    await dashboardApiClient.unbanIp(ip);
+    msg.textContent = `Unbanned ${ip}`;
+    msg.className = 'message success';
+    const unbanIpField = getById('unban-ip');
+    if (unbanIpField) unbanIpField.value = '';
+    if (dashboardState) dashboardState.invalidate('ip-bans');
+    runtimeEffects.setTimer(() => refreshActiveTab('unban-save'), 500);
+  } catch (e) {
+    msg.textContent = 'Error: ' + e.message;
+    msg.className = 'message error';
+  }
+}
+
+function bindMountScopedDomEvents() {
+  const cleanupTasks = [];
+
+  const bindEvent = (node, eventName, handler) => {
+    if (!node || typeof handler !== 'function') return;
+    node.addEventListener(eventName, handler);
+    cleanupTasks.push(() => {
+      node.removeEventListener(eventName, handler);
+    });
+  };
+
+  const bindFieldEvent = (id, eventName, handler) => {
+    const field = getById(id);
+    bindEvent(field, eventName, handler);
+  };
+
+  const bindInputAndBlur = (id, handler) => {
+    bindFieldEvent(id, 'input', handler);
+    bindFieldEvent(id, 'blur', handler);
+  };
+
+  // Add change listeners for robots serving and AI-policy controls.
+  [
+    { ids: ['robots-enabled-toggle'], event: 'change', handler: checkRobotsConfigChanged },
+    { ids: ['robots-crawl-delay'], event: 'input', handler: checkRobotsConfigChanged },
+    {
+      ids: ['robots-block-training-toggle', 'robots-block-search-toggle', 'robots-allow-search-toggle'],
+      event: 'change',
+      handler: checkAiPolicyConfigChanged
+    },
+    { ids: ['maze-enabled-toggle', 'maze-auto-ban-toggle'], event: 'change', handler: checkMazeConfigChanged },
+    { ids: ['honeypot-enabled-toggle'], event: 'change', handler: checkHoneypotConfigChanged },
+    { ids: ['challenge-puzzle-transform-count'], event: 'input', handler: checkChallengePuzzleConfigChanged },
+    { ids: ['challenge-puzzle-enabled-toggle'], event: 'change', handler: checkChallengePuzzleConfigChanged }
+  ].forEach(({ ids, event, handler }) => {
+    ids.forEach((id) => bindFieldEvent(id, event, handler));
+  });
+
+  bindInputAndBlur('honeypot-paths', () => {
+    validateHoneypotPathsField(true);
+    checkHoneypotConfigChanged();
+    refreshCoreActionButtonsState();
+  });
+
+  ['browser-block-rules', 'browser-whitelist-rules'].forEach((id) => {
+    bindInputAndBlur(id, () => {
+      validateBrowserRulesField(id, true);
+      checkBrowserPolicyConfigChanged();
+      refreshCoreActionButtonsState();
+    });
+  });
+
+  ['network-whitelist', 'path-whitelist'].forEach((id) => {
+    bindInputAndBlur(id, () => {
+      checkBypassAllowlistsConfigChanged();
+      refreshCoreActionButtonsState();
+    });
+  });
+
+  const previewRobotsButton = getById('preview-robots');
+  if (previewRobotsButton) {
+    bindEvent(previewRobotsButton, 'click', handleToggleRobotsPreviewClick);
+  }
+
+  bindFieldEvent('pow-enabled-toggle', 'change', checkPowConfigChanged);
+  bindFieldEvent('pow-difficulty', 'input', checkPowConfigChanged);
+  bindFieldEvent('pow-ttl', 'input', checkPowConfigChanged);
+
+  [
+    'challenge-puzzle-threshold',
+    'maze-threshold-score',
+    'weight-js-required',
+    'weight-geo-risk',
+    'weight-rate-medium',
+    'weight-rate-high'
+  ].forEach((id) => {
+    bindFieldEvent(id, 'input', checkBotnessConfigChanged);
+  });
+
+  GEO_FIELD_IDS.forEach((id) => {
+    const field = getById(id);
+    if (!field) return;
+    const inputHandler = () => handleGeoFieldInput(id, field);
+    const blurHandler = () => handleGeoFieldBlur(id);
+    bindEvent(field, 'input', inputHandler);
+    bindEvent(field, 'blur', blurHandler);
+  });
+
+  bindFieldEvent('rate-limit-threshold', 'input', checkRateLimitConfigChanged);
+  bindFieldEvent('js-required-enforced-toggle', 'change', checkJsRequiredConfigChanged);
+
+  const advancedConfigField = getById('advanced-config-json');
+  if (advancedConfigField) {
+    const inputHandler = () => {
+      checkAdvancedConfigChanged();
+      refreshCoreActionButtonsState();
+    };
+    const blurHandler = () => {
+      checkAdvancedConfigChanged();
+      refreshCoreActionButtonsState();
+    };
+    bindEvent(advancedConfigField, 'input', inputHandler);
+    bindEvent(advancedConfigField, 'blur', blurHandler);
+  }
+
+  // Update threshold display when slider moves
+  bindFieldEvent('cdp-threshold-slider', 'input', function onCdpThresholdSliderInput() {
+    const value = getById('cdp-threshold-value');
+    if (value) {
+      value.textContent = parseFloat(this.value).toFixed(1);
+    }
+    checkCdpConfigChanged();
+  });
+
+  // Add change listeners for CDP config controls
+  ['cdp-enabled-toggle', 'cdp-auto-ban-toggle'].forEach((id) => {
+    bindFieldEvent(id, 'change', checkCdpConfigChanged);
+  });
+
+  bindFieldEvent('edge-integration-mode-select', 'change', checkEdgeIntegrationModeChanged);
+
+  const banButton = getById('ban-btn');
+  if (banButton) {
+    bindEvent(banButton, 'click', handleBanIpAction);
+  }
+
+  const unbanButton = getById('unban-btn');
+  if (unbanButton) {
+    bindEvent(unbanButton, 'click', handleUnbanIpAction);
+  }
+
+  return () => {
+    cleanupTasks.reverse().forEach((cleanup) => cleanup());
+  };
+}
 
 function updateLastUpdatedTimestamp() {
   const ts = new Date().toISOString();
@@ -1147,14 +1254,15 @@ const CONFIG_UI_REFRESH_METHODS = Object.freeze([
   'updateChallengeConfig'
 ]);
 
-async function refreshSharedConfig(reason = 'manual') {
+async function refreshSharedConfig(reason = 'manual', options = {}) {
+  const requestOptions = options && options.signal ? { signal: options.signal } : {};
   if (!dashboardApiClient) {
     return dashboardState ? dashboardState.getSnapshot('config') : null;
   }
   if (dashboardState && reason === 'auto-refresh' && !dashboardState.isTabStale('config')) {
     return dashboardState.getSnapshot('config');
   }
-  const config = await dashboardApiClient.getConfig();
+  const config = await dashboardApiClient.getConfig(requestOptions);
   if (dashboardState) dashboardState.setSnapshot('config', config);
   await runDomWriteBatch(() => {
     updateConfigModeUi(config, { configSnapshot: config });
@@ -1165,7 +1273,7 @@ async function refreshSharedConfig(reason = 'manual') {
   return config;
 }
 
-async function refreshMonitoringTab(reason = 'manual') {
+async function refreshMonitoringTab(reason = 'manual', options = {}) {
   if (!dashboardApiClient) return;
   if (reason !== 'auto-refresh') {
     showTabLoading('monitoring', 'Loading monitoring data...');
@@ -1182,14 +1290,15 @@ async function refreshMonitoringTab(reason = 'manual') {
     monitoringView.showLoadingState();
   }
 
+  const requestOptions = options && options.signal ? { signal: options.signal } : {};
   const [analytics, events, bansData, mazeData, cdpData, cdpEventsData, monitoringData] = await Promise.all([
-    dashboardApiClient.getAnalytics(),
-    dashboardApiClient.getEvents(24),
-    dashboardApiClient.getBans(),
-    dashboardApiClient.getMaze(),
-    dashboardApiClient.getCdp(),
-    dashboardApiClient.getCdpEvents({ hours: 24, limit: 500 }),
-    dashboardApiClient.getMonitoring({ hours: 24, limit: 10 })
+    dashboardApiClient.getAnalytics(requestOptions),
+    dashboardApiClient.getEvents(24, requestOptions),
+    dashboardApiClient.getBans(requestOptions),
+    dashboardApiClient.getMaze(requestOptions),
+    dashboardApiClient.getCdp(requestOptions),
+    dashboardApiClient.getCdpEvents({ hours: 24, limit: 500 }, requestOptions),
+    dashboardApiClient.getMonitoring({ hours: 24, limit: 10 }, requestOptions)
   ]);
 
   if (dashboardState) {
@@ -1226,12 +1335,13 @@ async function refreshMonitoringTab(reason = 'manual') {
   }
 }
 
-async function refreshIpBansTab(reason = 'manual') {
+async function refreshIpBansTab(reason = 'manual', options = {}) {
   if (!dashboardApiClient) return;
   if (reason !== 'auto-refresh') {
     showTabLoading('ip-bans', 'Loading ban list...');
   }
-  const bansData = await dashboardApiClient.getBans();
+  const requestOptions = options && options.signal ? { signal: options.signal } : {};
+  const bansData = await dashboardApiClient.getBans(requestOptions);
   if (dashboardState) dashboardState.setSnapshot('bans', bansData);
   await runDomWriteBatch(() => {
     if (tablesView) {
@@ -1245,11 +1355,11 @@ async function refreshIpBansTab(reason = 'manual') {
   }
 }
 
-async function refreshConfigBackedTab(tab, reason = 'manual', loadingMessage, emptyMessage) {
+async function refreshConfigBackedTab(tab, reason = 'manual', loadingMessage, emptyMessage, options = {}) {
   if (reason !== 'auto-refresh') {
     showTabLoading(tab, loadingMessage);
   }
-  const config = await refreshSharedConfig(reason);
+  const config = await refreshSharedConfig(reason, options);
   if (isConfigSnapshotEmpty(config)) {
     showTabEmpty(tab, emptyMessage);
   } else {
@@ -1257,30 +1367,38 @@ async function refreshConfigBackedTab(tab, reason = 'manual', loadingMessage, em
   }
 }
 
-const refreshStatusTab = (reason = 'manual') =>
+const refreshStatusTab = (reason = 'manual', options = {}) =>
   refreshConfigBackedTab(
     'status',
     reason,
     'Loading status signals...',
-    'No status config snapshot available yet.'
+    'No status config snapshot available yet.',
+    options
   );
 
-const refreshConfigTab = (reason = 'manual') =>
-  refreshConfigBackedTab('config', reason, 'Loading config...', 'No config snapshot available yet.');
+const refreshConfigTab = (reason = 'manual', options = {}) =>
+  refreshConfigBackedTab(
+    'config',
+    reason,
+    'Loading config...',
+    'No config snapshot available yet.',
+    options
+  );
 
-const refreshTuningTab = (reason = 'manual') =>
+const refreshTuningTab = (reason = 'manual', options = {}) =>
   refreshConfigBackedTab(
     'tuning',
     reason,
     'Loading tuning values...',
-    'No tuning config snapshot available yet.'
+    'No tuning config snapshot available yet.',
+    options
   );
 
 const TAB_REFRESH_HANDLERS = Object.freeze({
-  monitoring: async (reason = 'manual') => {
-    await refreshMonitoringTab(reason);
+  monitoring: async (reason = 'manual', options = {}) => {
+    await refreshMonitoringTab(reason, options);
     if (reason !== 'auto-refresh') {
-      await refreshSharedConfig(reason);
+      await refreshSharedConfig(reason, options);
     }
   },
   'ip-bans': refreshIpBansTab,
@@ -1289,15 +1407,18 @@ const TAB_REFRESH_HANDLERS = Object.freeze({
   tuning: refreshTuningTab
 });
 
-async function refreshDashboardForTab(tab, reason = 'manual') {
+async function refreshDashboardForTab(tab, reason = 'manual', options = {}) {
   const activeTab = tabLifecycleModule.normalizeTab(tab);
   try {
     const handler = TAB_REFRESH_HANDLERS[activeTab] || TAB_REFRESH_HANDLERS.monitoring;
-    await handler(reason);
+    await handler(reason, options);
     if (dashboardState) dashboardState.markTabUpdated(activeTab);
     refreshCoreActionButtonsState();
     updateLastUpdatedTimestamp();
   } catch (error) {
+    if (error && error.name === 'AbortError') {
+      return;
+    }
     const message = error && error.message ? error.message : 'Refresh failed';
     console.error(`Dashboard refresh error (${activeTab}):`, error);
     showTabError(activeTab, message);
@@ -1313,63 +1434,91 @@ function refreshActiveTab(reason = 'manual') {
   if (dashboardTabCoordinator) {
     return dashboardTabCoordinator.refreshActive({ reason });
   }
-  return refreshDashboardForTab('monitoring', reason);
+  const activeTab = dashboardState ? dashboardState.getActiveTab() : 'monitoring';
+  return refreshDashboardForTab(activeTab, reason);
 }
 
-// Admin controls - Ban IP
-const banButton = getById('ban-btn');
-if (banButton) {
-  banButton.onclick = async function banIpAction() {
-    const msg = getById('admin-msg');
-    if (!msg || !getAdminContext(msg)) return;
-    const ip = readIpFieldValue('ban-ip', true, msg, 'Ban IP');
-    if (ip === null) return;
-    const duration = readManualBanDurationSeconds(true);
-    if (duration === null) return;
+export function setDashboardActiveTab(tab, reason = 'external') {
+  const normalized = tabLifecycleModule.normalizeTab(tab);
+  if (dashboardState) {
+    dashboardState.setActiveTab(normalized);
+  }
+  document.body.dataset.activeDashboardTab = normalized;
+  refreshCoreActionButtonsState();
+  if (runtimeMountOptions.useExternalTabPipeline !== true && dashboardTabCoordinator) {
+    dashboardTabCoordinator.activate(normalized, reason);
+  }
+  return normalized;
+}
 
-    msg.textContent = `Banning ${ip}...`;
-    msg.className = 'message info';
+export function getDashboardActiveTab() {
+  if (dashboardTabCoordinator) {
+    return dashboardTabCoordinator.getActiveTab();
+  }
+  return dashboardState ? dashboardState.getActiveTab() : tabLifecycleModule.DEFAULT_DASHBOARD_TAB;
+}
 
-    try {
-      await dashboardApiClient.banIp(ip, duration);
-      msg.textContent = `Banned ${ip} for ${duration}s`;
-      msg.className = 'message success';
-      const banIpField = getById('ban-ip');
-      if (banIpField) banIpField.value = '';
-      if (dashboardState) dashboardState.invalidate('ip-bans');
-      runtimeEffects.setTimer(() => refreshActiveTab('ban-save'), 500);
-    } catch (e) {
-      msg.textContent = 'Error: ' + e.message;
-      msg.className = 'message error';
-    }
+export async function refreshDashboardTab(tab, reason = 'manual', options = {}) {
+  const normalized = setDashboardActiveTab(tab, reason);
+  return refreshDashboardForTab(normalized, reason, options);
+}
+
+export async function restoreDashboardSession() {
+  if (!adminSessionController) return false;
+  const authenticated = await adminSessionController.restoreAdminSession();
+  const sessionState = adminSessionController.getState();
+  if (dashboardState) {
+    dashboardState.setSession({
+      authenticated: sessionState.authenticated === true,
+      csrfToken: sessionState.csrfToken || ''
+    });
+  }
+  refreshCoreActionButtonsState();
+  return authenticated;
+}
+
+export function getDashboardSessionState() {
+  if (!adminSessionController) {
+    return { authenticated: false, csrfToken: '' };
+  }
+  const state = adminSessionController.getState();
+  return {
+    authenticated: state.authenticated === true,
+    csrfToken: state.csrfToken || ''
   };
 }
 
-// Admin controls - Unban IP
-const unbanButton = getById('unban-btn');
-if (unbanButton) {
-  unbanButton.onclick = async function unbanIpAction() {
-    const msg = getById('admin-msg');
-    if (!msg || !getAdminContext(msg)) return;
-    const ip = readIpFieldValue('unban-ip', true, msg, 'Unban IP');
-    if (ip === null) return;
+export async function logoutDashboardSession() {
+  const resolved = resolveAdminApiEndpoint();
+  const endpoint = resolved && resolved.endpoint ? resolved.endpoint : '';
+  if (!endpoint || !runtimeEffects) return;
 
-    msg.textContent = `Unbanning ${ip}...`;
-    msg.className = 'message info';
+  const sessionState = getDashboardSessionState();
+  const headers = new Headers();
+  if (sessionState.csrfToken) {
+    headers.set('X-Shuma-CSRF', sessionState.csrfToken);
+  }
 
-    try {
-      await dashboardApiClient.unbanIp(ip);
-      msg.textContent = `Unbanned ${ip}`;
-      msg.className = 'message success';
-      const unbanIpField = getById('unban-ip');
-      if (unbanIpField) unbanIpField.value = '';
-      if (dashboardState) dashboardState.invalidate('ip-bans');
-      runtimeEffects.setTimer(() => refreshActiveTab('unban-save'), 500);
-    } catch (e) {
-      msg.textContent = 'Error: ' + e.message;
-      msg.className = 'message error';
-    }
-  };
+  try {
+    await runtimeEffects.request(`${endpoint}/admin/logout`, {
+      method: 'POST',
+      headers,
+      credentials: 'same-origin'
+    });
+  } catch (_e) {}
+
+  if (adminSessionController) {
+    await adminSessionController.restoreAdminSession();
+  }
+  if (dashboardState) {
+    dashboardState.setSession({ authenticated: false, csrfToken: '' });
+  }
+  const message = getById('admin-msg');
+  if (message) {
+    message.textContent = 'Logged out';
+    message.className = 'message success';
+  }
+  refreshCoreActionButtonsState();
 }
 
 function clearAutoRefreshTimer() {
@@ -1395,201 +1544,276 @@ function scheduleAutoRefresh() {
   }, interval);
 }
 
-// Initialize charts and load data on page load
-configDraftStore = configDraftStoreModule.create(CONFIG_DRAFT_DEFAULTS);
-runtimeEffects = createRuntimeEffects();
-statusPanel = statusModule.create({ document });
-
-dashboardState = dashboardStateModule.create({
-  initialTab: tabLifecycleModule.DEFAULT_DASHBOARD_TAB
-});
-tabStateView = tabStateViewModule.create({
-  query,
-  getStateStore: () => dashboardState
-});
-
-adminSessionController = adminSessionModule.create({
-  resolveAdminApiEndpoint,
-  refreshCoreActionButtonsState,
-  redirectToLogin,
-  request: (input, init) => runtimeEffects.request(input, init)
-});
-adminSessionController.bindLogoutButton('logout-btn', 'admin-msg');
-
-dashboardApiClient = dashboardApiClientModule.create({
-  getAdminContext,
-  onUnauthorized: redirectToLogin,
-  request: (input, init) => runtimeEffects.request(input, init)
-});
-
-monitoringView = monitoringViewModule.create({
-  escapeHtml,
-  effects: runtimeEffects
-});
-
-tablesView = tablesViewModule.create({
-  escapeHtml,
-  onQuickUnban: async (ip) => {
-    const msg = getById('admin-msg');
-    if (!getAdminContext(msg)) return;
-
-    msg.textContent = `Unbanning ${ip}...`;
-    msg.className = 'message info';
-
-    try {
-      await dashboardApiClient.unbanIp(ip);
-      msg.textContent = `Unbanned ${ip}`;
-      msg.className = 'message success';
-      if (dashboardState) dashboardState.invalidate('ip-bans');
-      runtimeEffects.setTimer(() => refreshActiveTab('quick-unban'), 500);
-    } catch (e) {
-      msg.textContent = 'Error: ' + e.message;
-      msg.className = 'message error';
+function bindVisibilityHandler() {
+  if (visibilityChangeListener) {
+    document.removeEventListener('visibilitychange', visibilityChangeListener);
+  }
+  visibilityChangeListener = () => {
+    pageVisible = document.visibilityState !== 'hidden';
+    if (pageVisible) {
+      scheduleAutoRefresh();
+    } else {
+      clearAutoRefreshTimer();
     }
-  }
-});
-
-inputValidation = inputValidationModule.create({
-  getById,
-  setFieldError,
-  integerFieldRules: INTEGER_FIELD_RULES,
-  banDurationBoundsSeconds: BAN_DURATION_BOUNDS_SECONDS,
-  banDurationFields: BAN_DURATION_FIELDS,
-  manualBanDurationField: MANUAL_BAN_DURATION_FIELD,
-  onFieldInteraction: refreshCoreActionButtonsState
-});
-
-configUiState = configUiStateModule.create({
-  getById,
-  setDraft,
-  getDraft,
-  statusPanel,
-  adminConfigWriteEnabled,
-  parseBoolLike,
-  normalizeEdgeIntegrationMode,
-  normalizeCountryCodesForCompare,
-  formatListTextarea,
-  normalizeListTextareaForCompare,
-  formatBrowserRulesTextarea,
-  normalizeBrowserRulesForCompare,
-  setBanDurationInputFromSeconds,
-  banDurationFields: BAN_DURATION_FIELDS,
-  buildAdvancedConfigTemplate,
-  normalizeJsonObjectForCompare
-});
-
-dashboardTabCoordinator = tabLifecycleModule.createTabLifecycleCoordinator({
-  controllers: createDashboardTabControllers(),
-  onActiveTabChange: (nextTab) => {
-    if (dashboardState) dashboardState.setActiveTab(nextTab);
-    scheduleAutoRefresh();
-  }
-});
-dashboardTabCoordinator.init();
-initInputValidation();
-if (monitoringView) {
-  monitoringView.bindPrometheusCopyButtons();
+  };
+  document.addEventListener('visibilitychange', visibilityChangeListener);
 }
-dashboardCharts.init({
-  getAdminContext,
-  apiClient: dashboardApiClient
-});
-statusPanel.render();
 
-const configControlsContext = {
-  statusPanel,
-  apiClient: dashboardApiClient,
-  effects: runtimeEffects,
-  auth: {
-    getAdminContext
-  },
-  callbacks: {
-    onConfigSaved: (_patch, result) => {
-      if (result && result.config) {
-        applyStatusPanelPatch({ configSnapshot: result.config });
-        setAdvancedConfigEditorFromConfig(result.config, true);
-      }
-      if (dashboardState) {
-        dashboardState.invalidate('securityConfig');
-        dashboardState.invalidate('monitoring');
-        dashboardState.invalidate('ip-bans');
+function unbindVisibilityHandler() {
+  if (!visibilityChangeListener) return;
+  document.removeEventListener('visibilitychange', visibilityChangeListener);
+  visibilityChangeListener = null;
+}
+
+export function mountDashboardApp(options = {}) {
+  if (runtimeMounted) return;
+  runtimeMounted = true;
+  runtimeMountOptions = normalizeRuntimeMountOptions(options);
+  pageVisible = document.visibilityState !== 'hidden';
+
+  configDraftStore = configDraftStoreModule.create(CONFIG_DRAFT_DEFAULTS);
+  runtimeEffects = createRuntimeEffects();
+  statusPanel = statusModule.create({ document });
+
+  dashboardState = dashboardStateModule.create({
+    initialTab: runtimeMountOptions.initialTab
+  });
+  tabStateView = tabStateViewModule.create({
+    query,
+    getStateStore: () => dashboardState
+  });
+
+  adminSessionController = adminSessionModule.create({
+    resolveAdminApiEndpoint,
+    refreshCoreActionButtonsState,
+    redirectToLogin,
+    request: (input, init) => runtimeEffects.request(input, init)
+  });
+  if (runtimeMountOptions.bindLogoutButton) {
+    adminSessionController.bindLogoutButton('logout-btn', 'admin-msg');
+  }
+
+  dashboardApiClient = dashboardApiClientModule.create({
+    getAdminContext,
+    onUnauthorized: redirectToLogin,
+    request: (input, init) => runtimeEffects.request(input, init)
+  });
+
+  monitoringView = monitoringViewModule.create({
+    escapeHtml,
+    effects: runtimeEffects
+  });
+
+  tablesView = tablesViewModule.create({
+    escapeHtml,
+    onQuickUnban: async (ip) => {
+      const msg = getById('admin-msg');
+      if (!getAdminContext(msg)) return;
+
+      msg.textContent = `Unbanning ${ip}...`;
+      msg.className = 'message info';
+
+      try {
+        await dashboardApiClient.unbanIp(ip);
+        msg.textContent = `Unbanned ${ip}`;
+        msg.className = 'message success';
+        if (dashboardState) dashboardState.invalidate('ip-bans');
+        runtimeEffects.setTimer(() => refreshActiveTab('quick-unban'), 500);
+      } catch (e) {
+        msg.textContent = 'Error: ' + e.message;
+        msg.className = 'message error';
       }
     }
-  },
-  readers: {
-    readIntegerFieldValue,
-    readBanDurationSeconds,
-    readAdvancedConfigPatch
-  },
-  parsers: {
-    parseCountryCodesStrict,
-    parseListTextarea,
-    normalizeListTextareaForCompare,
-    parseHoneypotPathsTextarea,
-    parseBrowserRulesTextarea,
-    normalizeBrowserRulesForCompare
-  },
-  updaters: {
-    updateBanDurations,
-    updateGeoConfig,
-    updateHoneypotConfig,
-    updateBrowserPolicyConfig,
-    updateBypassAllowlistConfig,
-    updateEdgeIntegrationModeConfig,
-    refreshRobotsPreview,
-    setAdvancedConfigFromConfig: setAdvancedConfigEditorFromConfig
-  },
-  checks: {
-    checkMazeConfigChanged,
-    checkRobotsConfigChanged,
-    checkAiPolicyConfigChanged,
-    checkGeoConfigChanged,
-    checkHoneypotConfigChanged,
-    checkBrowserPolicyConfigChanged,
-    checkBypassAllowlistsConfigChanged,
-    checkPowConfigChanged,
-    checkChallengePuzzleConfigChanged,
-    checkBotnessConfigChanged,
-    checkCdpConfigChanged,
-    checkEdgeIntegrationModeChanged,
-    checkRateLimitConfigChanged,
-    checkJsRequiredConfigChanged,
-    checkAdvancedConfigChanged,
-    checkBanDurationsChanged
-  },
-  actions: {
-    refreshDashboard: () => refreshActiveTab('config-controls')
-  },
-  draft: {
-    get: getDraft,
-    set: setDraft
-  }
-};
+  });
 
-configControls.bind({
-  context: configControlsContext
-});
-adminSessionController.restoreAdminSession().then((authenticated) => {
-  const sessionState = adminSessionController.getState();
-  if (dashboardState) {
-    dashboardState.setSession({
-      authenticated: sessionState.authenticated === true,
-      csrfToken: sessionState.csrfToken || ''
+  inputValidation = inputValidationModule.create({
+    getById,
+    setFieldError,
+    integerFieldRules: INTEGER_FIELD_RULES,
+    banDurationBoundsSeconds: BAN_DURATION_BOUNDS_SECONDS,
+    banDurationFields: BAN_DURATION_FIELDS,
+    manualBanDurationField: MANUAL_BAN_DURATION_FIELD,
+    onFieldInteraction: refreshCoreActionButtonsState
+  });
+
+  configUiState = configUiStateModule.create({
+    getById,
+    setDraft,
+    getDraft,
+    statusPanel,
+    adminConfigWriteEnabled,
+    parseBoolLike,
+    normalizeEdgeIntegrationMode,
+    normalizeCountryCodesForCompare,
+    formatListTextarea,
+    normalizeListTextareaForCompare,
+    formatBrowserRulesTextarea,
+    normalizeBrowserRulesForCompare,
+    setBanDurationInputFromSeconds,
+    banDurationFields: BAN_DURATION_FIELDS,
+    buildAdvancedConfigTemplate,
+    normalizeJsonObjectForCompare
+  });
+
+  if (!runtimeMountOptions.useExternalTabPipeline) {
+    dashboardTabCoordinator = tabLifecycleModule.createTabLifecycleCoordinator({
+      controllers: createDashboardTabControllers(),
+      onActiveTabChange: (nextTab) => {
+        if (dashboardState) dashboardState.setActiveTab(nextTab);
+        if (!runtimeMountOptions.useExternalPollingPipeline) {
+          scheduleAutoRefresh();
+        }
+      }
+    });
+    dashboardTabCoordinator.init();
+  } else {
+    setDashboardActiveTab(runtimeMountOptions.initialTab, 'external-init');
+  }
+  initInputValidation();
+  teardownControlBindings = bindMountScopedDomEvents();
+  if (monitoringView) {
+    monitoringView.bindPrometheusCopyButtons();
+  }
+  dashboardCharts.init({
+    getAdminContext,
+    apiClient: dashboardApiClient
+  });
+  statusPanel.render();
+
+  const configControlsContext = {
+    statusPanel,
+    apiClient: dashboardApiClient,
+    effects: runtimeEffects,
+    auth: {
+      getAdminContext
+    },
+    callbacks: {
+      onConfigSaved: (_patch, result) => {
+        if (result && result.config) {
+          applyStatusPanelPatch({ configSnapshot: result.config });
+          setAdvancedConfigEditorFromConfig(result.config, true);
+        }
+        if (dashboardState) {
+          dashboardState.invalidate('securityConfig');
+          dashboardState.invalidate('monitoring');
+          dashboardState.invalidate('ip-bans');
+        }
+      }
+    },
+    readers: {
+      readIntegerFieldValue,
+      readBanDurationSeconds,
+      readAdvancedConfigPatch
+    },
+    parsers: {
+      parseCountryCodesStrict,
+      parseListTextarea,
+      normalizeListTextareaForCompare,
+      parseHoneypotPathsTextarea,
+      parseBrowserRulesTextarea,
+      normalizeBrowserRulesForCompare
+    },
+    updaters: {
+      updateBanDurations,
+      updateGeoConfig,
+      updateHoneypotConfig,
+      updateBrowserPolicyConfig,
+      updateBypassAllowlistConfig,
+      updateEdgeIntegrationModeConfig,
+      refreshRobotsPreview,
+      setAdvancedConfigFromConfig: setAdvancedConfigEditorFromConfig
+    },
+    checks: {
+      checkMazeConfigChanged,
+      checkRobotsConfigChanged,
+      checkAiPolicyConfigChanged,
+      checkGeoConfigChanged,
+      checkHoneypotConfigChanged,
+      checkBrowserPolicyConfigChanged,
+      checkBypassAllowlistsConfigChanged,
+      checkPowConfigChanged,
+      checkChallengePuzzleConfigChanged,
+      checkBotnessConfigChanged,
+      checkCdpConfigChanged,
+      checkEdgeIntegrationModeChanged,
+      checkRateLimitConfigChanged,
+      checkJsRequiredConfigChanged,
+      checkAdvancedConfigChanged,
+      checkBanDurationsChanged
+    },
+    actions: {
+      refreshDashboard: () => refreshActiveTab('config-controls')
+    },
+    draft: {
+      get: getDraft,
+      set: setDraft
+    }
+  };
+
+  configControls.bind({
+    context: configControlsContext
+  });
+  if (!runtimeMountOptions.useExternalSessionPipeline) {
+    adminSessionController.restoreAdminSession().then((authenticated) => {
+      const sessionState = adminSessionController.getState();
+      if (dashboardState) {
+        dashboardState.setSession({
+          authenticated: sessionState.authenticated === true,
+          csrfToken: sessionState.csrfToken || ''
+        });
+      }
+      if (!authenticated) {
+        redirectToLogin();
+        return;
+      }
+      refreshActiveTab('session-restored');
+      if (!runtimeMountOptions.useExternalPollingPipeline) {
+        scheduleAutoRefresh();
+      }
     });
   }
-  if (!authenticated) {
-    redirectToLogin();
-    return;
-  }
-  refreshActiveTab('session-restored');
-  scheduleAutoRefresh();
-});
 
-document.addEventListener('visibilitychange', () => {
-  pageVisible = document.visibilityState !== 'hidden';
-  if (pageVisible) {
-    scheduleAutoRefresh();
-  } else {
-    clearAutoRefreshTimer();
+  if (!runtimeMountOptions.useExternalPollingPipeline) {
+    bindVisibilityHandler();
   }
-});
+}
+
+export function unmountDashboardApp() {
+  if (!runtimeMounted) return;
+  runtimeMounted = false;
+  runtimeMountOptions = normalizeRuntimeMountOptions({});
+  clearAutoRefreshTimer();
+  unbindVisibilityHandler();
+  if (teardownControlBindings) {
+    teardownControlBindings();
+    teardownControlBindings = null;
+  }
+  if (dashboardTabCoordinator && typeof dashboardTabCoordinator.destroy === 'function') {
+    dashboardTabCoordinator.destroy();
+  }
+  if (monitoringView && typeof monitoringView.destroy === 'function') {
+    monitoringView.destroy();
+  }
+  if (dashboardCharts && typeof dashboardCharts.destroy === 'function') {
+    dashboardCharts.destroy();
+  }
+  const logoutButton = getById('logout-btn');
+  if (logoutButton) {
+    logoutButton.onclick = null;
+  }
+  if (document.body && document.body.dataset) {
+    delete document.body.dataset.activeDashboardTab;
+  }
+  dashboardTabCoordinator = null;
+  dashboardApiClient = null;
+  dashboardState = null;
+  monitoringView = null;
+  tablesView = null;
+  tabStateView = null;
+  configUiState = null;
+  inputValidation = null;
+  configDraftStore = null;
+  runtimeEffects = null;
+  statusPanel = null;
+  adminSessionController = null;
+}
