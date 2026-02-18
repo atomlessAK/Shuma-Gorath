@@ -1,10 +1,3 @@
-import {
-  getDashboardSessionState as getExternalDashboardSessionState,
-  logoutDashboardSession as logoutExternalDashboardSession,
-  refreshDashboardTab as refreshExternalDashboardTab,
-  restoreDashboardSession as restoreExternalDashboardSession,
-  setDashboardActiveTab as setExternalDashboardActiveTab
-} from './dashboard-external-adapters.js';
 let mountingPromise = null;
 let mounted = false;
 let runtimeModule = null;
@@ -16,18 +9,15 @@ async function resolveRuntimeModule() {
 }
 
 export async function mountDashboardRuntime(options = {}) {
-  const mountOptions = { ...(options || {}) };
-  delete mountOptions.mode;
-
   if (mounted) return;
   if (mountingPromise) return mountingPromise;
 
   mountingPromise = resolveRuntimeModule()
     .then(async (module) => {
-      if (typeof module.mountDashboardExternalRuntime !== 'function') {
-        throw new Error('Dashboard runtime entrypoint is missing mountDashboardExternalRuntime()');
+      if (typeof module.mountDashboardApp !== 'function') {
+        throw new Error('Dashboard runtime entrypoint is missing mountDashboardApp()');
       }
-      await module.mountDashboardExternalRuntime(mountOptions || {});
+      await module.mountDashboardApp({ ...(options || {}) });
       mounted = true;
     })
     .finally(() => {
@@ -45,22 +35,39 @@ export function unmountDashboardRuntime() {
   mounted = false;
 }
 
+async function ensureMountedRuntime() {
+  if (mountingPromise) {
+    await mountingPromise;
+  }
+  return runtimeModule;
+}
+
 export async function restoreDashboardSession() {
-  return restoreExternalDashboardSession();
+  const module = await ensureMountedRuntime();
+  if (!module || typeof module.restoreDashboardSession !== 'function') return false;
+  return module.restoreDashboardSession();
 }
 
 export function getDashboardSessionState() {
-  return getExternalDashboardSessionState();
+  if (!runtimeModule || typeof runtimeModule.getDashboardSessionState !== 'function') {
+    return { authenticated: false, csrfToken: '' };
+  }
+  return runtimeModule.getDashboardSessionState();
 }
 
 export async function refreshDashboardTab(tab, reason = 'manual', options = {}) {
-  return refreshExternalDashboardTab(tab, reason, options || {});
+  const module = await ensureMountedRuntime();
+  if (!module || typeof module.refreshDashboardTab !== 'function') return;
+  return module.refreshDashboardTab(tab, reason, options || {});
 }
 
 export function setDashboardActiveTab(tab) {
-  setExternalDashboardActiveTab(tab);
+  if (!runtimeModule || typeof runtimeModule.setDashboardActiveTab !== 'function') return;
+  runtimeModule.setDashboardActiveTab(tab);
 }
 
 export async function logoutDashboardSession() {
-  return logoutExternalDashboardSession();
+  const module = await ensureMountedRuntime();
+  if (!module || typeof module.logoutDashboardSession !== 'function') return;
+  return module.logoutDashboardSession();
 }

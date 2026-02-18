@@ -1,16 +1,10 @@
-export function createLegacyDashboardTabRuntime(options = {}) {
+export function createDashboardTabRuntime(options = {}) {
   const normalizeTab =
     typeof options.normalizeTab === 'function' ? options.normalizeTab : (value) => String(value || '');
   const defaultTab = String(options.defaultTab || 'monitoring');
   const documentRef = options.document || null;
   const getStateStore =
     typeof options.getStateStore === 'function' ? options.getStateStore : () => null;
-  const getTabCoordinator =
-    typeof options.getTabCoordinator === 'function' ? options.getTabCoordinator : () => null;
-  const getRuntimeMountOptions =
-    typeof options.getRuntimeMountOptions === 'function'
-      ? options.getRuntimeMountOptions
-      : () => ({ useExternalTabPipeline: false });
   const refreshCoreActionButtonsState =
     typeof options.refreshCoreActionButtonsState === 'function'
       ? options.refreshCoreActionButtonsState
@@ -28,23 +22,10 @@ export function createLegacyDashboardTabRuntime(options = {}) {
       documentRef.body.dataset.activeDashboardTab = normalized;
     }
     refreshCoreActionButtonsState();
-    const mountOptions = getRuntimeMountOptions() || {};
-    const tabCoordinator = getTabCoordinator();
-    if (
-      mountOptions.useExternalTabPipeline !== true &&
-      tabCoordinator &&
-      typeof tabCoordinator.activate === 'function'
-    ) {
-      tabCoordinator.activate(normalized, reason);
-    }
     return normalized;
   }
 
   function getActiveTab() {
-    const tabCoordinator = getTabCoordinator();
-    if (tabCoordinator && typeof tabCoordinator.getActiveTab === 'function') {
-      return tabCoordinator.getActiveTab();
-    }
     const stateStore = getStateStore();
     if (stateStore && typeof stateStore.getActiveTab === 'function') {
       return stateStore.getActiveTab();
@@ -64,7 +45,7 @@ export function createLegacyDashboardTabRuntime(options = {}) {
   };
 }
 
-export function createLegacyDashboardSessionRuntime(options = {}) {
+export function createDashboardSessionRuntime(options = {}) {
   const getAdminSessionController =
     typeof options.getAdminSessionController === 'function'
       ? options.getAdminSessionController
@@ -152,82 +133,5 @@ export function createLegacyDashboardSessionRuntime(options = {}) {
     getSessionState,
     restoreSession,
     logoutSession
-  };
-}
-
-export function createLegacyAutoRefreshRuntime(options = {}) {
-  const effects = options.effects;
-  const documentRef = options.document || null;
-  const tabRefreshIntervals = options.tabRefreshIntervals || {};
-  const defaultTab = String(options.defaultTab || 'monitoring');
-  const normalizeTab =
-    typeof options.normalizeTab === 'function' ? options.normalizeTab : (value) => String(value || defaultTab);
-  const getActiveTab =
-    typeof options.getActiveTab === 'function' ? options.getActiveTab : () => defaultTab;
-  const hasValidApiContext =
-    typeof options.hasValidApiContext === 'function' ? options.hasValidApiContext : () => false;
-  const refreshDashboardForTab =
-    typeof options.refreshDashboardForTab === 'function' ? options.refreshDashboardForTab : async () => {};
-
-  if (!effects || typeof effects.setTimer !== 'function' || typeof effects.clearTimer !== 'function') {
-    throw new Error('createLegacyAutoRefreshRuntime requires runtime effects with setTimer/clearTimer.');
-  }
-
-  let timer = null;
-  let visibilityChangeListener = null;
-  let pageVisible = documentRef ? documentRef.visibilityState !== 'hidden' : true;
-
-  function clear() {
-    if (!timer) return;
-    effects.clearTimer(timer);
-    timer = null;
-  }
-
-  function schedule() {
-    clear();
-    if (!hasValidApiContext() || !pageVisible) return;
-    const activeTab = normalizeTab(getActiveTab());
-    const intervalMs = tabRefreshIntervals[activeTab] || tabRefreshIntervals.monitoring || 30000;
-    timer = effects.setTimer(async () => {
-      timer = null;
-      if (hasValidApiContext() && pageVisible) {
-        await refreshDashboardForTab(activeTab, 'auto-refresh');
-      }
-      schedule();
-    }, intervalMs);
-  }
-
-  function unbindVisibility() {
-    if (!visibilityChangeListener || !documentRef) return;
-    documentRef.removeEventListener('visibilitychange', visibilityChangeListener);
-    visibilityChangeListener = null;
-  }
-
-  function bindVisibility() {
-    if (!documentRef || typeof documentRef.addEventListener !== 'function') return;
-    unbindVisibility();
-    visibilityChangeListener = () => {
-      pageVisible = documentRef.visibilityState !== 'hidden';
-      if (pageVisible) {
-        schedule();
-      } else {
-        clear();
-      }
-    };
-    documentRef.addEventListener('visibilitychange', visibilityChangeListener);
-  }
-
-  function destroy() {
-    clear();
-    unbindVisibility();
-  }
-
-  return {
-    schedule,
-    clear,
-    bindVisibility,
-    unbindVisibility,
-    destroy,
-    isPageVisible: () => pageVisible
   };
 }

@@ -114,10 +114,14 @@ make test-dashboard-e2e
 
 Behavior:
 1. Installs pinned Playwright dependencies via `pnpm` (through `corepack`).
-2. Runs dashboard module unit tests via `make test-dashboard-unit`.
-3. Runs dashboard bundle-size budget gate (`scripts/tests/check_dashboard_bundle_budget.js`) against `dist/dashboard/_app`.
-4. Seeds deterministic dashboard data via `make seed-dashboard-data`.
-5. Runs browser smoke checks for core dashboard behavior:
+2. Uses repo-local Playwright runtime paths for deterministic execution:
+   - browser cache: `.cache/ms-playwright`
+   - browser home/config: `.cache/playwright-home`
+3. Runs a Chromium launch preflight and fails fast with actionable diagnostics when sandbox permissions block browser startup.
+4. Runs dashboard module unit tests via `make test-dashboard-unit`.
+5. Runs dashboard bundle-size budget gate (`scripts/tests/check_dashboard_bundle_budget.js`) against `dist/dashboard/_app`.
+6. Seeds deterministic dashboard data via `make seed-dashboard-data`.
+7. Runs browser smoke checks for core dashboard behavior:
    - page loads and refresh succeeds
    - runtime page errors or failed JS/CSS loads fail the run
    - only one dashboard tab panel is visible at a time (panel exclusivity)
@@ -129,11 +133,12 @@ Behavior:
    - `/dashboard` canonical path redirects to `/dashboard/index.html`
    - tab-level error states surface backend failures
    - sticky table headers remain applied
-5. `make test` executes a final dashboard seed step (`make seed-dashboard-data`) after e2e so local dashboards retain recent sample data.
+8. `make test` executes a final dashboard seed step (`make seed-dashboard-data`) after e2e so local dashboards retain recent sample data.
 
 Notes:
 - Seeding is test-only and does not run during `make setup`.
 - Seeded rows are operational test data and may appear in local dashboard history.
+- Restricted sandbox escape hatch (local-only): set `PLAYWRIGHT_SANDBOX_ALLOW_SKIP=1` to skip dashboard e2e after a detected Chromium launch permission block.
 
 ## 🐙 Build Mode Notes
 
@@ -151,8 +156,10 @@ These directories are generated locally/CI and should never be committed:
 - `.spin/` - local Spin runtime data/logs
 - `playwright-report/` - Playwright HTML report output
 - `test-results/` - Playwright test result artifacts
+- `.cache/ms-playwright/` - repo-local Playwright browser cache
+- `.cache/playwright-home/` - repo-local Playwright HOME/config sandbox
 
-`make clean` removes these generated outputs, including stale local `src/*.wasm` artifacts.
+`make clean` removes core build/test outputs, including stale local `src/*.wasm` artifacts.
 
 ## 🐙 Manual Test Sequence (Optional)
 

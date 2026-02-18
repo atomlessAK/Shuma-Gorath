@@ -19,7 +19,6 @@ import * as configDraftStoreModule from '../../../modules/config-draft-store.js'
 import * as configFormUtilsModule from '../../../modules/config-form-utils.js';
 import * as inputValidationModule from '../../../modules/input-validation.js';
 import * as adminEndpointModule from '../../../modules/services/admin-endpoint.js';
-import * as featureControllersModule from '../../../modules/feature-controllers.js';
 import {
   acquireChartRuntime,
   getChartConstructor,
@@ -27,30 +26,10 @@ import {
 } from '../../../modules/services/chart-runtime-adapter.js';
 import { createRuntimeEffects } from '../../../modules/services/runtime-effects.js';
 import {
-  createLegacyAutoRefreshRuntime,
-  createLegacyDashboardSessionRuntime,
-  createLegacyDashboardTabRuntime
-} from './dashboard-legacy-orchestration.js';
-import { createLegacyConfigDirtyRuntime } from './dashboard-legacy-config-dirty.js';
-import {
-  clearDashboardExternalAdapters,
-  configureDashboardExternalAdapters,
-  getDashboardActiveTab as getExternalDashboardActiveTab,
-  getDashboardSessionState as getExternalDashboardSessionState,
-  logoutDashboardSession as logoutExternalDashboardSession,
-  refreshDashboardTab as refreshExternalDashboardTab,
-  restoreDashboardSession as restoreExternalDashboardSession,
-  setDashboardActiveTab as setExternalDashboardActiveTab
-} from './dashboard-external-adapters.js';
-
-export {
-  getExternalDashboardActiveTab as getDashboardActiveTab,
-  getExternalDashboardSessionState as getDashboardSessionState,
-  logoutExternalDashboardSession as logoutDashboardSession,
-  refreshExternalDashboardTab as refreshDashboardTab,
-  restoreExternalDashboardSession as restoreDashboardSession,
-  setExternalDashboardActiveTab as setDashboardActiveTab
-};
+  createDashboardSessionRuntime,
+  createDashboardTabRuntime
+} from './dashboard-runtime-orchestration.js';
+import { createConfigDirtyRuntime } from './dashboard-runtime-config-dirty.js';
 
 const {
   parseCountryCodesStrict,
@@ -152,7 +131,6 @@ const ADVANCED_CONFIG_TEMPLATE_PATHS = Object.freeze(
 );
 
 let adminSessionController = null;
-let dashboardTabCoordinator = null;
 let dashboardApiClient = null;
 let dashboardState = null;
 let monitoringView = null;
@@ -163,17 +141,12 @@ let inputValidation = null;
 let configDraftStore = null;
 let runtimeEffects = null;
 let statusPanel = null;
-let legacyAutoRefreshRuntime = null;
-let legacyConfigDirtyRuntime = null;
-let legacyTabRuntime = null;
-let legacySessionRuntime = null;
+let configDirtyRuntime = null;
+let tabRuntime = null;
+let sessionRuntime = null;
 let teardownControlBindings = null;
 let runtimeMounted = false;
 let runtimeMountOptions = {
-  useExternalTabPipeline: false,
-  useExternalPollingPipeline: false,
-  useExternalSessionPipeline: false,
-  bindLogoutButton: true,
   chartRuntimeSrc: '',
   initialTab: tabLifecycleModule.DEFAULT_DASHBOARD_TAB
 };
@@ -184,24 +157,12 @@ const queryAll = domCache.queryAll;
 const domWriteScheduler = domModule.createWriteScheduler();
 const resolveAdminApiEndpoint = adminEndpointModule.createAdminEndpointResolver({ window });
 
-const TAB_REFRESH_INTERVAL_MS = Object.freeze({
-  monitoring: 30000,
-  'ip-bans': 45000,
-  status: 60000,
-  config: 60000,
-  tuning: 60000
-});
-
 function normalizeRuntimeMountOptions(options = {}) {
   const source = options || {};
   const chartRuntimeSrc = typeof source.chartRuntimeSrc === 'string'
     ? source.chartRuntimeSrc.trim()
     : '';
   return {
-    useExternalTabPipeline: source.useExternalTabPipeline === true,
-    useExternalPollingPipeline: source.useExternalPollingPipeline === true,
-    useExternalSessionPipeline: source.useExternalSessionPipeline === true,
-    bindLogoutButton: source.bindLogoutButton !== false,
     chartRuntimeSrc,
     initialTab: tabLifecycleModule.normalizeTab(
       source.initialTab || tabLifecycleModule.DEFAULT_DASHBOARD_TAB
@@ -216,21 +177,6 @@ function runDomWriteBatch(task) {
       resolve();
     });
   });
-}
-
-function setDashboardEventController() {
-  dashboardEventAbortController = new AbortController();
-}
-
-function clearDashboardEventController() {
-  if (!dashboardEventAbortController) return;
-  dashboardEventAbortController.abort();
-  dashboardEventAbortController = null;
-}
-
-function dashboardEventOptions() {
-  if (!dashboardEventAbortController) return undefined;
-  return { signal: dashboardEventAbortController.signal };
 }
 
 const cloneJsonValue = jsonObjectModule.cloneJsonValue;
@@ -367,41 +313,11 @@ function refreshCoreActionButtonsState() {
     validateIpFieldById('unban-ip', true, 'Unban IP')
   );
 
-  if (legacyConfigDirtyRuntime && typeof legacyConfigDirtyRuntime.runCoreChecks === 'function') {
-    legacyConfigDirtyRuntime.runCoreChecks();
+  if (configDirtyRuntime && typeof configDirtyRuntime.runCoreChecks === 'function') {
+    configDirtyRuntime.runCoreChecks();
   }
   checkGeoConfigChanged();
   checkAdvancedConfigChanged();
-}
-
-function createDashboardTabControllers() {
-  function makeController(tab) {
-    return {
-      init: function initTabController() {},
-      mount: function mountTabController() {
-        document.body.dataset.activeDashboardTab = tab;
-        if (dashboardState) {
-          dashboardState.setActiveTab(tab);
-        }
-        refreshCoreActionButtonsState();
-        if (hasValidApiContext()) {
-          refreshDashboardForTab(tab, 'tab-mount');
-        }
-      },
-      unmount: function unmountTabController() {},
-      refresh: function refreshTabController(context = {}) {
-        return refreshDashboardForTab(tab, context.reason || 'manual');
-      }
-    };
-  }
-
-  return {
-    monitoring: makeController('monitoring'),
-    'ip-bans': makeController('ip-bans'),
-    status: makeController('status'),
-    config: makeController('config'),
-    tuning: makeController('tuning')
-  };
 }
 
 function getAdminContext(messageTarget) {
@@ -589,28 +505,28 @@ function setValidActionButtonState(buttonId, apiValid, fieldsValid = true) {
   setButtonState(buttonId, apiValid, fieldsValid, true, false);
 }
 
-function runLegacyConfigDirtyCheck(methodName) {
-  if (!legacyConfigDirtyRuntime) return;
-  const handler = legacyConfigDirtyRuntime[methodName];
+function runConfigDirtyCheck(methodName) {
+  if (!configDirtyRuntime) return;
+  const handler = configDirtyRuntime[methodName];
   if (typeof handler === 'function') {
     handler();
   }
 }
 
 function checkRobotsConfigChanged() {
-  runLegacyConfigDirtyCheck('checkRobots');
+  runConfigDirtyCheck('checkRobots');
 }
 
 function checkAiPolicyConfigChanged() {
-  runLegacyConfigDirtyCheck('checkAiPolicy');
+  runConfigDirtyCheck('checkAiPolicy');
 }
 
 function checkMazeConfigChanged() {
-  runLegacyConfigDirtyCheck('checkMaze');
+  runConfigDirtyCheck('checkMaze');
 }
 
 function checkBanDurationsChanged() {
-  runLegacyConfigDirtyCheck('checkBanDurations');
+  runConfigDirtyCheck('checkBanDurations');
 }
 
 function validateHoneypotPathsField(showInline = false) {
@@ -627,7 +543,7 @@ function validateHoneypotPathsField(showInline = false) {
 }
 
 function checkHoneypotConfigChanged() {
-  runLegacyConfigDirtyCheck('checkHoneypot');
+  runConfigDirtyCheck('checkHoneypot');
 }
 
 function validateBrowserRulesField(id, showInline = false) {
@@ -644,15 +560,15 @@ function validateBrowserRulesField(id, showInline = false) {
 }
 
 function checkBrowserPolicyConfigChanged() {
-  runLegacyConfigDirtyCheck('checkBrowserPolicy');
+  runConfigDirtyCheck('checkBrowserPolicy');
 }
 
 function checkBypassAllowlistsConfigChanged() {
-  runLegacyConfigDirtyCheck('checkBypassAllowlists');
+  runConfigDirtyCheck('checkBypassAllowlists');
 }
 
 function checkChallengePuzzleConfigChanged() {
-  runLegacyConfigDirtyCheck('checkChallengePuzzle');
+  runConfigDirtyCheck('checkChallengePuzzle');
 }
 
 // Fetch and update robots.txt preview content
@@ -707,11 +623,11 @@ const updatePowConfig = (config) => invokeConfigUiState('updatePowConfig', confi
 const updateChallengeConfig = (config) => invokeConfigUiState('updateChallengeConfig', config);
 
 function checkPowConfigChanged() {
-  runLegacyConfigDirtyCheck('checkPow');
+  runConfigDirtyCheck('checkPow');
 }
 
 function checkBotnessConfigChanged() {
-  runLegacyConfigDirtyCheck('checkBotness');
+  runConfigDirtyCheck('checkBotness');
 }
 
 function checkGeoConfigChanged() {
@@ -769,19 +685,19 @@ function handleGeoFieldBlur(id) {
 
 // Check if CDP config has changed from saved state
 function checkCdpConfigChanged() {
-  runLegacyConfigDirtyCheck('checkCdp');
+  runConfigDirtyCheck('checkCdp');
 }
 
 function checkEdgeIntegrationModeChanged() {
-  runLegacyConfigDirtyCheck('checkEdgeMode');
+  runConfigDirtyCheck('checkEdgeMode');
 }
 
 function checkRateLimitConfigChanged() {
-  runLegacyConfigDirtyCheck('checkRateLimit');
+  runConfigDirtyCheck('checkRateLimit');
 }
 
 function checkJsRequiredConfigChanged() {
-  runLegacyConfigDirtyCheck('checkJsRequired');
+  runConfigDirtyCheck('checkJsRequired');
 }
 
 function setAdvancedConfigEditorFromConfig(config, preserveDirty = true) {
@@ -1288,25 +1204,7 @@ async function refreshDashboardForTab(tab, reason = 'manual', options = {}) {
   }
 }
 
-function createDashboardFeatureControllers() {
-  return featureControllersModule.createDashboardFeatureControllers({
-    notifyTabMounted: (tab) => {
-      document.body.dataset.activeDashboardTab = tab;
-      if (dashboardState) {
-        dashboardState.setActiveTab(tab);
-      }
-      refreshCoreActionButtonsState();
-    },
-    notifyTabUnmounted: () => {},
-    refreshTab: (tab, reason) => refreshDashboardForTab(tab, reason),
-    hasValidApiContext
-  });
-}
-
 function refreshActiveTab(reason = 'manual') {
-  if (dashboardTabCoordinator) {
-    return dashboardTabCoordinator.refreshActive({ reason });
-  }
   const activeTab = dashboardState ? dashboardState.getActiveTab() : 'monitoring';
   return refreshDashboardForTab(activeTab, reason);
 }
@@ -1339,45 +1237,23 @@ export async function mountDashboardApp(options = {}) {
     redirectToLogin,
     request: (input, init) => runtimeEffects.request(input, init)
   });
-  if (runtimeMountOptions.bindLogoutButton) {
-    adminSessionController.bindLogoutButton('logout-btn', 'admin-msg');
-  }
 
-  legacyTabRuntime = createLegacyDashboardTabRuntime({
+  tabRuntime = createDashboardTabRuntime({
     document,
     normalizeTab: tabLifecycleModule.normalizeTab,
     defaultTab: tabLifecycleModule.DEFAULT_DASHBOARD_TAB,
     getStateStore: () => dashboardState,
-    getTabCoordinator: () => dashboardTabCoordinator,
-    getRuntimeMountOptions: () => runtimeMountOptions,
     refreshCoreActionButtonsState,
     refreshDashboardForTab
   });
 
-  legacySessionRuntime = createLegacyDashboardSessionRuntime({
+  sessionRuntime = createDashboardSessionRuntime({
     getAdminSessionController: () => adminSessionController,
     getStateStore: () => dashboardState,
     refreshCoreActionButtonsState,
     resolveAdminApiEndpoint,
     getRuntimeEffects: () => runtimeEffects,
     getMessageNode: () => getById('admin-msg')
-  });
-  configureDashboardExternalAdapters({
-    tabRuntime: legacyTabRuntime,
-    sessionRuntime: legacySessionRuntime,
-    normalizeTab: tabLifecycleModule.normalizeTab,
-    defaultTab: tabLifecycleModule.DEFAULT_DASHBOARD_TAB
-  });
-
-  legacyAutoRefreshRuntime = createLegacyAutoRefreshRuntime({
-    effects: runtimeEffects,
-    document,
-    tabRefreshIntervals: TAB_REFRESH_INTERVAL_MS,
-    defaultTab: tabLifecycleModule.DEFAULT_DASHBOARD_TAB,
-    normalizeTab: tabLifecycleModule.normalizeTab,
-    getActiveTab: () => getExternalDashboardActiveTab(),
-    hasValidApiContext,
-    refreshDashboardForTab
   });
 
   dashboardApiClient = dashboardApiClientModule.create({
@@ -1444,7 +1320,7 @@ export async function mountDashboardApp(options = {}) {
     normalizeJsonObjectForCompare
   });
 
-  legacyConfigDirtyRuntime = createLegacyConfigDirtyRuntime({
+  configDirtyRuntime = createConfigDirtyRuntime({
     getById,
     getDraft,
     isDraftDirty,
@@ -1460,20 +1336,6 @@ export async function mountDashboardApp(options = {}) {
     setDirtySaveButtonState
   });
 
-  if (!runtimeMountOptions.useExternalTabPipeline) {
-    dashboardTabCoordinator = tabLifecycleModule.createTabLifecycleCoordinator({
-      controllers: createDashboardTabControllers(),
-      onActiveTabChange: (nextTab) => {
-        if (dashboardState) dashboardState.setActiveTab(nextTab);
-        if (!runtimeMountOptions.useExternalPollingPipeline && legacyAutoRefreshRuntime) {
-          legacyAutoRefreshRuntime.schedule();
-        }
-      }
-    });
-    dashboardTabCoordinator.init();
-  } else {
-    setExternalDashboardActiveTab(runtimeMountOptions.initialTab, 'external-init');
-  }
   initInputValidation();
   teardownControlBindings = bindMountScopedDomEvents();
   if (monitoringView) {
@@ -1559,63 +1421,59 @@ export async function mountDashboardApp(options = {}) {
   configControls.bind({
     context: configControlsContext
   });
-  if (!runtimeMountOptions.useExternalSessionPipeline) {
-    adminSessionController.restoreAdminSession().then((authenticated) => {
-      const sessionState = adminSessionController.getState();
-      if (dashboardState) {
-        dashboardState.setSession({
-          authenticated: sessionState.authenticated === true,
-          csrfToken: sessionState.csrfToken || ''
-        });
-      }
-      if (!authenticated) {
-        redirectToLogin();
-        return;
-      }
-      refreshActiveTab('session-restored');
-      if (!runtimeMountOptions.useExternalPollingPipeline && legacyAutoRefreshRuntime) {
-        legacyAutoRefreshRuntime.schedule();
-      }
-    });
-  }
-
-  if (!runtimeMountOptions.useExternalPollingPipeline && legacyAutoRefreshRuntime) {
-    legacyAutoRefreshRuntime.bindVisibility();
-  }
 }
 
-export async function mountDashboardExternalRuntime(options = {}) {
-  const source = options || {};
-  await mountDashboardApp({
-    useExternalTabPipeline: true,
-    useExternalPollingPipeline: true,
-    useExternalSessionPipeline: true,
-    bindLogoutButton: false,
-    chartRuntimeSrc: source.chartRuntimeSrc || '',
-    initialTab: tabLifecycleModule.normalizeTab(
-      source.initialTab || tabLifecycleModule.DEFAULT_DASHBOARD_TAB
-    )
-  });
+export function getDashboardActiveTab() {
+  if (!tabRuntime || typeof tabRuntime.getActiveTab !== 'function') {
+    return tabLifecycleModule.DEFAULT_DASHBOARD_TAB;
+  }
+  return tabRuntime.getActiveTab();
+}
+
+export function setDashboardActiveTab(tab, reason = 'external') {
+  const normalized = tabLifecycleModule.normalizeTab(
+    tab || tabLifecycleModule.DEFAULT_DASHBOARD_TAB
+  );
+  if (!tabRuntime || typeof tabRuntime.setActiveTab !== 'function') {
+    return normalized;
+  }
+  return tabRuntime.setActiveTab(normalized, reason);
+}
+
+export async function refreshDashboardTab(tab, reason = 'manual', options = {}) {
+  if (!tabRuntime || typeof tabRuntime.refreshTab !== 'function') return;
+  return tabRuntime.refreshTab(tab, reason, options || {});
+}
+
+export async function restoreDashboardSession() {
+  if (!sessionRuntime || typeof sessionRuntime.restoreSession !== 'function') {
+    return false;
+  }
+  return sessionRuntime.restoreSession();
+}
+
+export function getDashboardSessionState() {
+  if (!sessionRuntime || typeof sessionRuntime.getSessionState !== 'function') {
+    return { authenticated: false, csrfToken: '' };
+  }
+  return sessionRuntime.getSessionState();
+}
+
+export async function logoutDashboardSession() {
+  if (!sessionRuntime || typeof sessionRuntime.logoutSession !== 'function') return;
+  await sessionRuntime.logoutSession();
 }
 
 export function unmountDashboardApp() {
   if (!runtimeMounted) return;
   runtimeMounted = false;
   runtimeMountOptions = normalizeRuntimeMountOptions({});
-  if (legacyAutoRefreshRuntime) {
-    legacyAutoRefreshRuntime.destroy();
-    legacyAutoRefreshRuntime = null;
-  }
-  legacyConfigDirtyRuntime = null;
-  legacyTabRuntime = null;
-  legacySessionRuntime = null;
-  clearDashboardExternalAdapters();
+  configDirtyRuntime = null;
+  tabRuntime = null;
+  sessionRuntime = null;
   if (teardownControlBindings) {
     teardownControlBindings();
     teardownControlBindings = null;
-  }
-  if (dashboardTabCoordinator && typeof dashboardTabCoordinator.destroy === 'function') {
-    dashboardTabCoordinator.destroy();
   }
   if (monitoringView && typeof monitoringView.destroy === 'function') {
     monitoringView.destroy();
@@ -1623,14 +1481,9 @@ export function unmountDashboardApp() {
   if (dashboardCharts && typeof dashboardCharts.destroy === 'function') {
     dashboardCharts.destroy();
   }
-  const logoutButton = getById('logout-btn');
-  if (logoutButton) {
-    logoutButton.onclick = null;
-  }
   if (document.body && document.body.dataset) {
     delete document.body.dataset.activeDashboardTab;
   }
-  dashboardTabCoordinator = null;
   dashboardApiClient = null;
   dashboardState = null;
   monitoringView = null;

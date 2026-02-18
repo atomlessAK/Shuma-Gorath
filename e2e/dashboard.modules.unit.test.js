@@ -2755,20 +2755,15 @@ test('dashboard runtime adapter enforces single-mount and explicit teardown hook
   const source = fs.readFileSync(runtimePath, 'utf8');
   assert.match(source, /if \(mounted\) return;/);
   assert.match(source, /if \(mountingPromise\) return mountingPromise;/);
-  assert.match(source, /const mountOptions = \{\s*\.\.\.\(options \|\| \{\}\)\s*\};/);
-  assert.match(source, /delete mountOptions\.mode;/);
-  assert.match(source, /module\.mountDashboardExternalRuntime\(mountOptions \|\| \{\}\)/);
+  assert.match(source, /module\.mountDashboardApp\(\{ \.\.\.\(options \|\| \{\}\) \}\)/);
   assert.match(source, /import\('\.\/dashboard-native-runtime\.js'\)/);
-  assert.equal(source.includes('module.mountDashboardApp('), false);
   assert.match(source, /runtimeModule\.unmountDashboardApp\(\)/);
-  assert.match(source, /refreshExternalDashboardTab/);
-  assert.match(source, /setExternalDashboardActiveTab/);
   assert.match(source, /restoreDashboardSession/);
   assert.match(source, /refreshDashboardTab/);
   assert.match(source, /setDashboardActiveTab/);
 });
 
-test('svelte dashboard route mounts the external runtime contract only', () => {
+test('svelte dashboard route mounts runtime contract without bridge flags', () => {
   const routePath = path.resolve(
     __dirname,
     '..',
@@ -2792,26 +2787,25 @@ test('svelte dashboard route mounts the external runtime contract only', () => {
   assert.equal(source.includes('useExternalSessionPipeline'), false);
 });
 
-test('dashboard native runtime delegates legacy tab/session/polling orchestration to runtime module', () => {
+test('dashboard native runtime delegates tab/session orchestration to runtime module', () => {
   const source = fs.readFileSync(DASHBOARD_NATIVE_RUNTIME_PATH, 'utf8');
 
-  assert.match(source, /createLegacyDashboardTabRuntime/);
-  assert.match(source, /createLegacyDashboardSessionRuntime/);
-  assert.match(source, /createLegacyAutoRefreshRuntime/);
-  assert.match(source, /legacyTabRuntime = createLegacyDashboardTabRuntime\(/);
-  assert.match(source, /legacySessionRuntime = createLegacyDashboardSessionRuntime\(/);
-  assert.match(source, /legacyAutoRefreshRuntime = createLegacyAutoRefreshRuntime\(/);
+  assert.match(source, /createDashboardTabRuntime/);
+  assert.match(source, /createDashboardSessionRuntime/);
+  assert.match(source, /tabRuntime = createDashboardTabRuntime\(/);
+  assert.match(source, /sessionRuntime = createDashboardSessionRuntime\(/);
+  assert.equal(source.includes('createAutoRefreshRuntime'), false);
   assert.equal(source.includes('function scheduleAutoRefresh()'), false);
   assert.equal(source.includes('function bindVisibilityHandler()'), false);
   assert.equal(source.includes('function clearAutoRefreshTimer()'), false);
 });
 
-test('dashboard native runtime delegates config dirty-check orchestration to runtime module', () => {
+test('dashboard native runtime delegates config dirty-check orchestration to runtime helper', () => {
   const source = fs.readFileSync(DASHBOARD_NATIVE_RUNTIME_PATH, 'utf8');
 
-  assert.match(source, /createLegacyConfigDirtyRuntime/);
-  assert.match(source, /legacyConfigDirtyRuntime = createLegacyConfigDirtyRuntime\(/);
-  assert.match(source, /legacyConfigDirtyRuntime\.runCoreChecks\(\)/);
+  assert.match(source, /createConfigDirtyRuntime/);
+  assert.match(source, /configDirtyRuntime = createConfigDirtyRuntime\(/);
+  assert.match(source, /configDirtyRuntime\.runCoreChecks\(\)/);
   assert.equal(source.includes('DIRTY_CHECK_REGISTRY'), false);
 });
 
@@ -2840,8 +2834,8 @@ test('monitoring auto-refresh uses consolidated monitoring summary reads to boun
   assert.equal(refreshSource.includes('dashboardApiClient.getCdpEvents('), false);
 });
 
-test('legacy orchestration runtime provides tab/session/polling primitives', { concurrency: false }, async () => {
-  const module = await importBrowserModule('dashboard/src/lib/runtime/dashboard-legacy-orchestration.js');
+test('runtime orchestration module provides tab/session primitives', { concurrency: false }, async () => {
+  const module = await importBrowserModule('dashboard/src/lib/runtime/dashboard-runtime-orchestration.js');
 
   const tabState = {
     activeTab: 'monitoring',
@@ -2856,18 +2850,6 @@ test('legacy orchestration runtime provides tab/session/polling primitives', { c
       this.session = { ...nextSession };
     }
   };
-  const tabCoordinator = {
-    activeTab: 'monitoring',
-    activations: [],
-    activate(tab, reason) {
-      this.activeTab = tab;
-      this.activations.push({ tab, reason });
-    },
-    getActiveTab() {
-      return this.activeTab;
-    }
-  };
-  const mountOptions = { useExternalTabPipeline: false };
   const documentStub = {
     visibilityState: 'visible',
     body: { dataset: {} },
@@ -2882,13 +2864,11 @@ test('legacy orchestration runtime provides tab/session/polling primitives', { c
     }
   };
   const refreshCalls = [];
-  const tabRuntime = module.createLegacyDashboardTabRuntime({
+  const tabRuntime = module.createDashboardTabRuntime({
     document: documentStub,
     normalizeTab: (tab) => String(tab || 'monitoring'),
     defaultTab: 'monitoring',
     getStateStore: () => tabState,
-    getTabCoordinator: () => tabCoordinator,
-    getRuntimeMountOptions: () => mountOptions,
     refreshCoreActionButtonsState: () => {},
     refreshDashboardForTab: async (tab, reason) => {
       refreshCalls.push({ tab, reason });
@@ -2898,7 +2878,6 @@ test('legacy orchestration runtime provides tab/session/polling primitives', { c
   assert.equal(tabRuntime.setActiveTab('status', 'click'), 'status');
   assert.equal(tabState.activeTab, 'status');
   assert.equal(documentStub.body.dataset.activeDashboardTab, 'status');
-  assert.deepEqual(tabCoordinator.activations[0], { tab: 'status', reason: 'click' });
 
   await tabRuntime.refreshTab('config', 'manual');
   assert.deepEqual(refreshCalls[0], { tab: 'config', reason: 'manual' });
@@ -2916,7 +2895,7 @@ test('legacy orchestration runtime provides tab/session/polling primitives', { c
   };
   let logoutRequest = null;
   const sessionMessage = { textContent: '', className: '' };
-  const sessionRuntime = module.createLegacyDashboardSessionRuntime({
+  const sessionRuntime = module.createDashboardSessionRuntime({
     getAdminSessionController: () => sessionController,
     getStateStore: () => tabState,
     refreshCoreActionButtonsState: () => {},
@@ -2941,50 +2920,10 @@ test('legacy orchestration runtime provides tab/session/polling primitives', { c
   assert.equal(sessionMessage.textContent, 'Logged out');
   assert.equal(sessionMessage.className, 'message success');
   assert.deepEqual(tabState.session, { authenticated: false, csrfToken: '' });
-
-  let timerHandle = null;
-  let clearCount = 0;
-  const pollingEffects = {
-    setTimer(handler, intervalMs) {
-      timerHandle = { handler, intervalMs };
-      return timerHandle;
-    },
-    clearTimer() {
-      clearCount += 1;
-    }
-  };
-  const pollRefreshes = [];
-  const pollingRuntime = module.createLegacyAutoRefreshRuntime({
-    effects: pollingEffects,
-    document: documentStub,
-    tabRefreshIntervals: { monitoring: 30000, config: 60000 },
-    defaultTab: 'monitoring',
-    normalizeTab: (tab) => String(tab || 'monitoring'),
-    getActiveTab: () => tabState.activeTab,
-    hasValidApiContext: () => true,
-    refreshDashboardForTab: async (tab, reason) => {
-      pollRefreshes.push({ tab, reason });
-    }
-  });
-
-  pollingRuntime.schedule();
-  assert.ok(timerHandle);
-  assert.equal(timerHandle.intervalMs, 60000);
-  await timerHandle.handler();
-  assert.deepEqual(pollRefreshes[0], { tab: 'config', reason: 'auto-refresh' });
-
-  pollingRuntime.bindVisibility();
-  documentStub.visibilityState = 'hidden';
-  if (typeof documentStub.listener === 'function') {
-    documentStub.listener();
-  }
-  assert.ok(clearCount >= 1);
-
-  pollingRuntime.destroy();
 });
 
-test('legacy config dirty runtime computes dirty state through capability contracts', { concurrency: false }, async () => {
-  const module = await importBrowserModule('dashboard/src/lib/runtime/dashboard-legacy-config-dirty.js');
+test('runtime config dirty helper computes dirty state through capability contracts', { concurrency: false }, async () => {
+  const module = await importBrowserModule('dashboard/src/lib/runtime/dashboard-runtime-config-dirty.js');
   const nodes = {
     'save-maze-config': { dataset: {}, disabled: true, textContent: '' },
     'save-robots-config': { dataset: {}, disabled: true, textContent: '' },
@@ -2998,7 +2937,7 @@ test('legacy config dirty runtime computes dirty state through capability contra
     'robots-allow-search-toggle': { checked: true, dataset: {} }
   };
   const dirtyCalls = [];
-  const runtime = module.createLegacyConfigDirtyRuntime({
+  const runtime = module.createConfigDirtyRuntime({
     getById: (id) => nodes[id] || null,
     getDraft: (sectionKey) => {
       if (sectionKey === 'maze') return { enabled: false, autoBan: false, threshold: 10 };

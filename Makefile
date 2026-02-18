@@ -327,12 +327,6 @@ test-dashboard-e2e: ## Run Playwright dashboard smoke tests (waits for existing 
 		$(MAKE) --no-print-directory test-dashboard-unit || exit 1; \
 		$(MAKE) --no-print-directory test-dashboard-budgets || exit 1; \
 		$(MAKE) --no-print-directory seed-dashboard-data || exit 1; \
-		PLAYWRIGHT_CHROMIUM_PATH=$$(corepack pnpm exec node -e "const { chromium } = require('@playwright/test'); process.stdout.write(chromium.executablePath() || '');" 2>/dev/null || true); \
-		if [ -n "$$PLAYWRIGHT_CHROMIUM_PATH" ] && [ -x "$$PLAYWRIGHT_CHROMIUM_PATH" ]; then \
-			echo "Playwright Chromium runtime found: $$PLAYWRIGHT_CHROMIUM_PATH"; \
-		else \
-			corepack pnpm exec playwright install chromium; \
-		fi; \
 		SHUMA_BASE_URL=http://127.0.0.1:3000 SHUMA_API_KEY=$(SHUMA_API_KEY) SHUMA_FORWARDED_IP_SECRET=$(SHUMA_FORWARDED_IP_SECRET) corepack pnpm run test:dashboard:e2e; \
 	else \
 		echo "$(RED)❌ Error: Spin server not ready$(NC)"; \

@@ -8,7 +8,8 @@
     "build:dashboard": "cd dashboard && ../node_modules/.bin/vite build",
     "seed:dashboard:e2e": "node e2e/seed-dashboard-data.js",
     "test:dashboard:unit": "node --test e2e/dashboard.modules.unit.test.js",
-    "test:dashboard:e2e": "playwright test --config=playwright.config.mjs"
+    "test:dashboard:e2e:raw": "playwright test --config=playwright.config.mjs",
+    "test:dashboard:e2e": "./scripts/tests/run_dashboard_e2e.sh"
   },
   "devDependencies": {
     "@playwright/test": "1.51.1",

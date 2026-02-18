@@ -38,6 +38,7 @@ Dashboard:
 Notes:
 - Run setup in an interactive terminal (it may prompt for sudo to install Spin).
 - `make setup` creates `.env.local` (gitignored) and auto-generates local dev secrets.
+- `make setup` installs Playwright Chromium into repo-local cache `.cache/ms-playwright` for deterministic dashboard e2e runs.
 - Use the Makefile for all build/run/test flows.
 
 ## 🐙 Common Commands

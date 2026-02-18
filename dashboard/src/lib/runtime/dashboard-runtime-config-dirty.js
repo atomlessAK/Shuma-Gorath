@@ -1,5 +1,5 @@
 /**
- * @typedef {Object} LegacyConfigDirtyRuntimeOptions
+ * @typedef {Object} DashboardConfigDirtyRuntimeOptions
  * @property {(id: string) => any} getById
  * @property {(sectionKey: string) => any} getDraft
  * @property {(sectionKey: string, currentValue?: any) => boolean} isDraftDirty
@@ -38,9 +38,9 @@ function setButtonLabel(getById, id, label) {
 }
 
 /**
- * @param {LegacyConfigDirtyRuntimeOptions} options
+ * @param {DashboardConfigDirtyRuntimeOptions} options
  */
-export function createLegacyConfigDirtyRuntime(options = /** @type {LegacyConfigDirtyRuntimeOptions} */ ({})) {
+export function createConfigDirtyRuntime(options = /** @type {DashboardConfigDirtyRuntimeOptions} */ ({})) {
   const getById = typeof options.getById === 'function' ? options.getById : defaultGetById;
   const getDraft = typeof options.getDraft === 'function' ? options.getDraft : () => null;
   const isDraftDirty = typeof options.isDraftDirty === 'function' ? options.isDraftDirty : () => false;

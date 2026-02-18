@@ -105,11 +105,15 @@ fi
 
 # 10. Check Playwright Chromium runtime
 if command -v corepack &> /dev/null && [[ -d node_modules/.pnpm ]]; then
-    PLAYWRIGHT_CHROMIUM_PATH="$(corepack pnpm exec node -e "const { chromium } = require('@playwright/test'); process.stdout.write(chromium.executablePath() || '');" 2>/dev/null || true)"
+    PLAYWRIGHT_BROWSER_CACHE="${PLAYWRIGHT_BROWSERS_PATH:-$(pwd)/.cache/ms-playwright}"
+    PLAYWRIGHT_CHROMIUM_PATH="$(
+        PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSER_CACHE" \
+        corepack pnpm exec node -e "const { chromium } = require('@playwright/test'); process.stdout.write(chromium.executablePath() || '');" 2>/dev/null || true
+    )"
     if [[ -n "$PLAYWRIGHT_CHROMIUM_PATH" ]] && [[ -x "$PLAYWRIGHT_CHROMIUM_PATH" ]]; then
-        pass "Playwright Chromium runtime installed: $PLAYWRIGHT_CHROMIUM_PATH"
+        pass "Playwright Chromium runtime installed: $PLAYWRIGHT_CHROMIUM_PATH (cache: $PLAYWRIGHT_BROWSER_CACHE)"
     else
-        fail "Playwright Chromium runtime missing (run: make setup)"
+        fail "Playwright Chromium runtime missing in cache $PLAYWRIGHT_BROWSER_CACHE (run: make setup)"
     fi
 else
     warn "Skipping Playwright Chromium check (pnpm dependencies unavailable)"

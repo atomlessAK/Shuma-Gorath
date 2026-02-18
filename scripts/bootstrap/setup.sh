@@ -407,13 +407,21 @@ else
     fi
 fi
 
-PLAYWRIGHT_CHROMIUM_PATH="$(corepack pnpm exec node -e "const { chromium } = require('@playwright/test'); process.stdout.write(chromium.executablePath() || '');" 2>/dev/null || true)"
+PLAYWRIGHT_BROWSER_CACHE="${PLAYWRIGHT_BROWSERS_PATH:-$(pwd)/.cache/ms-playwright}"
+mkdir -p "$PLAYWRIGHT_BROWSER_CACHE"
+PLAYWRIGHT_CHROMIUM_PATH="$(
+    PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSER_CACHE" \
+    corepack pnpm exec node -e "const { chromium } = require('@playwright/test'); process.stdout.write(chromium.executablePath() || '');" 2>/dev/null || true
+)"
 if [[ -n "$PLAYWRIGHT_CHROMIUM_PATH" && -x "$PLAYWRIGHT_CHROMIUM_PATH" ]]; then
     success "Playwright Chromium already installed ($PLAYWRIGHT_CHROMIUM_PATH)"
 else
-    info "Installing Playwright Chromium runtime..."
-    corepack pnpm exec playwright install chromium
-    PLAYWRIGHT_CHROMIUM_PATH="$(corepack pnpm exec node -e "const { chromium } = require('@playwright/test'); process.stdout.write(chromium.executablePath() || '');" 2>/dev/null || true)"
+    info "Installing Playwright Chromium runtime into $PLAYWRIGHT_BROWSER_CACHE..."
+    PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSER_CACHE" corepack pnpm exec playwright install chromium
+    PLAYWRIGHT_CHROMIUM_PATH="$(
+        PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSER_CACHE" \
+        corepack pnpm exec node -e "const { chromium } = require('@playwright/test'); process.stdout.write(chromium.executablePath() || '');" 2>/dev/null || true
+    )"
     if [[ -n "$PLAYWRIGHT_CHROMIUM_PATH" && -x "$PLAYWRIGHT_CHROMIUM_PATH" ]]; then
         success "Playwright Chromium installed ($PLAYWRIGHT_CHROMIUM_PATH)"
     else
@@ -497,8 +505,14 @@ corepack --version 2>/dev/null || echo "not found"
 echo -n "  pnpm:         "
 corepack pnpm --version 2>/dev/null || echo "not found"
 
+echo -n "  Browser cache:"
+echo " ${PLAYWRIGHT_BROWSER_CACHE}"
+
 echo -n "  Chromium:     "
-PLAYWRIGHT_CHROMIUM_PATH="$(corepack pnpm exec node -e "const { chromium } = require('@playwright/test'); process.stdout.write(chromium.executablePath() || '');" 2>/dev/null || true)"
+PLAYWRIGHT_CHROMIUM_PATH="$(
+    PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSER_CACHE" \
+    corepack pnpm exec node -e "const { chromium } = require('@playwright/test'); process.stdout.write(chromium.executablePath() || '');" 2>/dev/null || true
+)"
 if [[ -n "$PLAYWRIGHT_CHROMIUM_PATH" && -x "$PLAYWRIGHT_CHROMIUM_PATH" ]]; then
     echo "$PLAYWRIGHT_CHROMIUM_PATH"
 else

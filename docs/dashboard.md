@@ -44,7 +44,7 @@ Refresh model:
 - Runtime behavior mounts through `src/lib/runtime/dashboard-runtime.js` (`mount`/`unmount`) with explicit lifecycle cleanup.
 - Svelte-native orchestration (`src/lib/state/dashboard-store.js`, `src/lib/runtime/dashboard-effects.js`, `src/lib/runtime/dashboard-actions.js`) is the canonical runtime path for tab lifecycle, hash sync, polling, and auth/session flow.
 - Native action side-effects (login redirect path and tab-focus target lookup) are now routed through `src/lib/runtime/dashboard-effects.js` adapters instead of direct DOM/window reads in action pipelines.
-- Dashboard tab/session/polling orchestration helpers are centralized in `src/lib/runtime/dashboard-legacy-orchestration.js`, and config dirty-check orchestration is centralized in `src/lib/runtime/dashboard-legacy-config-dirty.js` and delegated from `src/lib/runtime/dashboard-native-runtime.js`.
+- Dashboard tab/session orchestration helpers are centralized in `src/lib/runtime/dashboard-runtime-orchestration.js`, and config dirty-check orchestration is centralized in `src/lib/runtime/dashboard-runtime-config-dirty.js` and delegated from `src/lib/runtime/dashboard-native-runtime.js`.
 - Chart runtime lifecycle is module-scoped through `modules/services/chart-runtime-adapter.js` (lazy load, singleton guard, teardown on final unmount) instead of static head-script injection.
 - `dashboard/package.json` still sets `"type": "module"` so existing dashboard module unit tests run via native ESM in Node.
 
@@ -176,8 +176,8 @@ dashboard/
   src/lib/state/dashboard-store.js
   src/lib/runtime/dashboard-effects.js
   src/lib/runtime/dashboard-actions.js
-  src/lib/runtime/dashboard-legacy-config-dirty.js
-  src/lib/runtime/dashboard-legacy-orchestration.js
+  src/lib/runtime/dashboard-runtime-config-dirty.js
+  src/lib/runtime/dashboard-runtime-orchestration.js
   src/lib/runtime/dashboard-runtime.js
   src/lib/runtime/dashboard-native-runtime.js
   static/assets/vendor/chart-lite-1.0.0.min.js
@@ -211,9 +211,9 @@ dist/
 ## 🐙 Data Flow (High Level)
 
 1. SvelteKit renders the dashboard page from `src/routes/+page.svelte` with dedicated tab components.
-2. On route mount, `src/lib/runtime/dashboard-runtime.js` mounts `src/lib/runtime/dashboard-native-runtime.js` with external orchestration enabled by default.
+2. On route mount, `src/lib/runtime/dashboard-runtime.js` mounts `src/lib/runtime/dashboard-native-runtime.js` as a single native runtime path (no compatibility flag matrix).
 3. Svelte-native orchestrators (`src/lib/state/dashboard-store.js`, `src/lib/runtime/dashboard-effects.js`, `src/lib/runtime/dashboard-actions.js`) own active-tab state, hash/keyboard navigation, session bootstrap, logout, and polling cadence.
-4. `src/lib/runtime/dashboard-native-runtime.js` provides reusable runtime adapters (refresh/session/config wiring) and explicit lifecycle entrypoints (`mountDashboardApp()` / `unmountDashboardApp()`), delegating legacy tab/session/polling orchestration to `src/lib/runtime/dashboard-legacy-orchestration.js` and config dirty-check orchestration to `src/lib/runtime/dashboard-legacy-config-dirty.js`.
+4. `src/lib/runtime/dashboard-native-runtime.js` provides reusable runtime adapters (refresh/session/config wiring) and explicit lifecycle entrypoints (`mountDashboardApp()` / `unmountDashboardApp()`), delegating tab/session orchestration to `src/lib/runtime/dashboard-runtime-orchestration.js` and config dirty-check orchestration to `src/lib/runtime/dashboard-runtime-config-dirty.js`.
 5. Domain modules (`modules/api-client.js`, `modules/dashboard-state.js`, `modules/monitoring-view.js`, `modules/tables-view.js`, `modules/config-controls.js`, etc.) continue to enforce behavior contracts.
 6. Login is Svelte-native in `src/routes/login.html/+page.svelte` (no shell injection/bridge).
 7. `adapter-static` writes final static assets to `dist/dashboard`, which Spin serves for `/dashboard/...`.
