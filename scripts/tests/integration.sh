@@ -563,6 +563,62 @@ else
   fail "/metrics missing ban counters"
 fi
 
+# Verify monitoring parity metric families exist with bounded label vocabularies
+metrics_family_guard_ok=$(METRICS_TEXT="$metrics_resp" python3 - <<'PY'
+import os
+import re
+
+text = os.environ.get("METRICS_TEXT", "")
+expected = {
+    "bot_defence_monitoring_challenge_failures_total": {
+        "label": "reason",
+        "values": {"incorrect", "expired_replay", "sequence_violation", "invalid_output", "forbidden"},
+    },
+    "bot_defence_monitoring_pow_verifications_total": {
+        "label": "outcome",
+        "values": {"success", "failure"},
+    },
+    "bot_defence_monitoring_pow_failures_total": {
+        "label": "reason",
+        "values": {"invalid_proof", "missing_seed_nonce", "sequence_violation", "expired_replay", "binding_timing_mismatch"},
+    },
+    "bot_defence_monitoring_rate_violations_total": {
+        "label": "outcome",
+        "values": {"limited", "banned", "fallback_allow", "fallback_deny"},
+    },
+    "bot_defence_monitoring_geo_violations_total": {
+        "label": "action",
+        "values": {"block", "challenge", "maze"},
+    },
+}
+
+ok = True
+for metric, config in expected.items():
+    label = config["label"]
+    pattern = re.compile(rf'^{re.escape(metric)}\{{{label}="([^"]+)"\}}\s+([0-9]+(?:\.[0-9]+)?)$')
+    found_values = set()
+    for line in text.splitlines():
+        match = pattern.match(line.strip())
+        if not match:
+            continue
+        found_values.add(match.group(1))
+    if found_values != config["values"]:
+        ok = False
+        break
+
+cdp_match = re.search(r'^bot_defence_cdp_detections_total\s+([0-9]+(?:\.[0-9]+)?)$', text, re.MULTILINE)
+if not cdp_match:
+    ok = False
+
+print("1" if ok else "0")
+PY
+)
+if [[ "$metrics_family_guard_ok" == "1" ]]; then
+  pass "/metrics includes bounded monitoring parity metric families with expected labels"
+else
+  fail "/metrics monitoring parity metric families missing or label vocabularies drifted"
+fi
+
 # Test 17: CDP report endpoint exists
 info "Testing POST /cdp-report endpoint..."
 cdp_report='{"cdp_detected":true,"score":0.5,"checks":["webdriver"]}'
@@ -629,6 +685,78 @@ if [[ "$monitoring_shape_ok" == "1" ]]; then
   pass "/admin/monitoring returns structured telemetry summary"
 else
   fail "/admin/monitoring did not return expected summary shape"
+  echo -e "${YELLOW}DEBUG /admin/monitoring:${NC} $monitoring_resp"
+fi
+
+monitoring_metrics_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" "$BASE_URL/metrics")
+monitoring_metrics_parity_ok=$(MONITORING_JSON="$monitoring_resp" METRICS_TEXT="$monitoring_metrics_resp" python3 - <<'PY'
+import json
+import os
+import re
+
+metrics_text = os.environ.get("METRICS_TEXT", "")
+monitoring = json.loads(os.environ.get("MONITORING_JSON", "{}"))
+summary = monitoring.get("summary", {})
+details = monitoring.get("details", {})
+
+def parse_labeled(metric_name, label_name):
+    pattern = re.compile(
+        rf'^{re.escape(metric_name)}\{{{label_name}="([^"]+)"\}}\s+([0-9]+(?:\.[0-9]+)?)$'
+    )
+    result = {}
+    for line in metrics_text.splitlines():
+        match = pattern.match(line.strip())
+        if not match:
+            continue
+        result[match.group(1)] = int(float(match.group(2)))
+    return result
+
+def parse_scalar(metric_name):
+    match = re.search(
+        rf'^{re.escape(metric_name)}\s+([0-9]+(?:\.[0-9]+)?)$',
+        metrics_text,
+        re.MULTILINE,
+    )
+    if not match:
+        return None
+    return int(float(match.group(1)))
+
+expected = {
+    "challenge": summary.get("challenge", {}).get("reasons", {}),
+    "pow_outcomes": summary.get("pow", {}).get("outcomes", {}),
+    "pow_reasons": summary.get("pow", {}).get("reasons", {}),
+    "rate_outcomes": summary.get("rate", {}).get("outcomes", {}),
+    "geo_actions": summary.get("geo", {}).get("actions", {}),
+}
+
+actual = {
+    "challenge": parse_labeled("bot_defence_monitoring_challenge_failures_total", "reason"),
+    "pow_outcomes": parse_labeled("bot_defence_monitoring_pow_verifications_total", "outcome"),
+    "pow_reasons": parse_labeled("bot_defence_monitoring_pow_failures_total", "reason"),
+    "rate_outcomes": parse_labeled("bot_defence_monitoring_rate_violations_total", "outcome"),
+    "geo_actions": parse_labeled("bot_defence_monitoring_geo_violations_total", "action"),
+}
+
+ok = True
+for key in expected:
+    normalized_expected = {k: int(v) for k, v in (expected.get(key) or {}).items()}
+    if actual.get(key, {}) != normalized_expected:
+        ok = False
+        break
+
+cdp_expected = int(details.get("cdp", {}).get("stats", {}).get("total_detections", 0))
+cdp_actual = parse_scalar("bot_defence_cdp_detections_total")
+if cdp_actual is None or cdp_actual != cdp_expected:
+    ok = False
+
+print("1" if ok else "0")
+PY
+)
+if [[ "$monitoring_metrics_parity_ok" == "1" ]]; then
+  pass "/metrics monitoring families stay in parity with /admin/monitoring summary counters"
+else
+  fail "/metrics monitoring families are out of parity with /admin/monitoring summary counters"
+  echo -e "${YELLOW}DEBUG /metrics:${NC} $monitoring_metrics_resp"
   echo -e "${YELLOW}DEBUG /admin/monitoring:${NC} $monitoring_resp"
 fi
 

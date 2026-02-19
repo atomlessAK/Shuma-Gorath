@@ -45,6 +45,23 @@ const MAZE_CHECKPOINT_OUTCOMES: [&str; 4] = [
 ];
 const MAZE_BUDGET_OUTCOMES: [&str; 3] = ["acquired", "saturated", "response_cap_exceeded"];
 const MAZE_PROOF_OUTCOMES: [&str; 3] = ["required", "passed", "failed"];
+const MONITORING_CHALLENGE_FAILURE_REASON_KEYS: [&str; 5] = [
+    "incorrect",
+    "expired_replay",
+    "sequence_violation",
+    "invalid_output",
+    "forbidden",
+];
+const MONITORING_POW_OUTCOME_KEYS: [&str; 2] = ["success", "failure"];
+const MONITORING_POW_FAILURE_REASON_KEYS: [&str; 5] = [
+    "invalid_proof",
+    "missing_seed_nonce",
+    "sequence_violation",
+    "expired_replay",
+    "binding_timing_mismatch",
+];
+const MONITORING_RATE_OUTCOME_KEYS: [&str; 4] = ["limited", "banned", "fallback_allow", "fallback_deny"];
+const MONITORING_GEO_ACTION_KEYS: [&str; 3] = ["block", "challenge", "maze"];
 const PROVIDER_OBSERVED_COMBINATIONS: [(
     crate::providers::registry::ProviderCapability,
     crate::config::ProviderBackend,
@@ -452,6 +469,16 @@ pub fn render_metrics(store: &Store) -> String {
         challenge_expired_replay
     ));
 
+    output.push_str("\n# TYPE bot_defence_cdp_detections_total counter\n");
+    output.push_str("# HELP bot_defence_cdp_detections_total Total CDP detection reports processed\n");
+    // Keep parity with `/admin/cdp` stats while preserving the buffered metrics key path.
+    let cdp_detections = get_counter(store, "cdp:detections")
+        .max(get_counter(store, &format!("{}cdp_detections_total", METRICS_PREFIX)));
+    output.push_str(&format!(
+        "bot_defence_cdp_detections_total {}\n",
+        cdp_detections
+    ));
+
     // Whitelisted total
     output.push_str("\n# TYPE bot_defence_whitelisted_total counter\n");
     let whitelisted = get_counter(store, &format!("{}whitelisted_total", METRICS_PREFIX));
@@ -729,6 +756,88 @@ pub fn render_metrics(store: &Store) -> String {
         output.push_str(&format!(
             "bot_defence_policy_signals_total{{signal=\"{}\"}} {}\n",
             signal, count
+        ));
+    }
+
+    let monitoring_summary = crate::observability::monitoring::summarize_metrics_window(store);
+
+    output.push_str("\n# TYPE bot_defence_monitoring_challenge_failures_total counter\n");
+    output.push_str(
+        "# HELP bot_defence_monitoring_challenge_failures_total Monitoring challenge failures by normalized reason\n",
+    );
+    for reason in MONITORING_CHALLENGE_FAILURE_REASON_KEYS {
+        let count = monitoring_summary
+            .challenge
+            .reasons
+            .get(reason)
+            .copied()
+            .unwrap_or(0);
+        output.push_str(&format!(
+            "bot_defence_monitoring_challenge_failures_total{{reason=\"{}\"}} {}\n",
+            reason, count
+        ));
+    }
+
+    output.push_str("\n# TYPE bot_defence_monitoring_pow_verifications_total counter\n");
+    output.push_str(
+        "# HELP bot_defence_monitoring_pow_verifications_total Monitoring PoW verification outcomes\n",
+    );
+    for outcome in MONITORING_POW_OUTCOME_KEYS {
+        let count = monitoring_summary
+            .pow
+            .outcomes
+            .get(outcome)
+            .copied()
+            .unwrap_or(0);
+        output.push_str(&format!(
+            "bot_defence_monitoring_pow_verifications_total{{outcome=\"{}\"}} {}\n",
+            outcome, count
+        ));
+    }
+
+    output.push_str("\n# TYPE bot_defence_monitoring_pow_failures_total counter\n");
+    output.push_str(
+        "# HELP bot_defence_monitoring_pow_failures_total Monitoring PoW verification failures by normalized reason\n",
+    );
+    for reason in MONITORING_POW_FAILURE_REASON_KEYS {
+        let count = monitoring_summary
+            .pow
+            .reasons
+            .get(reason)
+            .copied()
+            .unwrap_or(0);
+        output.push_str(&format!(
+            "bot_defence_monitoring_pow_failures_total{{reason=\"{}\"}} {}\n",
+            reason, count
+        ));
+    }
+
+    output.push_str("\n# TYPE bot_defence_monitoring_rate_violations_total counter\n");
+    output.push_str(
+        "# HELP bot_defence_monitoring_rate_violations_total Monitoring rate-limit violations by normalized outcome\n",
+    );
+    for outcome in MONITORING_RATE_OUTCOME_KEYS {
+        let count = monitoring_summary
+            .rate
+            .outcomes
+            .get(outcome)
+            .copied()
+            .unwrap_or(0);
+        output.push_str(&format!(
+            "bot_defence_monitoring_rate_violations_total{{outcome=\"{}\"}} {}\n",
+            outcome, count
+        ));
+    }
+
+    output.push_str("\n# TYPE bot_defence_monitoring_geo_violations_total counter\n");
+    output.push_str(
+        "# HELP bot_defence_monitoring_geo_violations_total Monitoring GEO policy violations by normalized action\n",
+    );
+    for action in MONITORING_GEO_ACTION_KEYS {
+        let count = monitoring_summary.geo.actions.get(action).copied().unwrap_or(0);
+        output.push_str(&format!(
+            "bot_defence_monitoring_geo_violations_total{{action=\"{}\"}} {}\n",
+            action, count
         ));
     }
 

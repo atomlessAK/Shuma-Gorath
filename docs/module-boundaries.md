@@ -29,7 +29,7 @@ This document defines the in-repo boundaries used to prepare future repo splits.
 - Maze/tarpit domain: `src/maze/` plus future tarpit implementation
 - Challenge domain: `src/challenge/` (`puzzle` and future `not_a_bot` challenge modes)
 - Observability domain: `src/observability/` (`metrics` and monitoring surfaces)
-- Dashboard adapter: `dashboard/modules/` API/session/config adapters
+- Dashboard adapter: `dashboard/src/lib/domain/` API/session/config adapters
 
 ## Defence Taxonomy (H3.6.1)
 

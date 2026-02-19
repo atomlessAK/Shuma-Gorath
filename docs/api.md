@@ -193,9 +193,10 @@ For CDP-only operational views without the 100-row mixed-event cap, use:
 - `summary.challenge`:
 - `total_failures`, `unique_offenders`, `top_offenders`, `reasons`, `trend`
 - `summary.pow`:
-- `total_failures`, `unique_offenders`, `top_offenders`, `reasons`, `trend`
+- `total_failures`, `total_successes`, `total_attempts`, `success_ratio`
+- `unique_offenders`, `top_offenders`, `reasons`, `outcomes`, `trend`
 - `summary.rate`:
-- `total_violations`, `unique_offenders`, `top_offenders`, `outcomes`
+- `total_violations`, `unique_offenders`, `top_offenders`, `top_paths`, `outcomes`
 - `summary.geo`:
 - `total_violations`, `actions`, `top_countries`
 - `prometheus`:

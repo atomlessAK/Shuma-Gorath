@@ -27,6 +27,12 @@ const formatNumber = (value, fallback = '0') => {
   return numeric.toLocaleString();
 };
 
+const toNonNegativeNumber = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) return 0;
+  return numeric;
+};
+
 const normalizeOffenderBucketLabel = (rawLabel) => {
   const label = String(rawLabel || '').trim();
   if (!label) return 'untrusted/unknown';
@@ -104,6 +110,26 @@ export const deriveMonitoringSummaryViewModel = (summary = {}) => {
   const pow = summary.pow || {};
   const rate = summary.rate || {};
   const geo = summary.geo || {};
+  const honeypotTopPaths = Array.isArray(honeypot.top_paths)
+    ? honeypot.top_paths.map((entry) => ({
+      path: String(
+        Array.isArray(entry)
+          ? (entry[0] ?? '')
+          : (entry?.path ?? entry?.label ?? '')
+      ),
+      count: toNonNegativeNumber(Array.isArray(entry) ? entry[1] : entry?.count)
+    }))
+    : [];
+  const geoTopCountries = Array.isArray(geo.top_countries)
+    ? geo.top_countries.map((entry) => ({
+      country: String(
+        Array.isArray(entry)
+          ? (entry[0] ?? '')
+          : (entry?.country ?? entry?.label ?? '')
+      ),
+      count: toNonNegativeNumber(Array.isArray(entry) ? entry[1] : entry?.count)
+    }))
+    : [];
 
   const topHoneypotCrawler =
     Array.isArray(honeypot.top_crawlers) && honeypot.top_crawlers.length
@@ -121,6 +147,14 @@ export const deriveMonitoringSummaryViewModel = (summary = {}) => {
     Array.isArray(rate.top_offenders) && rate.top_offenders.length
       ? rate.top_offenders[0]
       : null;
+  const powFailureTotal = toNonNegativeNumber(pow.total_failures);
+  const powSuccessTotal = toNonNegativeNumber(pow.total_successes);
+  const powAttemptFallback = powFailureTotal + powSuccessTotal;
+  const powAttemptsTotal = Math.max(powAttemptFallback, toNonNegativeNumber(pow.total_attempts));
+  const powRatioRaw = Number(pow.success_ratio);
+  const powSuccessRatio = Number.isFinite(powRatioRaw)
+    ? Math.min(1, Math.max(0, powRatioRaw))
+    : (powAttemptsTotal > 0 ? Math.min(1, Math.max(0, powSuccessTotal / powAttemptsTotal)) : 0);
 
   return {
     honeypot: {
@@ -132,7 +166,7 @@ export const deriveMonitoringSummaryViewModel = (summary = {}) => {
         'hit',
         'hits'
       ),
-      topPaths: Array.isArray(honeypot.top_paths) ? honeypot.top_paths : []
+      topPaths: honeypotTopPaths
     },
     challenge: {
       totalFailures: formatNumber(challenge.total_failures, '0'),
@@ -147,7 +181,11 @@ export const deriveMonitoringSummaryViewModel = (summary = {}) => {
       trend: deriveTrendSeries(challenge.trend)
     },
     pow: {
-      totalFailures: formatNumber(pow.total_failures, '0'),
+      totalFailures: formatNumber(powFailureTotal, '0'),
+      totalSuccesses: formatNumber(powSuccessTotal, '0'),
+      totalAttempts: formatNumber(powAttemptsTotal, '0'),
+      successRatio: powSuccessRatio,
+      successRate: `${(powSuccessRatio * 100).toFixed(1)}%`,
       uniqueOffenders: formatNumber(pow.unique_offenders, '0'),
       topOffender: deriveTopOffenderViewModel(
         topPowOffender?.label,
@@ -156,6 +194,7 @@ export const deriveMonitoringSummaryViewModel = (summary = {}) => {
         'hits'
       ),
       reasons: sortCountEntries(pow.reasons),
+      outcomes: sortCountEntries(pow.outcomes),
       trend: deriveTrendSeries(pow.trend)
     },
     rate: {
@@ -176,7 +215,7 @@ export const deriveMonitoringSummaryViewModel = (summary = {}) => {
         challenge: Number(geo.actions?.challenge || 0).toLocaleString(),
         maze: Number(geo.actions?.maze || 0).toLocaleString()
       },
-      topCountries: Array.isArray(geo.top_countries) ? geo.top_countries : []
+      topCountries: geoTopCountries
     }
   };
 };

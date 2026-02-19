@@ -1,6 +1,6 @@
 # TODO Roadmap
 
-Last updated: 2026-02-18
+Last updated: 2026-02-19
 
 This is the active work queue.
 `todos/security-review.md` tracks security finding validity and closure status.
@@ -144,7 +144,7 @@ Implementation rule: when internal feature work touches provider-managed capabil
 - [ ] Design runtime-agnostic architecture that keeps core detection logic portable while preserving Fermyon-first performance paths.
 - [ ] Evaluate renaming `SHUMA_CHALLENGE_PUZZLE_RISK_THRESHOLD` to `SHUMA_BOTNESS_CHALLENGE_PUZZLE_THRESHOLD` to reflect botness semantics.
 - [ ] Standardize terminology across code/UI/docs so `honeypot` and `maze` are used consistently instead of interchangeably.
-- [ ] Initialize Ban IP pane duration controls from the current Admin Manual Ban default duration so Ban IP and Ban Durations panes stay consistent.
+- [x] Initialize Ban IP pane duration controls from the current Admin Manual Ban default duration so Ban IP and Ban Durations panes stay consistent.
 - [x] Dashboard modernization now follows SvelteKit full cutover (`DSH-SVLT-*`) with static adapter output served via Spin (`dist/dashboard`), superseding the prior framework migration direction.
 - [ ] Document setup-time config bootstrapping clearly: how `make setup` creates/populates local env, how env-only vars are sourced, and how KV defaults are seeded and later overridden.
 - [ ] Long-term option: integrate upstream identity/proxy auth (OIDC/SAML) for dashboard/admin instead of app-level key login.
@@ -156,16 +156,18 @@ Implementation rule: when internal feature work touches provider-managed capabil
 - [x] DSH-MON-4 Add a `Rate Limiting Violations` monitoring section with totals, unique offender buckets, top offender buckets, and enforcement outcomes (`limited`, `banned`, `fallback_allow`, `fallback_deny`).
 - [x] DSH-MON-5 Add a `GEO Violations` monitoring section with totals by route/action (`block`, `challenge`, `maze`) and top country codes causing policy actions.
 - [x] DSH-MON-6 Add a Monitoring-page helper panel that explains how to export/scrape the same signals in Prometheus format (`/metrics`) for external visualization platforms (for example Prometheus/Grafana), including copyable scrape examples.
-- [ ] DSH-MON-7 Deliberate Prometheus parity scope for Monitoring: audit each Monitoring widget/signal as `already_exported`, `derivable_from_existing_series`, or `missing_export`; then define a prioritized add-list with cardinality/cost guardrails before implementing new metric series.
+- [x] DSH-MON-7 Deliberate Prometheus parity scope for Monitoring: audit each Monitoring widget/signal as `already_exported`, `derivable_from_existing_series`, or `missing_export`; then define a prioritized add-list with cardinality/cost guardrails before implementing new metric series. (`docs/monitoring-prometheus-parity-audit.md`)
+- [x] DSH-MON-8 Implement Priority-1 low-cardinality missing-export metric families from `docs/monitoring-prometheus-parity-audit.md` (`cdp_detections`, challenge reason totals, PoW outcomes/reasons, rate outcomes, GEO action totals).
+- [x] DSH-MON-9 Add `/metrics` regression coverage and dashboard parity assertions for newly exported monitoring families (including cardinality guardrail tests).
 - [x] MON-TEL-1 Add structured honeypot hit telemetry (KV/metric counters by IP bucket and path key) so dashboard can report path-level honeypot activity without relying on free-form event text parsing.
 - [x] MON-TEL-2 Add challenge-submit failure telemetry with explicit counters and optional event records for failure classes that currently only increment coarse counters (enable top-offender and reason panels).
-- [ ] MON-TEL-3 Add explicit PoW verify outcome telemetry (success + failure classes) since invalid-proof and malformed-request paths are not currently surfaced as dashboard-ready counters/events.
-- [ ] MON-TEL-3.a Add PoW verify success-class telemetry and decide whether Monitoring should expose success/fail ratio or keep failures-only.
-- [ ] MON-TEL-4 Add rate-limit violation summary endpoint (or equivalent aggregation contract) that returns filtered offender/top-path/top-window data without requiring expensive client-side filtering over generic event feeds.
+- [x] MON-TEL-3 Add explicit PoW verify outcome telemetry (success + failure classes) since invalid-proof and malformed-request paths are not currently surfaced as dashboard-ready counters/events.
+- [x] MON-TEL-3.a Add PoW verify success-class telemetry and decide whether Monitoring should expose success/fail ratio or keep failures-only.
+- [x] MON-TEL-4 Add rate-limit violation summary endpoint (or equivalent aggregation contract) that returns filtered offender/top-path/top-window data without requiring expensive client-side filtering over generic event feeds.
 - [x] MON-TEL-5 Add GEO enforcement telemetry keyed by action + country (bounded cardinality, ISO country normalization) so GEO monitoring panels are robust and not dependent on outcome-string parsing.
 - [x] MON-TEL-6 Add admin API surface for these monitoring summaries (`/admin/honeypot`, `/admin/challenge`, `/admin/pow`, `/admin/rate`, `/admin/geo` or consolidated endpoint) with strict response schema + docs.
-- [ ] MON-TEL-7 Add tests for telemetry correctness and dashboard rendering states (empty/loading/error/data) for each new monitoring section, including cardinality guardrails and retention-window behavior.
-- [ ] MON-TEL-7.a Extend dashboard automated tests to assert new monitoring cards/tables/charts across empty/loading/error/data states, not just adapter contracts.
+- [x] MON-TEL-7 Add tests for telemetry correctness and dashboard rendering states (empty/loading/error/data) for each new monitoring section, including cardinality guardrails and retention-window behavior.
+- [x] MON-TEL-7.a Extend dashboard automated tests to assert new monitoring cards/tables/charts across empty/loading/error/data states, not just adapter contracts.
 
 ## Recurring Quality Gates
 - [ ] Keep unit, integration, e2e, and CI flows passing; clean up defunct tests quickly.

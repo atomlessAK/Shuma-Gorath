@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PLAYWRIGHT_BROWSER_CACHE="${PLAYWRIGHT_BROWSERS_PATH:-${ROOT_DIR}/.cache/ms-playwright}"
 PLAYWRIGHT_LOCAL_HOME="${PLAYWRIGHT_HOME:-${ROOT_DIR}/.cache/playwright-home}"
 ORIGINAL_HOME="${HOME:-}"
-PLAYWRIGHT_FORCE_LOCAL_HOME="${PLAYWRIGHT_FORCE_LOCAL_HOME:-0}"
+PLAYWRIGHT_FORCE_LOCAL_HOME="${PLAYWRIGHT_FORCE_LOCAL_HOME:-1}"
 
 mkdir -p "${PLAYWRIGHT_BROWSER_CACHE}"
 
@@ -28,22 +28,16 @@ if [[ -z "${PLAYWRIGHT_CHROMIUM_PATH}" || ! -x "${PLAYWRIGHT_CHROMIUM_PATH}" ]];
   corepack pnpm exec playwright install chromium
 fi
 
-if ! corepack pnpm exec node scripts/tests/verify_playwright_launch.mjs; then
-  status=$?
-  if [[ "$status" -eq 42 && "${using_local_home}" == "true" && -n "${ORIGINAL_HOME}" ]]; then
-    echo "Playwright launch failed under repo-local HOME; retrying preflight with system HOME..."
-    using_local_home=false
-    export HOME="${ORIGINAL_HOME}"
-    unset CFFIXED_USER_HOME
-    unset XDG_CONFIG_HOME
-    if ! corepack pnpm exec node scripts/tests/verify_playwright_launch.mjs; then
-      status=$?
-    else
-      status=0
-    fi
-  fi
-else
+status=0
+corepack pnpm exec node scripts/tests/verify_playwright_launch.mjs || status=$?
+if [[ "$status" -eq 42 && "${using_local_home}" == "true" && -n "${ORIGINAL_HOME}" ]]; then
+  echo "Playwright launch failed under repo-local HOME; retrying preflight with system HOME..."
+  using_local_home=false
+  export HOME="${ORIGINAL_HOME}"
+  unset CFFIXED_USER_HOME
+  unset XDG_CONFIG_HOME
   status=0
+  corepack pnpm exec node scripts/tests/verify_playwright_launch.mjs || status=$?
 fi
 
 if [[ "${status:-0}" -ne 0 ]]; then

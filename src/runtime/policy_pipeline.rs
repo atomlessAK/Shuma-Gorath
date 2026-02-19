@@ -48,8 +48,12 @@ pub(crate) fn maybe_handle_honeypot(
                 summary: Some(format!("path={}", path)),
             }),
         );
-    crate::observability::monitoring::record_rate_violation(store, ip, "limited");
-    crate::observability::monitoring::record_rate_outcome(store, "banned");
+    crate::observability::monitoring::record_rate_violation_with_path(
+        store,
+        ip,
+        Some(path),
+        "banned",
+    );
     crate::observability::metrics::increment(
         store,
         crate::observability::metrics::MetricName::BansTotal,
@@ -85,6 +89,7 @@ pub(crate) fn maybe_handle_rate_limit(
     provider_registry: &crate::providers::registry::ProviderRegistry,
     site_id: &str,
     ip: &str,
+    path: &str,
 ) -> Option<Response> {
     if !cfg.rate_action_enabled() {
         return None;
@@ -118,6 +123,12 @@ pub(crate) fn maybe_handle_rate_limit(
                 summary: Some(format!("rate_limit={}", cfg.rate_limit)),
             }),
         );
+    crate::observability::monitoring::record_rate_violation_with_path(
+        store,
+        ip,
+        Some(path),
+        "banned",
+    );
     crate::observability::metrics::increment(
         store,
         crate::observability::metrics::MetricName::BansTotal,

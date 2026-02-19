@@ -87,6 +87,40 @@ function runtimeFailures(page) {
   return [...guard.failures];
 }
 
+function parsePrometheusLabeledCounters(text, metricName, labelName) {
+  const counters = {};
+  const escapedMetric = metricName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const escapedLabel = labelName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(
+    `^${escapedMetric}\\{${escapedLabel}="([^"]+)"\\}\\s+([0-9]+(?:\\.[0-9]+)?)$`
+  );
+  for (const line of String(text || "").split("\n")) {
+    const match = pattern.exec(line.trim());
+    if (!match) continue;
+    counters[match[1]] = Number.parseInt(match[2], 10);
+  }
+  return counters;
+}
+
+function parsePrometheusScalar(text, metricName) {
+  const escapedMetric = metricName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`^${escapedMetric}\\s+([0-9]+(?:\\.[0-9]+)?)$`, "m");
+  const match = pattern.exec(String(text || ""));
+  if (!match) return 0;
+  return Number.parseInt(match[1], 10);
+}
+
+function sumCounterValues(counters) {
+  return Object.values(counters || {}).reduce((total, value) => total + Number(value || 0), 0);
+}
+
+function parseDashboardCounterText(text) {
+  const digits = String(text || "").replace(/[^0-9.-]/g, "");
+  if (!digits) return 0;
+  const parsed = Number.parseFloat(digits);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 async function assertActiveTabPanelVisibility(page, activeTab) {
   for (const tab of DASHBOARD_TABS) {
     await expect(page.locator(`#dashboard-tab-${tab}`)).toHaveAttribute(
@@ -143,10 +177,6 @@ async function openDashboard(page, options = {}) {
       return Boolean(total && total !== "-" && total !== "...");
     }, { timeout: 15000 });
   }
-  await page.waitForFunction(() => {
-    const subtitle = document.getElementById("config-mode-subtitle")?.textContent || "";
-    return !subtitle.includes("LOADING");
-  }, { timeout: 15000 });
   await assertActiveTabPanelVisibility(page, initialTab);
   assertNoRuntimeFailures(page);
 }
@@ -338,7 +368,17 @@ test("dashboard clean-state renders explicit empty placeholders", async ({ page 
         summary: {
           honeypot: { total_hits: 0, unique_crawlers: 0, top_crawlers: [], top_paths: [] },
           challenge: { total_failures: 0, unique_offenders: 0, top_offenders: [], reasons: {}, trend: [] },
-          pow: { total_failures: 0, unique_offenders: 0, top_offenders: [], reasons: {}, trend: [] },
+          pow: {
+            total_failures: 0,
+            total_successes: 0,
+            total_attempts: 0,
+            success_ratio: 0,
+            unique_offenders: 0,
+            top_offenders: [],
+            reasons: {},
+            outcomes: {},
+            trend: []
+          },
           rate: { total_violations: 0, unique_offenders: 0, top_offenders: [], outcomes: {} },
           geo: { total_violations: 0, actions: { block: 0, challenge: 0, maze: 0 }, top_countries: [] }
         },
@@ -373,10 +413,122 @@ test("dashboard clean-state renders explicit empty placeholders", async ({ page 
     "No CDP detections or auto-bans in the selected window"
   );
   await expect(page.locator("#maze-top-offender")).toHaveText("None");
+  await expect(page.locator("#honeypot-top-paths")).toContainText("No honeypot path data yet");
+  await expect(page.locator("#challenge-failure-reasons")).toContainText("No failures in window");
+  await expect(page.locator("#pow-failure-reasons")).toContainText("No failures in window");
+  await expect(page.locator("#pow-outcomes-list")).toContainText("No verify outcomes yet");
+  await expect(page.locator("#pow-total-attempts")).toHaveText("0");
+  await expect(page.locator("#pow-success-total")).toHaveText("0");
+  await expect(page.locator("#pow-success-ratio")).toHaveText("0.0%");
+  await expect(page.locator("#rate-outcomes-list")).toContainText("No outcomes yet");
+  await expect(page.locator("#geo-top-countries")).toContainText("No GEO violations yet");
 
   await openTab(page, "ip-bans");
   await expect(page.locator("#bans-table tbody")).toContainText("No active bans");
   await expect(page.locator('[data-tab-state="ip-bans"]')).toContainText("No active bans.");
+});
+
+test("monitoring summary sections render data and cap oversized result lists", async ({ page }) => {
+  const buildCountEntries = (prefix, count, start = 1) =>
+    Array.from({ length: count }, (_, index) => ({
+      label: `${prefix}-${index + start}`,
+      count: count - index
+    }));
+
+  const buildReasonMap = (prefix, count) =>
+    Array.from({ length: count }, (_, index) => [`${prefix}_${index + 1}`, count - index]).reduce(
+      (accumulator, [key, value]) => ({ ...accumulator, [key]: value }),
+      {}
+    );
+
+  await page.route("**/admin/monitoring?hours=*&limit=*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        summary: {
+          honeypot: {
+            total_hits: 125,
+            unique_crawlers: 17,
+            top_crawlers: buildCountEntries("crawler", 14),
+            top_paths: buildCountEntries("/trap", 15).map((entry) => ({
+              label: entry.label,
+              count: entry.count
+            }))
+          },
+          challenge: {
+            total_failures: 41,
+            unique_offenders: 12,
+            top_offenders: buildCountEntries("challenge-offender", 12),
+            reasons: buildReasonMap("challenge_reason", 12),
+            trend: []
+          },
+          pow: {
+            total_failures: 20,
+            total_successes: 80,
+            total_attempts: 100,
+            success_ratio: 0.8,
+            unique_offenders: 9,
+            top_offenders: buildCountEntries("pow-offender", 12),
+            reasons: buildReasonMap("pow_reason", 12),
+            outcomes: { success: 80, failure: 20 },
+            trend: []
+          },
+          rate: {
+            total_violations: 31,
+            unique_offenders: 7,
+            top_offenders: buildCountEntries("rate-offender", 11),
+            outcomes: { limited: 20, banned: 10, fallback_allow: 1, fallback_deny: 0 }
+          },
+          geo: {
+            total_violations: 29,
+            actions: { block: 9, challenge: 11, maze: 9 },
+            top_countries: buildCountEntries("CC", 12)
+          }
+        },
+        prometheus: { endpoint: "/metrics", notes: [] },
+        details: {
+          analytics: { ban_count: 2, test_mode: false, fail_mode: "open" },
+          events: {
+            recent_events: [
+              {
+                ts: Math.floor(Date.now() / 1000),
+                event: "Challenge",
+                ip: "198.51.100.44",
+                reason: "challenge_reason_1",
+                outcome: "served",
+                admin: "ops"
+              }
+            ],
+            event_counts: { Challenge: 1 },
+            top_ips: [["198.51.100.44", 1]],
+            unique_ips: 1
+          },
+          bans: { bans: [] },
+          maze: { total_hits: 0, unique_crawlers: 0, maze_auto_bans: 0, top_crawlers: [] },
+          cdp: { stats: { total_detections: 0, auto_bans: 0 }, config: {}, fingerprint_stats: {} },
+          cdp_events: { events: [] }
+        }
+      })
+    });
+  });
+
+  await openDashboard(page);
+  await expect(page.locator("#honeypot-total-hits")).toHaveText("125");
+  await expect(page.locator("#challenge-failures-total")).toHaveText("41");
+  await expect(page.locator("#pow-total-attempts")).toHaveText("100");
+  await expect(page.locator("#pow-success-total")).toHaveText("80");
+  await expect(page.locator("#pow-failures-total")).toHaveText("20");
+  await expect(page.locator("#pow-success-ratio")).toHaveText("80.0%");
+  await expect(page.locator("#pow-outcomes-list")).toContainText("Success: 80");
+  await expect(page.locator("#pow-outcomes-list")).toContainText("Failure: 20");
+  await expect(page.locator("#rate-violations-total")).toHaveText("31");
+  await expect(page.locator("#geo-violations-total")).toHaveText("29");
+
+  await expect(page.locator("#honeypot-top-paths .crawler-item")).toHaveCount(10);
+  await expect(page.locator("#challenge-failure-reasons tr")).toHaveCount(10);
+  await expect(page.locator("#pow-failure-reasons tr")).toHaveCount(10);
+  await expect(page.locator("#geo-top-countries .crawler-item")).toHaveCount(10);
 });
 
 test("status/config/tuning show empty state when config snapshot is empty", async ({ page }) => {
@@ -421,6 +573,102 @@ test("dashboard loads and shows seeded operational data", async ({ page }) => {
   await expect(page.locator("#test-mode-status")).toHaveClass(/test-mode-status--(enabled|disabled)/);
 });
 
+test("dashboard monitoring totals stay in parity with /metrics monitoring families", async ({ page, request }) => {
+  await openDashboard(page);
+
+  const adminHeaders = {
+    ...buildTrustedForwardingHeaders(),
+    Authorization: `Bearer ${API_KEY}`
+  };
+
+  const [monitoringResponse, metricsResponse] = await Promise.all([
+    request.get(`${BASE_URL}/admin/monitoring?hours=24&limit=10`, { headers: adminHeaders }),
+    request.get(`${BASE_URL}/metrics`, { headers: buildTrustedForwardingHeaders() })
+  ]);
+
+  expect(monitoringResponse.ok()).toBe(true);
+  expect(metricsResponse.ok()).toBe(true);
+
+  const monitoring = await monitoringResponse.json();
+  const metricsText = await metricsResponse.text();
+
+  const challengeReasons = parsePrometheusLabeledCounters(
+    metricsText,
+    "bot_defence_monitoring_challenge_failures_total",
+    "reason"
+  );
+  const powOutcomes = parsePrometheusLabeledCounters(
+    metricsText,
+    "bot_defence_monitoring_pow_verifications_total",
+    "outcome"
+  );
+  const powReasons = parsePrometheusLabeledCounters(
+    metricsText,
+    "bot_defence_monitoring_pow_failures_total",
+    "reason"
+  );
+  const rateOutcomes = parsePrometheusLabeledCounters(
+    metricsText,
+    "bot_defence_monitoring_rate_violations_total",
+    "outcome"
+  );
+  const geoActions = parsePrometheusLabeledCounters(
+    metricsText,
+    "bot_defence_monitoring_geo_violations_total",
+    "action"
+  );
+  const cdpDetections = parsePrometheusScalar(metricsText, "bot_defence_cdp_detections_total");
+
+  expect(Object.keys(challengeReasons).sort()).toEqual([
+    "expired_replay",
+    "forbidden",
+    "incorrect",
+    "invalid_output",
+    "sequence_violation"
+  ]);
+  expect(Object.keys(powOutcomes).sort()).toEqual(["failure", "success"]);
+  expect(Object.keys(powReasons).sort()).toEqual([
+    "binding_timing_mismatch",
+    "expired_replay",
+    "invalid_proof",
+    "missing_seed_nonce",
+    "sequence_violation"
+  ]);
+  expect(Object.keys(rateOutcomes).sort()).toEqual([
+    "banned",
+    "fallback_allow",
+    "fallback_deny",
+    "limited"
+  ]);
+  expect(Object.keys(geoActions).sort()).toEqual(["block", "challenge", "maze"]);
+
+  const summary = monitoring.summary || {};
+  expect(challengeReasons).toEqual(summary.challenge?.reasons || {});
+  expect(powOutcomes).toEqual(summary.pow?.outcomes || {});
+  expect(powReasons).toEqual(summary.pow?.reasons || {});
+  expect(rateOutcomes).toEqual(summary.rate?.outcomes || {});
+  expect(geoActions).toEqual(summary.geo?.actions || {});
+  expect(cdpDetections).toBe(Number(monitoring.details?.cdp?.stats?.total_detections || 0));
+
+  const uiChallengeFailures = parseDashboardCounterText(
+    await page.locator("#challenge-failures-total").textContent()
+  );
+  const uiPowAttempts = parseDashboardCounterText(
+    await page.locator("#pow-total-attempts").textContent()
+  );
+  const uiRateViolations = parseDashboardCounterText(
+    await page.locator("#rate-violations-total").textContent()
+  );
+  const uiGeoViolations = parseDashboardCounterText(
+    await page.locator("#geo-violations-total").textContent()
+  );
+
+  expect(uiChallengeFailures).toBe(sumCounterValues(challengeReasons));
+  expect(uiPowAttempts).toBe(sumCounterValues(powOutcomes));
+  expect(uiRateViolations).toBe(Number(summary.rate?.total_violations || 0));
+  expect(uiGeoViolations).toBe(sumCounterValues(geoActions));
+});
+
 test("status tab resolves fail mode without requiring monitoring bootstrap", async ({ page }) => {
   await openDashboard(page, { initialTab: "status" });
   const failModeCard = page
@@ -451,6 +699,24 @@ test("status tab resolves fail mode without requiring monitoring bootstrap", asy
 test("ban form enforces IP validity and submit state", async ({ page }) => {
   await openDashboard(page);
   await openTab(page, "ip-bans");
+
+  const durationState = await page.evaluate(() => {
+    const readNumber = (id) => {
+      const raw = document.getElementById(id)?.value || "0";
+      const parsed = Number.parseInt(String(raw), 10);
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+    const days = readNumber("ban-duration-days");
+    const hours = readNumber("ban-duration-hours");
+    const minutes = readNumber("ban-duration-minutes");
+    return {
+      days,
+      hours,
+      minutes,
+      totalSeconds: (days * 86400) + (hours * 3600) + (minutes * 60)
+    };
+  });
+  expect(durationState.totalSeconds).toBeGreaterThan(0);
 
   const banButton = page.locator("#ban-btn");
   await expect(banButton).toBeDisabled();
@@ -1252,6 +1518,23 @@ test("tab error state is surfaced when tab-scoped fetch fails", async ({ page })
   await openTab(page, "ip-bans");
   await expect(page.locator('[data-tab-state="ip-bans"]')).toContainText("temporary ban endpoint outage");
   await page.unroute("**/admin/ban");
+});
+
+test("monitoring tab surfaces tab-scoped error when consolidated monitoring fetch fails", async ({ page }) => {
+  await openDashboard(page, { initialTab: "status" });
+
+  await page.route("**/admin/monitoring?hours=*&limit=*", async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "monitoring pipeline unavailable" })
+    });
+  }, { times: 1 });
+
+  await openTab(page, "monitoring");
+  await expect(page.locator('[data-tab-state="monitoring"]')).toContainText(
+    "monitoring pipeline unavailable"
+  );
 });
 
 test("shared config endpoint failures surface per-tab errors for status/config/tuning", async ({ page }) => {

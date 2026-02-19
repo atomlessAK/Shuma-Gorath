@@ -5,62 +5,59 @@ export function createDashboardRefreshRuntime(options = {}) {
     typeof options.getApiClient === 'function' ? options.getApiClient : () => null;
   const getStateStore =
     typeof options.getStateStore === 'function' ? options.getStateStore : () => null;
-  const getTablesView =
-    typeof options.getTablesView === 'function' ? options.getTablesView : () => null;
-  const getChartsRuntime =
-    typeof options.getChartsRuntime === 'function' ? options.getChartsRuntime : () => null;
-  const getMessageNode =
-    typeof options.getMessageNode === 'function' ? options.getMessageNode : () => null;
-  const runDomWriteBatch =
-    typeof options.runDomWriteBatch === 'function' ? options.runDomWriteBatch : async (task) => task();
-  const updateConfigModeUi =
-    typeof options.updateConfigModeUi === 'function' ? options.updateConfigModeUi : () => {};
-  const invokeConfigUiState =
-    typeof options.invokeConfigUiState === 'function' ? options.invokeConfigUiState : () => {};
-  const refreshAllDirtySections =
-    typeof options.refreshAllDirtySections === 'function' ? options.refreshAllDirtySections : () => {};
-  const refreshDirtySections =
-    typeof options.refreshDirtySections === 'function' ? options.refreshDirtySections : () => {};
-  const refreshCoreActionButtonsState =
-    typeof options.refreshCoreActionButtonsState === 'function'
-      ? options.refreshCoreActionButtonsState
-      : () => {};
-  const tabState =
-    options.tabState && typeof options.tabState === 'object' ? options.tabState : {};
   const deriveMonitoringAnalytics =
     typeof options.deriveMonitoringAnalytics === 'function'
       ? options.deriveMonitoringAnalytics
       : () => ({ ban_count: 0, test_mode: false, fail_mode: 'open' });
-  const configUiRefreshMethods = Array.isArray(options.configUiRefreshMethods)
-    ? options.configUiRefreshMethods
-    : [];
-  const dirtySectionsByTab =
-    options.dirtySectionsByTab && typeof options.dirtySectionsByTab === 'object'
-      ? options.dirtySectionsByTab
-      : {};
-
-  const showTabLoading =
-    typeof tabState.showTabLoading === 'function' ? tabState.showTabLoading : () => {};
-  const showTabError =
-    typeof tabState.showTabError === 'function' ? tabState.showTabError : () => {};
-  const showTabEmpty =
-    typeof tabState.showTabEmpty === 'function' ? tabState.showTabEmpty : () => {};
-  const clearTabStateMessage =
-    typeof tabState.clearTabStateMessage === 'function' ? tabState.clearTabStateMessage : () => {};
 
   const isConfigSnapshotEmpty = (config) =>
     !config || typeof config !== 'object' || Object.keys(config).length === 0;
-  const snapshotKey = (value) => {
-    if (!value || typeof value !== 'object') return 'null';
-    try {
-      return JSON.stringify(value);
-    } catch (_error) {
-      return '__unserializable__';
-    }
-  };
 
   function toRequestOptions(runtimeOptions = {}) {
     return runtimeOptions && runtimeOptions.signal ? { signal: runtimeOptions.signal } : {};
+  }
+
+  function applySnapshots(updates = {}) {
+    const dashboardState = getStateStore();
+    if (!dashboardState || !updates || typeof updates !== 'object') return;
+    if (typeof dashboardState.setSnapshots === 'function') {
+      dashboardState.setSnapshots(updates);
+      return;
+    }
+    Object.entries(updates).forEach(([key, value]) => {
+      dashboardState.setSnapshot(key, value);
+    });
+  }
+
+  function showTabLoading(tab, message = 'Loading...') {
+    const dashboardState = getStateStore();
+    if (!dashboardState) return;
+    dashboardState.clearTabError(tab);
+    dashboardState.setTabEmpty(tab, false, '');
+    dashboardState.setTabLoading(tab, true, message);
+  }
+
+  function showTabError(tab, message) {
+    const dashboardState = getStateStore();
+    if (!dashboardState) return;
+    dashboardState.setTabEmpty(tab, false, '');
+    dashboardState.setTabError(tab, message);
+  }
+
+  function showTabEmpty(tab, message) {
+    const dashboardState = getStateStore();
+    if (!dashboardState) return;
+    dashboardState.clearTabError(tab);
+    dashboardState.setTabLoading(tab, false, '');
+    dashboardState.setTabEmpty(tab, true, message);
+  }
+
+  function clearTabStateMessage(tab) {
+    const dashboardState = getStateStore();
+    if (!dashboardState) return;
+    dashboardState.setTabLoading(tab, false, '');
+    dashboardState.setTabEmpty(tab, false, '');
+    dashboardState.clearTabError(tab);
   }
 
   async function refreshSharedConfig(reason = 'manual', runtimeOptions = {}) {
@@ -76,20 +73,8 @@ export function createDashboardRefreshRuntime(options = {}) {
     }
 
     const config = await dashboardApiClient.getConfig(requestOptions);
-    const previousConfig = dashboardState ? dashboardState.getSnapshot('config') : null;
-    const configChanged = snapshotKey(previousConfig) !== snapshotKey(config);
-    if (dashboardState && configChanged) {
-      dashboardState.setSnapshot('config', config);
-    }
-    await runDomWriteBatch(() => {
-      updateConfigModeUi(config);
-      if (configChanged || reason !== 'auto-refresh') {
-        configUiRefreshMethods.forEach((methodName) => invokeConfigUiState(methodName, config));
-        invokeConfigUiState('setAdvancedConfigEditorFromConfig', config, true);
-        refreshAllDirtySections();
-      }
-    });
-    return configChanged ? config : (previousConfig || config);
+    applySnapshots({ config });
+    return config;
   }
 
   async function refreshMonitoringTab(reason = 'manual', runtimeOptions = {}) {
@@ -120,26 +105,19 @@ export function createDashboardRefreshRuntime(options = {}) {
     }
 
     if (dashboardState) {
-      dashboardState.setSnapshot('monitoring', monitoringData);
-      if (!isAutoRefresh) {
-        dashboardState.setSnapshot('analytics', analytics);
-        dashboardState.setSnapshot('events', events);
-        dashboardState.setSnapshot('bans', bansData);
-        dashboardState.setSnapshot('maze', mazeData);
-        dashboardState.setSnapshot('cdp', cdpData);
-        dashboardState.setSnapshot('cdpEvents', cdpEventsData);
-      }
-    }
-
-    if (!isAutoRefresh) {
-      await runDomWriteBatch(() => {
-        const chartsRuntime = getChartsRuntime();
-        if (chartsRuntime) {
-          chartsRuntime.updateEventTypesChart(events.event_counts || {});
-          chartsRuntime.updateTopIpsChart(events.top_ips || []);
-          chartsRuntime.updateTimeSeriesChart();
-        }
-      });
+      applySnapshots(
+        isAutoRefresh
+          ? { monitoring: monitoringData }
+          : {
+            monitoring: monitoringData,
+            analytics,
+            events,
+            bans: bansData,
+            maze: mazeData,
+            cdp: cdpData,
+            cdpEvents: cdpEventsData
+          }
+      );
     }
 
     if (dashboardState && dashboardState.getDerivedState().monitoringEmpty) {
@@ -152,21 +130,17 @@ export function createDashboardRefreshRuntime(options = {}) {
   async function refreshIpBansTab(reason = 'manual', runtimeOptions = {}) {
     const dashboardApiClient = getApiClient();
     if (!dashboardApiClient) return;
+    const includeConfigRefresh = reason !== 'auto-refresh';
     if (reason !== 'auto-refresh') {
       showTabLoading('ip-bans', 'Loading ban list...');
     }
     const dashboardState = getStateStore();
     const requestOptions = toRequestOptions(runtimeOptions);
-    const bansData = await dashboardApiClient.getBans(requestOptions);
-    if (dashboardState) {
-      dashboardState.setSnapshot('bans', bansData);
-    }
-    await runDomWriteBatch(() => {
-      const tablesView = getTablesView();
-      if (tablesView) {
-        tablesView.updateBansTable(bansData.bans || []);
-      }
-    });
+    const [bansData] = await Promise.all([
+      dashboardApiClient.getBans(requestOptions),
+      includeConfigRefresh ? refreshSharedConfig(reason, runtimeOptions) : Promise.resolve(null)
+    ]);
+    if (dashboardState) applySnapshots({ bans: bansData });
     if (!Array.isArray(bansData.bans) || bansData.bans.length === 0) {
       showTabEmpty('ip-bans', 'No active bans.');
     } else {
@@ -241,8 +215,6 @@ export function createDashboardRefreshRuntime(options = {}) {
       if (dashboardState) {
         dashboardState.markTabUpdated(activeTab);
       }
-      refreshCoreActionButtonsState();
-      refreshDirtySections(dirtySectionsByTab[activeTab] || []);
     } catch (error) {
       if (error && error.name === 'AbortError') {
         return;
@@ -250,11 +222,6 @@ export function createDashboardRefreshRuntime(options = {}) {
       const message = error && error.message ? error.message : 'Refresh failed';
       console.error(`Dashboard refresh error (${activeTab}):`, error);
       showTabError(activeTab, message);
-      const messageNode = getMessageNode();
-      if (messageNode) {
-        messageNode.textContent = `Refresh failed: ${message}`;
-        messageNode.className = 'message error';
-      }
     }
   }
 

@@ -5,7 +5,7 @@ import {
   createInitialState,
   reduceState,
   normalizeTab
-} from '../../../modules/dashboard-state.js';
+} from '../domain/dashboard-state.js';
 
 export { DASHBOARD_TABS, DEFAULT_TAB, normalizeTab };
 
@@ -18,7 +18,6 @@ export const TAB_REFRESH_INTERVAL_MS = Object.freeze({
 });
 export const RUNTIME_TELEMETRY_ROLLING_WINDOW_SIZE = 20;
 
-const cloneJson = (value) => JSON.parse(JSON.stringify(value));
 const clampMetric = (value) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || numeric < 0) return 0;
@@ -98,23 +97,10 @@ const updateMetric = (metric = {}, rawValue) => {
   };
 };
 
-function createDraftState() {
-  return {
-    baselines: {},
-    drafts: {}
-  };
-}
-
-function toNormalizedDraft(value) {
-  if (value === undefined) return '';
-  return JSON.stringify(value);
-}
-
 export function createDashboardStore(options = {}) {
   const initialTab = normalizeTab(options.initialTab || DEFAULT_TAB);
   const internal = writable(createInitialState(initialTab));
   const runtimeTelemetryStore = writable(createRuntimeTelemetryState());
-  const draftState = createDraftState();
 
   const dispatch = (event = {}) => {
     let next = null;
@@ -130,6 +116,7 @@ export function createDashboardStore(options = {}) {
   const setActiveTab = (tab) => dispatch({ type: 'set-active-tab', tab: normalizeTab(tab) });
   const setSession = (session = {}) => dispatch({ type: 'set-session', session });
   const setSnapshot = (key, value) => dispatch({ type: 'set-snapshot', key, value });
+  const setSnapshots = (updates = {}) => dispatch({ type: 'set-snapshots', snapshots: updates });
   const setTabLoading = (tab, loading, message = undefined) => {
     const event = { type: 'set-tab-loading', tab, loading };
     if (message !== undefined) {
@@ -158,6 +145,24 @@ export function createDashboardStore(options = {}) {
     }
     return current.snapshots[key];
   };
+  const getSnapshotVersion = (key) => {
+    const current = getState();
+    if (
+      !current ||
+      !current.snapshotVersions ||
+      !Object.prototype.hasOwnProperty.call(current.snapshotVersions, key)
+    ) {
+      return 0;
+    }
+    return Number(current.snapshotVersions[key] || 0);
+  };
+  const getSnapshotVersions = () => {
+    const current = getState();
+    const versions = current && current.snapshotVersions && typeof current.snapshotVersions === 'object'
+      ? current.snapshotVersions
+      : {};
+    return { ...versions };
+  };
   const isTabStale = (tab) => {
     const key = normalizeTab(tab);
     const current = getState();
@@ -182,42 +187,6 @@ export function createDashboardStore(options = {}) {
   const reset = (tab = DEFAULT_TAB) => {
     internal.set(createInitialState(normalizeTab(tab)));
     resetRuntimeTelemetry();
-    draftState.baselines = {};
-    draftState.drafts = {};
-  };
-
-  const setDraftBaseline = (sectionKey, value) => {
-    const key = String(sectionKey || '');
-    if (!key) return;
-    draftState.baselines[key] = cloneJson(value ?? null);
-    if (!Object.prototype.hasOwnProperty.call(draftState.drafts, key)) {
-      draftState.drafts[key] = cloneJson(value ?? null);
-    }
-  };
-
-  const setDraft = (sectionKey, value) => {
-    const key = String(sectionKey || '');
-    if (!key) return;
-    draftState.drafts[key] = cloneJson(value ?? null);
-  };
-
-  const getDraft = (sectionKey) => {
-    const key = String(sectionKey || '');
-    if (!key) return null;
-    if (!Object.prototype.hasOwnProperty.call(draftState.drafts, key)) return null;
-    return cloneJson(draftState.drafts[key]);
-  };
-
-  const isDraftDirty = (sectionKey, currentValue = undefined) => {
-    const key = String(sectionKey || '');
-    if (!key) return false;
-    const baseline = Object.prototype.hasOwnProperty.call(draftState.baselines, key)
-      ? draftState.baselines[key]
-      : null;
-    const candidate = currentValue === undefined
-      ? (Object.prototype.hasOwnProperty.call(draftState.drafts, key) ? draftState.drafts[key] : null)
-      : currentValue;
-    return toNormalizedDraft(candidate) !== toNormalizedDraft(baseline);
   };
 
   const tabStatus = (tab) => derived(internal, ($state) => {
@@ -323,7 +292,10 @@ export function createDashboardStore(options = {}) {
     setSession,
     getSession,
     setSnapshot,
+    setSnapshots,
     getSnapshot,
+    getSnapshotVersion,
+    getSnapshotVersions,
     setTabLoading,
     setTabError,
     clearTabError,
@@ -332,10 +304,6 @@ export function createDashboardStore(options = {}) {
     invalidate,
     isTabStale,
     getDerivedState,
-    setDraftBaseline,
-    setDraft,
-    getDraft,
-    isDraftDirty,
     tabStatus,
     session,
     activeTab,

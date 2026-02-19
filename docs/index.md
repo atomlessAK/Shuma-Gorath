@@ -16,6 +16,7 @@ Use the Makefile as the official workflow. These docs are the source of truth fo
 - [`configuration.md`](configuration.md) - Runtime configuration reference
 - [`security-hardening.md`](security-hardening.md) - Deployment security checklist
 - [`observability.md`](observability.md) - Prometheus/Grafana integration
+- [`monitoring-prometheus-parity-audit.md`](monitoring-prometheus-parity-audit.md) - Monitoring widget-to-Prometheus parity matrix and prioritized missing-export plan
 - [`bot-defence.md`](bot-defence.md) - Shuma-Gorath layered defence strategy with managed edge bot protection
 - [`features.md`](features.md) - Feature list and roadmap
 - [`challenge-verification.md`](challenge-verification.md) - Human verification strategy

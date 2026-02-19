@@ -3,7 +3,7 @@
     buildFeatureStatusItems,
     buildVariableInventoryGroups,
     deriveStatusSnapshot
-  } from '../../../../modules/status.js';
+  } from '../../domain/status.js';
   import TabStateMessage from './primitives/TabStateMessage.svelte';
 
   export let managed = false;
@@ -23,6 +23,12 @@
     if (!raw) return '-';
     return raw;
   };
+
+  const toPlainText = (value) =>
+    String(value || '')
+      .replace(/<[^>]*>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
 
   $: statusSnapshot = deriveStatusSnapshot(configSnapshot || {});
   $: featureStatusItems = buildFeatureStatusItems(statusSnapshot);
@@ -47,7 +53,7 @@
         {#each featureStatusItems as item}
           <div class="status-item">
             <h3>{item.title}</h3>
-            <p class="control-desc text-muted">{@html item.description}</p>
+            <p class="control-desc text-muted">{toPlainText(item.description)}</p>
             <div class="status-rows">
               <div class="info-row">
                 <span class="info-label text-muted">Status:</span>

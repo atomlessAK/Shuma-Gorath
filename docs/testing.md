@@ -116,8 +116,8 @@ Behavior:
 1. Installs pinned Playwright dependencies via `pnpm` (through `corepack`).
 2. Uses repo-local Playwright browser cache for deterministic execution:
    - browser cache: `.cache/ms-playwright`
-   - by default the runner keeps system `HOME` for browser launch stability in restricted sandboxes
-   - optional: set `PLAYWRIGHT_FORCE_LOCAL_HOME=1` to use repo-local browser home/config at `.cache/playwright-home`
+   - by default the runner uses repo-local browser `HOME`/config at `.cache/playwright-home`
+   - optional: set `PLAYWRIGHT_FORCE_LOCAL_HOME=0` to keep system `HOME`
    - if Chromium launch fails with a known sandbox signature while local HOME is forced, the runner retries preflight with system HOME
 3. Runs a Chromium launch preflight and fails fast with actionable diagnostics when sandbox permissions block browser startup.
 4. Runs dashboard module unit tests via `make test-dashboard-unit`.

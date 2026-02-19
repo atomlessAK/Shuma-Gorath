@@ -10,14 +10,44 @@
     derivePrometheusHelperViewModel,
     formatMetricLabel
   } from './monitoring-view-model.js';
-  import StatCard from './primitives/StatCard.svelte';
+  import { arraysEqualShallow } from '../../domain/core/format.js';
   import TabStateMessage from './primitives/TabStateMessage.svelte';
-  import TableWrapper from './primitives/TableWrapper.svelte';
+  import OverviewStats from './monitoring/OverviewStats.svelte';
+  import PrimaryCharts from './monitoring/PrimaryCharts.svelte';
+  import RecentEventsTable from './monitoring/RecentEventsTable.svelte';
+  import CdpSection from './monitoring/CdpSection.svelte';
+  import MazeSection from './monitoring/MazeSection.svelte';
+  import HoneypotSection from './monitoring/HoneypotSection.svelte';
+  import ChallengeSection from './monitoring/ChallengeSection.svelte';
+  import PowSection from './monitoring/PowSection.svelte';
+  import RateSection from './monitoring/RateSection.svelte';
+  import GeoSection from './monitoring/GeoSection.svelte';
+  import ExternalMonitoringSection from './monitoring/ExternalMonitoringSection.svelte';
 
   const EVENT_ROW_RENDER_LIMIT = 100;
   const CDP_ROW_RENDER_LIMIT = 500;
+  const MONITORING_LIST_LIMIT = 10;
+  const MONITORING_TREND_POINT_LIMIT = 720;
+  const RANGE_EVENTS_FETCH_LIMIT = 5000;
+  const RANGE_EVENTS_REQUEST_TIMEOUT_MS = 10000;
+  const MAX_SAFE_COUNT = 1_000_000_000;
   const CHALLENGE_TREND_COLOR = 'rgba(122, 114, 255, 0.35)';
   const POW_TREND_COLOR = 'rgba(255, 130, 92, 0.35)';
+  const POW_OUTCOME_LABELS = Object.freeze({
+    success: 'Success',
+    failure: 'Failure'
+  });
+  const CHART_PALETTE = [
+    'rgb(255,205,235)',
+    'rgb(225,175,205)',
+    'rgb(205, 155, 185)',
+    'rgb(190, 140, 170)',
+    'rgb(175, 125, 155)',
+    'rgb(160, 110, 140)',
+    'rgb(147, 97, 127)',
+    'rgb(135, 85, 115)'
+  ];
+  const TIME_RANGES = Object.freeze(['hour', 'day', 'week', 'month']);
 
   export let managed = false;
   export let isActive = true;
@@ -29,11 +59,23 @@
   export let cdpSnapshot = null;
   export let cdpEventsSnapshot = null;
   export let monitoringSnapshot = null;
+  export let onFetchEventsRange = null;
 
+  let eventTypesCanvas = null;
+  let topIpsCanvas = null;
+  let timeSeriesCanvas = null;
   let challengeTrendCanvas = null;
   let powTrendCanvas = null;
+  let eventTypesChart = null;
+  let topIpsChart = null;
+  let timeSeriesChart = null;
   let challengeTrendChart = null;
   let powTrendChart = null;
+
+  let selectedTimeRange = 'hour';
+  let rangeEventsSnapshot = { range: '', recent_events: [] };
+  let rangeEventsAbortController = null;
+  let lastRequestedRange = '';
 
   let copyButtonLabel = 'Copy JS Example';
   let copyCurlButtonLabel = 'Copy Curl Example';
@@ -48,6 +90,53 @@
     if (timerId === null) return null;
     clearTimeout(timerId);
     return null;
+  };
+  const clampCount = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric < 0) return 0;
+    return Math.min(MAX_SAFE_COUNT, Math.floor(numeric));
+  };
+  const sanitizeText = (value, fallback = '-') => {
+    const text = String(value || '').replace(/[\u0000-\u001f\u007f]/g, '').trim();
+    return text || fallback;
+  };
+  const shouldFetchRange = (range) => range === 'week' || range === 'month';
+  const hoursForRange = (range) => {
+    if (range === 'hour') return 1;
+    if (range === 'day') return 24;
+    if (range === 'week') return 168;
+    return 720;
+  };
+  const cutoffForRange = (range, now) => {
+    if (range === 'hour') return now - (60 * 60 * 1000);
+    if (range === 'day') return now - (24 * 60 * 60 * 1000);
+    if (range === 'week') return now - (7 * 24 * 60 * 60 * 1000);
+    return now - (30 * 24 * 60 * 60 * 1000);
+  };
+  const bucketSizeForRange = (range) =>
+    range === 'hour' ? 300000 : range === 'day' ? 3600000 : 86400000;
+  const formatBucketLabel = (range, epochMs) => {
+    const date = new Date(epochMs);
+    if (range === 'hour') {
+      return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    }
+    if (range === 'day') {
+      return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      });
+    }
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+  const sameSeries = (chart, nextLabels, nextData) => {
+    if (!chart || !chart.data || !Array.isArray(chart.data.datasets) || chart.data.datasets.length === 0) {
+      return false;
+    }
+    const currentLabels = Array.isArray(chart.data.labels) ? chart.data.labels : [];
+    const currentData = Array.isArray(chart.data.datasets[0].data) ? chart.data.datasets[0].data : [];
+    return arraysEqualShallow(currentLabels, nextLabels) && arraysEqualShallow(currentData, nextData);
   };
 
   const scheduleCopyLabelReset = (kind) => {
@@ -102,36 +191,53 @@
 
   const normalizeReasonRows = (rows, labels) => {
     if (!Array.isArray(rows)) return [];
-    return rows.map(([key, value]) => ({
-      key,
-      label: formatMetricLabel(key, labels),
-      count: Number(value || 0)
+    return rows.slice(0, MONITORING_LIST_LIMIT).map(([key, value]) => ({
+      key: sanitizeText(key),
+      label: sanitizeText(formatMetricLabel(key, labels)),
+      count: clampCount(value)
     }));
   };
 
   const normalizePairRows = (rows, labels) => {
     if (!Array.isArray(rows)) return [];
-    return rows.map(([key, value]) => ({
-      key,
-      label: formatMetricLabel(key, labels),
-      count: Number(value || 0)
+    return rows.slice(0, MONITORING_LIST_LIMIT).map(([key, value]) => ({
+      key: sanitizeText(key),
+      label: sanitizeText(formatMetricLabel(key, labels)),
+      count: clampCount(value)
     }));
   };
 
   const normalizeTopPaths = (paths) => {
     if (!Array.isArray(paths)) return [];
-    return paths.map((entry) => ({
-      path: String(entry.path || '-'),
-      count: Number(entry.count || 0)
+    return paths.slice(0, MONITORING_LIST_LIMIT).map((entry) => ({
+      path: sanitizeText(entry.path, '-'),
+      count: clampCount(entry.count)
     }));
   };
 
   const normalizeTopCountries = (rows) => {
     if (!Array.isArray(rows)) return [];
-    return rows.map((entry) => ({
-      country: String(entry.country || '-'),
-      count: Number(entry.count || 0)
+    return rows.slice(0, MONITORING_LIST_LIMIT).map((entry) => ({
+      country: sanitizeText(entry.country, '-'),
+      count: clampCount(entry.count)
     }));
+  };
+
+  const normalizeTrendSeries = (series) => {
+    const labels = Array.isArray(series?.labels) ? series.labels : [];
+    const data = Array.isArray(series?.data) ? series.data : [];
+    const pointCount = Math.min(labels.length, data.length);
+    const start = Math.max(0, pointCount - MONITORING_TREND_POINT_LIMIT);
+    const nextLabels = [];
+    const nextData = [];
+    for (let index = start; index < pointCount; index += 1) {
+      nextLabels.push(sanitizeText(labels[index], '-'));
+      nextData.push(clampCount(data[index]));
+    }
+    return {
+      labels: nextLabels,
+      data: nextData
+    };
   };
 
   const getChartConstructor = () => {
@@ -175,11 +281,210 @@
       });
     }
 
+    if (sameSeries(chart, trendSeries.labels, trendSeries.data)) return chart;
     chart.data.labels = trendSeries.labels;
     chart.data.datasets[0].data = trendSeries.data;
     chart.update();
     return chart;
   };
+
+  const updateDoughnutChart = (chart, canvas, counts) => {
+    const chartCtor = getChartConstructor();
+    if (!canvas || !chartCtor) return chart;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return chart;
+    const labels = Object.keys(counts || {});
+    const data = Object.values(counts || {});
+    const colors = data.map((_, index) => CHART_PALETTE[index % CHART_PALETTE.length]);
+
+    if (!chart) {
+      return new chartCtor(ctx, {
+        type: 'doughnut',
+        data: {
+          labels,
+          datasets: [{ data, backgroundColor: colors, borderColor: colors }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: { legend: { position: 'bottom' } }
+        }
+      });
+    }
+
+    if (sameSeries(chart, labels, data)) return chart;
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = data;
+    chart.data.datasets[0].backgroundColor = colors;
+    chart.data.datasets[0].borderColor = colors;
+    chart.update();
+    return chart;
+  };
+
+  const updateTopIpsChart = (chart, canvas, topIps) => {
+    const chartCtor = getChartConstructor();
+    if (!canvas || !chartCtor) return chart;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return chart;
+    const pairs = Array.isArray(topIps) ? topIps : [];
+    const labels = pairs.map(([ip]) => String(ip || '-'));
+    const data = pairs.map(([, count]) => Number(count || 0));
+    const colors = data.map((_, index) => CHART_PALETTE[index % CHART_PALETTE.length]);
+
+    if (!chart) {
+      return new chartCtor(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{ label: 'Events', data, backgroundColor: colors, borderColor: colors }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { stepSize: 1 }
+            }
+          },
+          plugins: { legend: { display: false } }
+        }
+      });
+    }
+
+    if (sameSeries(chart, labels, data)) return chart;
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = data;
+    chart.data.datasets[0].backgroundColor = colors;
+    chart.data.datasets[0].borderColor = colors;
+    chart.update();
+    return chart;
+  };
+
+  const buildTimeSeries = (events, range) => {
+    const now = Date.now();
+    const cutoffTime = cutoffForRange(range, now);
+    const bucketSize = bucketSizeForRange(range);
+    const normalized = Array.isArray(events) ? events : [];
+    const filteredEvents = normalized.filter((entry) => (Number(entry?.ts || 0) * 1000) >= cutoffTime);
+    const boundedEvents = filteredEvents.length > RANGE_EVENTS_FETCH_LIMIT
+      ? filteredEvents.slice(0, RANGE_EVENTS_FETCH_LIMIT)
+      : filteredEvents;
+    const buckets = {};
+    for (let time = cutoffTime; time <= now; time += bucketSize) {
+      const bucketKey = Math.floor(time / bucketSize) * bucketSize;
+      buckets[bucketKey] = 0;
+    }
+    boundedEvents.forEach((entry) => {
+      const eventTime = Number(entry?.ts || 0) * 1000;
+      if (!Number.isFinite(eventTime) || eventTime <= 0) return;
+      const bucketKey = Math.floor(eventTime / bucketSize) * bucketSize;
+      buckets[bucketKey] = (buckets[bucketKey] || 0) + 1;
+    });
+    const sortedBuckets = Object.keys(buckets)
+      .map((key) => Number.parseInt(key, 10))
+      .sort((left, right) => left - right);
+    return {
+      labels: sortedBuckets.map((epochMs) => formatBucketLabel(range, epochMs)),
+      data: sortedBuckets.map((epochMs) => buckets[epochMs] || 0)
+    };
+  };
+
+  const updateTimeSeriesChart = (chart, canvas, series) => {
+    const chartCtor = getChartConstructor();
+    if (!canvas || !chartCtor) return chart;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return chart;
+
+    if (!chart) {
+      return new chartCtor(ctx, {
+        type: 'line',
+        data: {
+          labels: series.labels,
+          datasets: [{
+            label: 'Events',
+            data: series.data,
+            fill: true,
+            tension: 0.4,
+            borderWidth: 0,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            borderColor: 'rgba(0, 0, 0, 0)',
+            backgroundColor: CHART_PALETTE[0]
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { stepSize: 1 }
+            }
+          },
+          plugins: { legend: { display: false } }
+        }
+      });
+    }
+
+    if (sameSeries(chart, series.labels, series.data)) return chart;
+    chart.data.labels = series.labels;
+    chart.data.datasets[0].data = series.data;
+    chart.update();
+    return chart;
+  };
+
+  function selectTimeRange(range) {
+    if (!TIME_RANGES.includes(range)) return;
+    if (selectedTimeRange === range) return;
+    selectedTimeRange = range;
+    if (!shouldFetchRange(range)) return;
+    if (rangeEventsSnapshot.range === range) return;
+    lastRequestedRange = '';
+  }
+
+  function abortRangeEventsFetch() {
+    if (!rangeEventsAbortController) return;
+    rangeEventsAbortController.abort();
+    rangeEventsAbortController = null;
+  }
+
+  async function fetchRangeEvents(range) {
+    if (!browser || !shouldFetchRange(range)) return;
+    const hours = hoursForRange(range);
+    if (!Number.isFinite(hours)) return;
+    if (typeof onFetchEventsRange !== 'function') {
+      rangeEventsSnapshot = { range, recent_events: [] };
+      return;
+    }
+    abortRangeEventsFetch();
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => {
+      abortController.abort();
+    }, RANGE_EVENTS_REQUEST_TIMEOUT_MS);
+    rangeEventsAbortController = abortController;
+    try {
+      const payload = await onFetchEventsRange(hours, {
+        signal: abortController.signal
+      });
+      if (rangeEventsAbortController !== abortController) return;
+      rangeEventsSnapshot = {
+        range,
+        recent_events: Array.isArray(payload?.recent_events)
+          ? payload.recent_events.slice(0, RANGE_EVENTS_FETCH_LIMIT)
+          : []
+      };
+    } catch (error) {
+      if (error && error.name === 'AbortError') return;
+      if (rangeEventsAbortController !== abortController) return;
+      rangeEventsSnapshot = { range, recent_events: [] };
+    } finally {
+      clearTimeout(timeoutId);
+      if (rangeEventsAbortController === abortController) {
+        rangeEventsAbortController = null;
+      }
+    }
+  }
 
   $: analytics = analyticsSnapshot && typeof analyticsSnapshot === 'object' ? analyticsSnapshot : {};
   $: events = eventsSnapshot && typeof eventsSnapshot === 'object' ? eventsSnapshot : {};
@@ -208,7 +513,6 @@
   $: uniqueIps = Number.isFinite(Number(events.unique_ips))
     ? Number(events.unique_ips)
     : (Array.isArray(events.top_ips) ? events.top_ips.length : 0);
-  $: testModeEnabled = analytics.test_mode === true;
 
   $: cdpDetections = Number(cdp?.stats?.total_detections || 0);
   $: cdpAutoBans = Number(cdp?.stats?.auto_bans || 0);
@@ -232,11 +536,41 @@
     CHALLENGE_REASON_LABELS
   );
   $: powReasonRows = normalizeReasonRows(monitoringSummary.pow.reasons, POW_REASON_LABELS);
+  $: powOutcomeRows = normalizePairRows(monitoringSummary.pow.outcomes, POW_OUTCOME_LABELS);
   $: rateOutcomeRows = normalizePairRows(monitoringSummary.rate.outcomes, RATE_OUTCOME_LABELS);
   $: geoTopCountries = normalizeTopCountries(monitoringSummary.geo.topCountries);
 
-  $: challengeTrendSeries = monitoringSummary.challenge.trend || { labels: [], data: [] };
-  $: powTrendSeries = monitoringSummary.pow.trend || { labels: [], data: [] };
+  $: challengeTrendSeries = normalizeTrendSeries(monitoringSummary.challenge.trend);
+  $: powTrendSeries = normalizeTrendSeries(monitoringSummary.pow.trend);
+
+  $: defaultRangeEvents = Array.isArray(events.recent_events)
+    ? events.recent_events.slice(0, RANGE_EVENTS_FETCH_LIMIT)
+    : [];
+  $: selectedRangeEvents = shouldFetchRange(selectedTimeRange)
+    ? (rangeEventsSnapshot.range === selectedTimeRange ? rangeEventsSnapshot.recent_events : [])
+    : defaultRangeEvents;
+  $: timeSeries = buildTimeSeries(selectedRangeEvents, selectedTimeRange);
+
+  $: if (browser && !isActive) {
+    abortRangeEventsFetch();
+  }
+
+  $: if (browser && isActive && shouldFetchRange(selectedTimeRange) && lastRequestedRange !== selectedTimeRange) {
+    lastRequestedRange = selectedTimeRange;
+    void fetchRangeEvents(selectedTimeRange);
+  }
+
+  $: if (browser && eventTypesCanvas) {
+    eventTypesChart = updateDoughnutChart(eventTypesChart, eventTypesCanvas, events.event_counts || {});
+  }
+
+  $: if (browser && topIpsCanvas) {
+    topIpsChart = updateTopIpsChart(topIpsChart, topIpsCanvas, events.top_ips || []);
+  }
+
+  $: if (browser && timeSeriesCanvas) {
+    timeSeriesChart = updateTimeSeriesChart(timeSeriesChart, timeSeriesCanvas, timeSeries);
+  }
 
   $: if (browser && challengeTrendCanvas) {
     challengeTrendChart = updateTrendChart(
@@ -261,12 +595,25 @@
   onDestroy(() => {
     copyButtonTimer = clearTimer(copyButtonTimer);
     copyCurlButtonTimer = clearTimer(copyCurlButtonTimer);
+    abortRangeEventsFetch();
+    if (eventTypesChart && typeof eventTypesChart.destroy === 'function') {
+      eventTypesChart.destroy();
+    }
+    if (topIpsChart && typeof topIpsChart.destroy === 'function') {
+      topIpsChart.destroy();
+    }
+    if (timeSeriesChart && typeof timeSeriesChart.destroy === 'function') {
+      timeSeriesChart.destroy();
+    }
     if (challengeTrendChart && typeof challengeTrendChart.destroy === 'function') {
       challengeTrendChart.destroy();
     }
     if (powTrendChart && typeof powTrendChart.destroy === 'function') {
       powTrendChart.destroy();
     }
+    eventTypesChart = null;
+    topIpsChart = null;
+    timeSeriesChart = null;
     challengeTrendChart = null;
     powTrendChart = null;
   });
@@ -283,376 +630,82 @@
 >
   <TabStateMessage tab="monitoring" status={tabStatus} />
 
-  <div class="stats-cards">
-    <StatCard title="Total Bans">
-      <div class="stat-value" id="total-bans">{tabStatus?.loading ? '...' : totalBans.toLocaleString()}</div>
-    </StatCard>
-    <StatCard title="Active Bans">
-      <div class="stat-value" id="active-bans">{tabStatus?.loading ? '...' : activeBans.toLocaleString()}</div>
-    </StatCard>
-    <StatCard title="Events (24h)">
-      <div class="stat-value" id="total-events">{tabStatus?.loading ? '...' : eventCount.toLocaleString()}</div>
-    </StatCard>
-    <StatCard title="Unique IPs">
-      <div class="stat-value" id="unique-ips">{tabStatus?.loading ? '...' : uniqueIps.toLocaleString()}</div>
-    </StatCard>
-  </div>
+  <OverviewStats
+    loading={tabStatus?.loading === true}
+    {totalBans}
+    {activeBans}
+    {eventCount}
+    {uniqueIps}
+  />
 
-  <div class="charts-row">
-    <div class="chart-container panel-soft panel-border pad-md">
-      <h2>Event Types (24h)</h2>
-      <canvas id="eventTypesChart"></canvas>
-    </div>
-    <div class="chart-container panel-soft panel-border pad-md">
-      <h2>Top 10 IPs by Events</h2>
-      <canvas id="topIpsChart"></canvas>
-    </div>
-  </div>
+  <PrimaryCharts
+    {selectedTimeRange}
+    onSelectTimeRange={selectTimeRange}
+    bind:eventTypesCanvas
+    bind:topIpsCanvas
+    bind:timeSeriesCanvas
+  />
 
-  <div class="section">
-    <h2>Events Over Time</h2>
-    <p class="section-desc text-muted">Recent events plotted over various time windows</p>
-    <div class="chart-header">
-      <div class="time-range-buttons">
-        <button class="btn time-btn active" data-range="hour">60 Mins</button>
-        <button class="btn time-btn" data-range="day">24 Hours</button>
-        <button class="btn time-btn" data-range="week">7 Days</button>
-        <button class="btn time-btn" data-range="month">30 Days</button>
-      </div>
-    </div>
-    <div class="chart-container panel-soft panel-border pad-md">
-      <canvas id="timeSeriesChart"></canvas>
-    </div>
-  </div>
+  <RecentEventsTable
+    {recentEvents}
+    {formatTime}
+    {eventBadgeClass}
+  />
 
-  <div class="section events">
-    <h2>Recent Events</h2>
-    <p class="section-desc text-muted">Last 100 recorded events</p>
-    <TableWrapper>
-      <table id="events" class="panel panel-border">
-        <thead>
-          <tr>
-            <th class="caps-label">Time</th>
-            <th class="caps-label">Type</th>
-            <th class="caps-label">IP</th>
-            <th class="caps-label">Reason</th>
-            <th class="caps-label">Outcome</th>
-            <th class="caps-label">Admin</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#if recentEvents.length === 0}
-            <tr><td colspan="6" style="text-align: center; color: #6b7280;">No recent events</td></tr>
-          {:else}
-            {#each recentEvents as ev}
-              <tr>
-                <td>{formatTime(ev.ts)}</td>
-                <td><span class={eventBadgeClass(ev.event)}>{ev.event || '-'}</span></td>
-                <td><code>{ev.ip || '-'}</code></td>
-                <td>{ev.reason || '-'}</td>
-                <td>{ev.outcome || '-'}</td>
-                <td>{ev.admin || '-'}</td>
-              </tr>
-            {/each}
-          {/if}
-        </tbody>
-      </table>
-    </TableWrapper>
-  </div>
+  <CdpSection
+    loading={tabStatus?.loading === true}
+    {cdpDetections}
+    {cdpAutoBans}
+    {cdpFingerprintEvents}
+    {cdpFingerprintFlowViolations}
+    {recentCdpEvents}
+    {formatTime}
+    {readCdpField}
+  />
 
-  <div class="section events">
-    <h2>CDP Detections</h2>
-    <p class="section-desc text-muted">Browser automation detection and bans in the last 24hrs</p>
-    <div class="stats-cards stats-cards--compact">
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label">Total Detections</h3>
-        <div class="stat-value stat-value" id="cdp-total-detections">{tabStatus?.loading ? '...' : cdpDetections.toLocaleString()}</div>
-      </div>
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label">Auto-Bans</h3>
-        <div class="stat-value stat-value" id="cdp-total-auto-bans">{tabStatus?.loading ? '...' : cdpAutoBans.toLocaleString()}</div>
-      </div>
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label">FP Mismatch Events</h3>
-        <div class="stat-value stat-value" id="cdp-fp-events">{tabStatus?.loading ? '...' : cdpFingerprintEvents.toLocaleString()}</div>
-      </div>
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label">FP Flow Violations</h3>
-        <div class="stat-value stat-value" id="cdp-fp-flow-violations">{tabStatus?.loading ? '...' : cdpFingerprintFlowViolations.toLocaleString()}</div>
-      </div>
-    </div>
-    <div class="table-wrapper">
-      <table id="cdp-events" class="panel panel-border">
-        <thead>
-          <tr>
-            <th class="caps-label">Time</th>
-            <th class="caps-label">IP</th>
-            <th class="caps-label">Type</th>
-            <th class="caps-label">Tier</th>
-            <th class="caps-label">Score</th>
-            <th class="caps-label">Details</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#if recentCdpEvents.length === 0}
-            <tr><td colspan="6" style="text-align: center; color: #6b7280;">No CDP detections or auto-bans in the selected window</td></tr>
-          {:else}
-            {#each recentCdpEvents as ev}
-              {@const reason = String(ev.reason || '')}
-              {@const outcome = String(ev.outcome || '-')}
-              {@const isBan = reason.toLowerCase() === 'cdp_automation'}
-              {@const tierSource = isBan ? outcome : reason}
-              {@const tier = readCdpField(tierSource, 'tier').toUpperCase()}
-              {@const score = readCdpField(tierSource, 'score')}
-              {@const details = isBan
-                ? `Auto-ban: ${outcome}`
-                : (outcome.toLowerCase().startsWith('checks:') ? outcome.replace(/^checks:/i, 'Checks: ') : outcome)}
-              <tr>
-                <td>{formatTime(ev.ts)}</td>
-                <td><code>{ev.ip || '-'}</code></td>
-                <td><span class={`badge ${isBan ? 'ban' : 'challenge'}`}>{isBan ? 'BAN' : 'DETECTION'}</span></td>
-                <td>{tier}</td>
-                <td>{score}</td>
-                <td>{details}</td>
-              </tr>
-            {/each}
-          {/if}
-        </tbody>
-      </table>
-    </div>
-  </div>
+  <MazeSection
+    loading={tabStatus?.loading === true}
+    {mazeStats}
+  />
 
-  <div class="section events">
-    <h2>Maze</h2>
-    <p class="section-desc text-muted">Crawlers trapped in infinite fake pages</p>
-    <div class="stats-cards stats-cards--compact">
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label">Total Hits</h3>
-        <span class="stat-value" id="maze-total-hits">{tabStatus?.loading ? '...' : mazeStats.totalHits}</span>
-      </div>
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label">Unique Crawlers</h3>
-        <span class="stat-value" id="maze-unique-crawlers">{tabStatus?.loading ? '...' : mazeStats.uniqueCrawlers}</span>
-      </div>
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label">Auto-Banned</h3>
-        <span class="stat-value" id="maze-auto-bans">{tabStatus?.loading ? '...' : mazeStats.mazeAutoBans}</span>
-      </div>
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label" id="maze-top-offender-label">{tabStatus?.loading ? 'Top Offender' : mazeStats.topOffender.label}</h3>
-        <span class="stat-value" id="maze-top-offender">{tabStatus?.loading ? '...' : mazeStats.topOffender.value}</span>
-      </div>
-    </div>
-  </div>
+  <HoneypotSection
+    loading={tabStatus?.loading === true}
+    honeypot={monitoringSummary.honeypot}
+    topPaths={honeypotTopPaths}
+  />
 
-  <div class="section events">
-    <h2>Honeypot Hits</h2>
-    <p class="section-desc text-muted">Structured honeypot telemetry (hits, offender buckets, and trap paths).</p>
-    <div class="stats-cards stats-cards--compact">
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label">Total Hits</h3>
-        <span class="stat-value" id="honeypot-total-hits">{tabStatus?.loading ? '...' : monitoringSummary.honeypot.totalHits}</span>
-      </div>
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label">Unique Crawlers</h3>
-        <span class="stat-value" id="honeypot-unique-crawlers">{tabStatus?.loading ? '...' : monitoringSummary.honeypot.uniqueCrawlers}</span>
-      </div>
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label" id="honeypot-top-offender-label">{tabStatus?.loading ? 'Top Offender' : monitoringSummary.honeypot.topOffender.label}</h3>
-        <span class="stat-value" id="honeypot-top-offender">{tabStatus?.loading ? '...' : monitoringSummary.honeypot.topOffender.value}</span>
-      </div>
-    </div>
-    <div class="panel panel-border pad-md">
-      <h3>Top Honeypot Paths</h3>
-      <div id="honeypot-top-paths" class="crawler-list">
-        {#if honeypotTopPaths.length === 0}
-          <p class="no-data">No honeypot path data yet</p>
-        {:else}
-          {#each honeypotTopPaths as row}
-            <div class="crawler-item panel panel-border">
-              <span class="crawler-ip">{row.path}</span>
-              <span class="crawler-hits">{row.count.toLocaleString()} hits</span>
-            </div>
-          {/each}
-        {/if}
-      </div>
-    </div>
-  </div>
+  <ChallengeSection
+    loading={tabStatus?.loading === true}
+    challengeSummary={monitoringSummary.challenge}
+    {challengeReasonRows}
+    bind:challengeTrendCanvas
+  />
 
-  <div class="section events">
-    <h2>Challenge Failures</h2>
-    <p class="section-desc text-muted">Challenge submit failures by reason class with trend and top offender.</p>
-    <div class="stats-cards stats-cards--compact">
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label">Total Failures</h3>
-        <div class="stat-value" id="challenge-failures-total">{tabStatus?.loading ? '...' : monitoringSummary.challenge.totalFailures}</div>
-      </div>
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label">Unique Offenders</h3>
-        <div class="stat-value" id="challenge-failures-unique">{tabStatus?.loading ? '...' : monitoringSummary.challenge.uniqueOffenders}</div>
-      </div>
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label" id="challenge-top-offender-label">{tabStatus?.loading ? 'Top Offender' : monitoringSummary.challenge.topOffender.label}</h3>
-        <div class="stat-value" id="challenge-top-offender">{tabStatus?.loading ? '...' : monitoringSummary.challenge.topOffender.value}</div>
-      </div>
-    </div>
-    <div class="chart-container panel-soft panel-border pad-md">
-      <canvas id="challengeFailuresTrendChart" bind:this={challengeTrendCanvas}></canvas>
-    </div>
-    <div class="panel panel-border pad-md">
-      <div class="table-wrapper">
-        <table class="panel panel-border">
-          <thead>
-            <tr>
-              <th class="caps-label">Reason</th>
-              <th class="caps-label">Count</th>
-            </tr>
-          </thead>
-          <tbody id="challenge-failure-reasons">
-            {#if challengeReasonRows.length === 0}
-              <tr><td colspan="2" style="text-align: center; color: #6b7280;">No failures in window</td></tr>
-            {:else}
-              {#each challengeReasonRows as row}
-                <tr>
-                  <td>{row.label}</td>
-                  <td>{row.count.toLocaleString()}</td>
-                </tr>
-              {/each}
-            {/if}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
+  <PowSection
+    loading={tabStatus?.loading === true}
+    powSummary={monitoringSummary.pow}
+    {powReasonRows}
+    {powOutcomeRows}
+    bind:powTrendCanvas
+  />
 
-  <div class="section events">
-    <h2>PoW Failures</h2>
-    <p class="section-desc text-muted">PoW verification failures by reason class with trend and top offender.</p>
-    <div class="stats-cards stats-cards--compact">
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label">Total Failures</h3>
-        <div class="stat-value" id="pow-failures-total">{tabStatus?.loading ? '...' : monitoringSummary.pow.totalFailures}</div>
-      </div>
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label">Unique Offenders</h3>
-        <div class="stat-value" id="pow-failures-unique">{tabStatus?.loading ? '...' : monitoringSummary.pow.uniqueOffenders}</div>
-      </div>
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label" id="pow-top-offender-label">{tabStatus?.loading ? 'Top Offender' : monitoringSummary.pow.topOffender.label}</h3>
-        <div class="stat-value" id="pow-top-offender">{tabStatus?.loading ? '...' : monitoringSummary.pow.topOffender.value}</div>
-      </div>
-    </div>
-    <div class="chart-container panel-soft panel-border pad-md">
-      <canvas id="powFailuresTrendChart" bind:this={powTrendCanvas}></canvas>
-    </div>
-    <div class="panel panel-border pad-md">
-      <div class="table-wrapper">
-        <table class="panel panel-border">
-          <thead>
-            <tr>
-              <th class="caps-label">Reason</th>
-              <th class="caps-label">Count</th>
-            </tr>
-          </thead>
-          <tbody id="pow-failure-reasons">
-            {#if powReasonRows.length === 0}
-              <tr><td colspan="2" style="text-align: center; color: #6b7280;">No failures in window</td></tr>
-            {:else}
-              {#each powReasonRows as row}
-                <tr>
-                  <td>{row.label}</td>
-                  <td>{row.count.toLocaleString()}</td>
-                </tr>
-              {/each}
-            {/if}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
+  <RateSection
+    loading={tabStatus?.loading === true}
+    rateSummary={monitoringSummary.rate}
+    {rateOutcomeRows}
+  />
 
-  <div class="section events">
-    <h2>Rate Limiting Violations</h2>
-    <p class="section-desc text-muted">Rate-limit outcomes and top offender bucket.</p>
-    <div class="stats-cards stats-cards--compact">
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label">Total Violations</h3>
-        <div class="stat-value" id="rate-violations-total">{tabStatus?.loading ? '...' : monitoringSummary.rate.totalViolations}</div>
-      </div>
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label">Unique Offenders</h3>
-        <div class="stat-value" id="rate-violations-unique">{tabStatus?.loading ? '...' : monitoringSummary.rate.uniqueOffenders}</div>
-      </div>
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label" id="rate-top-offender-label">{tabStatus?.loading ? 'Top Offender' : monitoringSummary.rate.topOffender.label}</h3>
-        <div class="stat-value" id="rate-top-offender">{tabStatus?.loading ? '...' : monitoringSummary.rate.topOffender.value}</div>
-      </div>
-    </div>
-    <div class="panel panel-border pad-md">
-      <h3>Enforcement Outcomes</h3>
-      <ul id="rate-outcomes-list" class="metric-list">
-        {#if rateOutcomeRows.length === 0}
-          <li class="text-muted">No outcomes yet</li>
-        {:else}
-          {#each rateOutcomeRows as row}
-            <li><strong>{row.label}:</strong> {row.count.toLocaleString()}</li>
-          {/each}
-        {/if}
-      </ul>
-    </div>
-  </div>
+  <GeoSection
+    loading={tabStatus?.loading === true}
+    geoSummary={monitoringSummary.geo}
+    {geoTopCountries}
+  />
 
-  <div class="section events">
-    <h2>GEO Violations</h2>
-    <p class="section-desc text-muted">GEO policy actions by route and top country sources.</p>
-    <div class="stats-cards stats-cards--compact">
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label">Total Violations</h3>
-        <div class="stat-value" id="geo-violations-total">{tabStatus?.loading ? '...' : monitoringSummary.geo.totalViolations}</div>
-      </div>
-      <div class="card panel panel-border pad-md">
-        <h3 class="caps-label">Action Mix</h3>
-        <div class="stat-value stat-value--small" id="geo-action-mix">block {monitoringSummary.geo.actionMix.block} | challenge {monitoringSummary.geo.actionMix.challenge} | maze {monitoringSummary.geo.actionMix.maze}</div>
-      </div>
-    </div>
-    <div class="panel panel-border pad-md">
-      <h3>Top Countries Triggering GEO Actions</h3>
-      <div id="geo-top-countries" class="crawler-list">
-        {#if geoTopCountries.length === 0}
-          <p class="no-data">No GEO violations yet</p>
-        {:else}
-          {#each geoTopCountries as row}
-            <div class="crawler-item panel panel-border">
-              <span class="crawler-ip">{row.country}</span>
-              <span class="crawler-hits">{row.count.toLocaleString()} actions</span>
-            </div>
-          {/each}
-        {/if}
-      </div>
-    </div>
-  </div>
-
-  <div class="section panel panel-border pad-md">
-    <h2>External Monitoring</h2>
-    <ul id="monitoring-prometheus-facts" class="prometheus-facts text-muted">
-      {#each prometheusHelper.facts as fact}
-        <li>{fact}</li>
-      {/each}
-    </ul>
-    <h3 class="caps-label">1) Fetch Full Prometheus Text Payload (Javascript)</h3>
-    <pre id="monitoring-prometheus-example" class="prometheus-example prometheus-example--code">{prometheusHelper.exampleJs}</pre>
-    <div class="prometheus-copy-actions">
-      <button id="monitoring-prometheus-copy" class="btn btn-subtle" type="button" on:click={() => copyToClipboard(prometheusHelper.exampleJs, 'js')}>{copyButtonLabel}</button>
-      <button id="monitoring-prometheus-copy-curl" class="btn btn-subtle" type="button" data-copy-text={prometheusHelper.copyCurlText} on:click={() => copyToClipboard(prometheusHelper.copyCurlText, 'curl')}>{copyCurlButtonLabel}</button>
-    </div>
-    <h3 class="caps-label">2) Example Prometheus Text Payload (Truncated Output)</h3>
-    <pre id="monitoring-prometheus-output" class="prometheus-example prometheus-example--output">{prometheusHelper.exampleOutput}</pre>
-    <h3 class="caps-label">3) Read Selected Metrics From Prometheus Text Payload (Javascript)</h3>
-    <pre id="monitoring-prometheus-stats" class="prometheus-example prometheus-example--code">{prometheusHelper.exampleStats}</pre>
-    <h3 class="caps-label">4) Request JSON Format Bounded Summary &#123;<code>hours</code>/<code>limit</code>&#125; (Javascript)</h3>
-    <pre id="monitoring-prometheus-windowed" class="prometheus-example prometheus-example--code">{prometheusHelper.exampleWindowed}</pre>
-    <h3 class="caps-label">5) Read Specific Summary Stats from JSON. (Javascript)</h3>
-    <pre id="monitoring-prometheus-summary-stats" class="prometheus-example prometheus-example--code">{prometheusHelper.exampleSummaryStats}</pre>
-    <p class="section-desc text-muted">Detailed docs: <a id="monitoring-prometheus-observability-link" href={prometheusHelper.observabilityLink || 'https://github.com/atomless/Shuma-Gorath/blob/main/docs/observability.md'} target="_blank" rel="noopener noreferrer">Observability</a> and <a id="monitoring-prometheus-api-link" href={prometheusHelper.apiLink || 'https://github.com/atomless/Shuma-Gorath/blob/main/docs/api.md'} target="_blank" rel="noopener noreferrer">API</a>.</p>
-  </div>
+  <ExternalMonitoringSection
+    {prometheusHelper}
+    {copyButtonLabel}
+    copyCurlButtonLabel={copyCurlButtonLabel}
+    onCopyJs={(text) => copyToClipboard(text, 'js')}
+    onCopyCurl={(text) => copyToClipboard(text, 'curl')}
+  />
 </section>

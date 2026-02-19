@@ -22,6 +22,7 @@ const POW_REASON_KEYS: [&str; 5] = [
     "expired_replay",
     "binding_timing_mismatch",
 ];
+const POW_OUTCOME_KEYS: [&str; 2] = ["success", "failure"];
 const RATE_OUTCOME_KEYS: [&str; 4] = ["limited", "banned", "fallback_allow", "fallback_deny"];
 const GEO_ACTION_KEYS: [&str; 3] = ["block", "challenge", "maze"];
 
@@ -58,10 +59,24 @@ pub(crate) struct FailureSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
+pub(crate) struct PowSummary {
+    pub total_failures: u64,
+    pub total_successes: u64,
+    pub total_attempts: u64,
+    pub success_ratio: f64,
+    pub unique_offenders: u64,
+    pub top_offenders: Vec<CountEntry>,
+    pub reasons: BTreeMap<String, u64>,
+    pub outcomes: BTreeMap<String, u64>,
+    pub trend: Vec<TrendPoint>,
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
 pub(crate) struct RateSummary {
     pub total_violations: u64,
     pub unique_offenders: u64,
     pub top_offenders: Vec<CountEntry>,
+    pub top_paths: Vec<CountEntry>,
     pub outcomes: BTreeMap<String, u64>,
 }
 
@@ -78,7 +93,7 @@ pub(crate) struct MonitoringSummary {
     pub hours: u64,
     pub honeypot: HoneypotSummary,
     pub challenge: FailureSummary,
-    pub pow: FailureSummary,
+    pub pow: PowSummary,
     pub rate: RateSummary,
     pub geo: GeoSummary,
 }
@@ -298,13 +313,20 @@ pub(crate) fn record_pow_failure<S: crate::challenge::KeyValueStore>(
     let normalized_reason = normalize_pow_reason(reason);
     let ip_bucket = crate::signals::ip_identity::bucket_ip(ip);
     record_with_dimension(store, "pow", "total", None);
+    record_with_dimension(store, "pow", "outcome", Some("failure"));
     record_with_dimension(store, "pow", "reason", Some(normalized_reason));
     record_with_dimension(store, "pow", "ip", Some(ip_bucket.as_str()));
 }
 
-pub(crate) fn record_rate_violation<S: crate::challenge::KeyValueStore>(
+pub(crate) fn record_pow_success<S: crate::challenge::KeyValueStore>(store: &S) {
+    record_with_dimension(store, "pow", "success", None);
+    record_with_dimension(store, "pow", "outcome", Some("success"));
+}
+
+pub(crate) fn record_rate_violation_with_path<S: crate::challenge::KeyValueStore>(
     store: &S,
     ip: &str,
+    path: Option<&str>,
     outcome: &str,
 ) {
     let normalized_outcome = normalize_rate_outcome(outcome);
@@ -312,6 +334,10 @@ pub(crate) fn record_rate_violation<S: crate::challenge::KeyValueStore>(
     record_with_dimension(store, "rate", "total", None);
     record_with_dimension(store, "rate", "outcome", Some(normalized_outcome));
     record_with_dimension(store, "rate", "ip", Some(ip_bucket.as_str()));
+    if let Some(raw_path) = path {
+        let normalized_path = normalize_telemetry_path(raw_path);
+        record_with_dimension(store, "rate", "path", Some(normalized_path.as_str()));
+    }
 }
 
 pub(crate) fn record_rate_outcome<S: crate::challenge::KeyValueStore>(store: &S, outcome: &str) {
@@ -409,12 +435,15 @@ pub(crate) fn summarize_with_store<S: crate::challenge::KeyValueStore>(
     let mut challenge_trend = TrendAccumulator::default();
 
     let mut pow_total = 0u64;
+    let mut pow_success_total = 0u64;
     let mut pow_ip_counts: HashMap<String, u64> = HashMap::new();
     let mut pow_reason_counts: HashMap<String, u64> = HashMap::new();
+    let mut pow_outcomes: HashMap<String, u64> = HashMap::new();
     let mut pow_trend = TrendAccumulator::default();
 
     let mut rate_total = 0u64;
     let mut rate_ip_counts: HashMap<String, u64> = HashMap::new();
+    let mut rate_path_counts: HashMap<String, u64> = HashMap::new();
     let mut rate_outcomes: HashMap<String, u64> = HashMap::new();
 
     let mut geo_total = 0u64;
@@ -490,6 +519,9 @@ pub(crate) fn summarize_with_store<S: crate::challenge::KeyValueStore>(
                         let entry = pow_trend.totals.entry(hour).or_insert(0);
                         *entry = entry.saturating_add(count);
                     }
+                    "success" => {
+                        pow_success_total = pow_success_total.saturating_add(count);
+                    }
                     "ip" => {
                         if let Some(dim) = dimension {
                             let entry = pow_ip_counts.entry(dim).or_insert(0);
@@ -506,6 +538,12 @@ pub(crate) fn summarize_with_store<S: crate::challenge::KeyValueStore>(
                             *reason_entry = reason_entry.saturating_add(count);
                         }
                     }
+                    "outcome" => {
+                        if let Some(dim) = dimension {
+                            let entry = pow_outcomes.entry(dim).or_insert(0);
+                            *entry = entry.saturating_add(count);
+                        }
+                    }
                     _ => {}
                 },
                 "rate" => match metric.as_str() {
@@ -513,6 +551,12 @@ pub(crate) fn summarize_with_store<S: crate::challenge::KeyValueStore>(
                     "ip" => {
                         if let Some(dim) = dimension {
                             let entry = rate_ip_counts.entry(dim).or_insert(0);
+                            *entry = entry.saturating_add(count);
+                        }
+                    }
+                    "path" => {
+                        if let Some(dim) = dimension {
+                            let entry = rate_path_counts.entry(dim).or_insert(0);
                             *entry = entry.saturating_add(count);
                         }
                     }
@@ -557,6 +601,22 @@ pub(crate) fn summarize_with_store<S: crate::challenge::KeyValueStore>(
         *entry = entry.saturating_add(value);
     }
 
+    let mut pow_outcome_map = build_seeded_map(&POW_OUTCOME_KEYS);
+    for (key, value) in pow_outcomes {
+        let entry = pow_outcome_map.entry(key).or_insert(0);
+        *entry = entry.saturating_add(value);
+    }
+    let pow_outcome_failures = pow_outcome_map.get("failure").copied().unwrap_or(0);
+    let pow_outcome_successes = pow_outcome_map.get("success").copied().unwrap_or(0);
+    let pow_total_failures = pow_total.max(pow_outcome_failures);
+    let pow_total_successes = pow_success_total.max(pow_outcome_successes);
+    let pow_total_attempts = pow_total_failures.saturating_add(pow_total_successes);
+    let pow_success_ratio = if pow_total_attempts == 0 {
+        0.0
+    } else {
+        pow_total_successes as f64 / pow_total_attempts as f64
+    };
+
     let mut rate_outcome_map = build_seeded_map(&RATE_OUTCOME_KEYS);
     for (key, value) in rate_outcomes {
         let entry = rate_outcome_map.entry(key).or_insert(0);
@@ -585,17 +645,22 @@ pub(crate) fn summarize_with_store<S: crate::challenge::KeyValueStore>(
             reasons: challenge_reason_map,
             trend: build_trend(start_hour, end_hour, &CHALLENGE_REASON_KEYS, challenge_trend),
         },
-        pow: FailureSummary {
-            total_failures: pow_total,
+        pow: PowSummary {
+            total_failures: pow_total_failures,
+            total_successes: pow_total_successes,
+            total_attempts: pow_total_attempts,
+            success_ratio: pow_success_ratio,
             unique_offenders: pow_ip_counts.len() as u64,
             top_offenders: top_entries(&pow_ip_counts, top_limit),
             reasons: pow_reason_map,
+            outcomes: pow_outcome_map,
             trend: build_trend(start_hour, end_hour, &POW_REASON_KEYS, pow_trend),
         },
         rate: RateSummary {
             total_violations: rate_total,
             unique_offenders: rate_ip_counts.len() as u64,
             top_offenders: top_entries(&rate_ip_counts, top_limit),
+            top_paths: top_entries(&rate_path_counts, top_limit),
             outcomes: rate_outcome_map,
         },
         geo: GeoSummary {
@@ -604,6 +669,19 @@ pub(crate) fn summarize_with_store<S: crate::challenge::KeyValueStore>(
             top_countries: top_entries(&geo_countries, top_limit),
         },
     }
+}
+
+pub(crate) fn summarize_metrics_window<S: crate::challenge::KeyValueStore>(
+    store: &S,
+) -> MonitoringSummary {
+    let retention_hours = event_log_retention_hours();
+    // Keep Prometheus monitoring parity aligned with dashboard default 24h summaries.
+    let hours = if retention_hours == 0 {
+        24
+    } else {
+        retention_hours.min(24)
+    };
+    summarize_with_store(store, hours, MAX_TOP_LIMIT)
 }
 
 #[cfg(test)]
@@ -720,6 +798,33 @@ mod tests {
             .as_str(),
             2,
         );
+        let rate_ip = encode_dim("203.0.113.0");
+        let rate_path = encode_dim("/checkout");
+        let rate_outcome = encode_dim("limited");
+        set_counter(
+            &store,
+            format!("{}:rate:total:{}", MONITORING_PREFIX, now_hour).as_str(),
+            4,
+        );
+        set_counter(
+            &store,
+            format!("{}:rate:ip:{}:{}", MONITORING_PREFIX, rate_ip, now_hour).as_str(),
+            4,
+        );
+        set_counter(
+            &store,
+            format!("{}:rate:path:{}:{}", MONITORING_PREFIX, rate_path, now_hour).as_str(),
+            4,
+        );
+        set_counter(
+            &store,
+            format!(
+                "{}:rate:outcome:{}:{}",
+                MONITORING_PREFIX, rate_outcome, now_hour
+            )
+            .as_str(),
+            4,
+        );
 
         let summary = summarize_with_store(&store, 24, 10);
         assert_eq!(summary.honeypot.total_hits, 3);
@@ -732,5 +837,127 @@ mod tests {
         );
         assert_eq!(summary.challenge.unique_offenders, 1);
         assert_eq!(summary.challenge.trend.last().map(|v| v.total), Some(2));
+        assert_eq!(summary.rate.total_violations, 4);
+        assert_eq!(summary.rate.unique_offenders, 1);
+        assert_eq!(
+            summary.rate.top_paths.first().map(|v| (v.label.as_str(), v.count)),
+            Some(("/checkout", 4))
+        );
+        assert_eq!(
+            summary.rate.outcomes.get("limited").copied().unwrap_or(0),
+            4
+        );
+    }
+
+    #[test]
+    fn summarize_aggregates_pow_outcomes_and_ratio() {
+        let store = MockStore::default();
+        let now_hour = now_ts() / 3600;
+        let pow_ip = encode_dim("198.51.100.9");
+        let pow_reason = encode_dim("invalid_proof");
+        let pow_outcome_success = encode_dim("success");
+        let pow_outcome_failure = encode_dim("failure");
+
+        set_counter(
+            &store,
+            format!("{}:pow:total:{}", MONITORING_PREFIX, now_hour).as_str(),
+            3,
+        );
+        set_counter(
+            &store,
+            format!("{}:pow:success:{}", MONITORING_PREFIX, now_hour).as_str(),
+            9,
+        );
+        set_counter(
+            &store,
+            format!("{}:pow:ip:{}:{}", MONITORING_PREFIX, pow_ip, now_hour).as_str(),
+            3,
+        );
+        set_counter(
+            &store,
+            format!("{}:pow:reason:{}:{}", MONITORING_PREFIX, pow_reason, now_hour).as_str(),
+            3,
+        );
+        set_counter(
+            &store,
+            format!(
+                "{}:pow:outcome:{}:{}",
+                MONITORING_PREFIX, pow_outcome_success, now_hour
+            )
+            .as_str(),
+            9,
+        );
+        set_counter(
+            &store,
+            format!(
+                "{}:pow:outcome:{}:{}",
+                MONITORING_PREFIX, pow_outcome_failure, now_hour
+            )
+            .as_str(),
+            3,
+        );
+
+        let summary = summarize_with_store(&store, 24, 10);
+        assert_eq!(summary.pow.total_failures, 3);
+        assert_eq!(summary.pow.total_successes, 9);
+        assert_eq!(summary.pow.total_attempts, 12);
+        assert!((summary.pow.success_ratio - 0.75).abs() < 0.000_001);
+        assert_eq!(summary.pow.unique_offenders, 1);
+        assert_eq!(summary.pow.reasons.get("invalid_proof").copied().unwrap_or(0), 3);
+        assert_eq!(summary.pow.outcomes.get("success").copied().unwrap_or(0), 9);
+        assert_eq!(summary.pow.outcomes.get("failure").copied().unwrap_or(0), 3);
+    }
+
+    #[test]
+    fn summarize_enforces_top_limit_and_window_bounds() {
+        let store = MockStore::default();
+        let now_hour = now_ts() / 3600;
+        let old_hour = now_hour.saturating_sub(72);
+
+        set_counter(
+            &store,
+            format!("{}:honeypot:total:{}", MONITORING_PREFIX, old_hour).as_str(),
+            900,
+        );
+        set_counter(
+            &store,
+            format!("{}:honeypot:total:{}", MONITORING_PREFIX, now_hour).as_str(),
+            7,
+        );
+
+        for index in 0..70usize {
+            let ip = encode_dim(format!("198.51.100.{}", index).as_str());
+            set_counter(
+                &store,
+                format!("{}:honeypot:ip:{}:{}", MONITORING_PREFIX, ip, now_hour).as_str(),
+                (index + 1) as u64,
+            );
+        }
+
+        let summary = summarize_with_store(&store, 24, 500);
+        assert_eq!(summary.honeypot.total_hits, 7);
+        assert_eq!(summary.honeypot.top_crawlers.len(), MAX_TOP_LIMIT);
+    }
+
+    #[test]
+    fn record_cleanup_respects_retention_window() {
+        let _lock = crate::test_support::lock_env();
+        std::env::set_var("SHUMA_EVENT_LOG_RETENTION_HOURS", "1");
+        let store = MockStore::default();
+        let now_hour = now_ts() / 3600;
+        let expired_hour = now_hour.saturating_sub(6);
+        let expired_key = monitoring_key("pow", "total", None, expired_hour);
+        set_counter(&store, expired_key.as_str(), 1);
+        *LAST_MONITORING_CLEANUP_HOUR.lock().unwrap() = 0;
+
+        record_pow_failure(&store, "203.0.113.9", "invalid_proof");
+
+        assert!(
+            store
+                .get(expired_key.as_str())
+                .expect("counter read should succeed")
+                .is_none()
+        );
+        std::env::remove_var("SHUMA_EVENT_LOG_RETENTION_HOURS");
     }
 }

@@ -1027,6 +1027,7 @@ pub fn handle_bot_defence_impl(req: &Request) -> Response {
         &provider_registry,
         site_id,
         &ip,
+        path,
     ) {
         return response;
     }

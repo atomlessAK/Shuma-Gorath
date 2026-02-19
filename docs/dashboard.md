@@ -25,9 +25,12 @@ Refresh model:
 - One bounded timer is used (no per-tab timer accumulation).
 - Polling pauses while the page is hidden and resumes on visibility restore.
 - Default cadence: `Monitoring=30s`, `IP Bans=45s`, `Status/Config/Tuning=60s`.
+- Dashboard API requests now apply a client timeout guard (`12s` default) so stalled admin endpoints fail fast instead of hanging polling/refresh cycles indefinitely.
 - Monitoring auto-refresh uses a single consolidated read per cycle (`/admin/monitoring`) and updates Monitoring summary/helper panels without triggering multi-endpoint fan-out.
 - Monitoring manual/initial refresh still performs full-detail reads (`analytics`, `events`, `bans`, `maze`, `cdp`, `cdp/events`, `monitoring`) to keep charts/tables fully hydrated.
 - Monitoring events/CDP tables now use keyed row patching with bounded row windows (`events<=100`, `cdp<=500`) to avoid full-table DOM rebuild churn on refresh.
+- Monitoring summary/trend rendering now applies bounded sanitization before chart/table paint (top-list rows capped at `10`, trend points capped at `720`, range-event fetch rows capped at `5000`, non-finite/negative counts coerced to safe bounded integers).
+- Monitoring long-range (`7d`/`30d`) fetches now abort when the tab becomes inactive and apply a dedicated fetch timeout (`10s`) to avoid background request churn.
 - Runtime telemetry now captures:
 - refresh fetch latency (last/rolling avg/p95/max over a bounded sample window),
 - render timing to next frame (last/rolling avg/p95/max over a bounded sample window),
@@ -41,14 +44,12 @@ Refresh model:
 - `/dashboard/login.html`
 - Existing tab hash routes (`#monitoring`, `#ip-bans`, `#status`, `#config`, `#tuning`).
 - The page is now a Svelte component tree (`Monitoring`, `IP Bans`, `Status`, `Config`, `Tuning`) instead of shell-fragment injection.
-- Runtime behavior mounts through `src/lib/runtime/dashboard-runtime.js` (`mount`/`unmount`) with explicit lifecycle cleanup.
-- Svelte-native orchestration (`src/lib/state/dashboard-store.js`, `src/lib/runtime/dashboard-effects.js`, `src/lib/runtime/dashboard-actions.js`) is the canonical runtime path for tab lifecycle, hash sync, polling, and auth/session flow.
-- Native action side-effects (login redirect path and tab-focus target lookup) are now routed through `src/lib/runtime/dashboard-effects.js` adapters instead of direct DOM/window reads in action pipelines.
-- Dashboard tab/session orchestration helpers are centralized in `src/lib/runtime/dashboard-runtime-orchestration.js`.
-- Refresh orchestration and tab-state message transitions are centralized in `src/lib/runtime/dashboard-runtime-refresh.js` and `src/lib/runtime/dashboard-runtime-tab-state.js`.
-- Config dirty-check orchestration is centralized in `src/lib/runtime/dashboard-runtime-config-dirty.js`.
-- `src/lib/runtime/dashboard-native-runtime.js` now coordinates module wiring only and requires an injected route-owned store contract (no fallback runtime store creation).
-- Chart runtime lifecycle is module-scoped through `modules/services/chart-runtime-adapter.js` (lazy load, singleton guard, teardown on final unmount) instead of static head-script injection.
+- Runtime behavior mounts directly through `src/lib/runtime/dashboard-native-runtime.js` (`mountDashboardApp`/`unmountDashboardApp`) with explicit lifecycle cleanup.
+- Svelte-native orchestration is route-local through `src/routes/+page.svelte` + `src/lib/runtime/dashboard-route-controller.js` (hash sync, polling cadence, visibility pause/resume, session bootstrap/logout, and keyboard tab focus) with `src/lib/state/dashboard-store.js` as the single state source.
+- Refresh orchestration and tab-state message transitions are centralized in `src/lib/runtime/dashboard-runtime-refresh.js`.
+- `src/lib/runtime/dashboard-native-runtime.js` is now a slim runtime boundary for session restore/logout, snapshot refresh wiring, and domain API mutations (config save, ban/unban, robots preview) with no per-field DOM mutation layer.
+- Config, tuning, and IP-ban workflows are now component-local Svelte state with explicit callback props and declarative dirty/validation/submit behavior.
+- Chart runtime lifecycle is module-scoped through `src/lib/domain/services/chart-runtime-adapter.js` (lazy load, singleton guard, teardown on final unmount) instead of static head-script injection.
 - `dashboard/package.json` still sets `"type": "module"` so existing dashboard module unit tests run via native ESM in Node.
 
 ## 🐙 Features
@@ -75,7 +76,7 @@ Tables:
 - Monitoring summaries:
 - Honeypot Hits (total hits, unique crawler buckets, top crawlers, top paths)
 - Challenge Failures (reason breakdown + trend)
-- PoW Failures (reason breakdown + trend)
+- PoW Verification (success/failure outcomes, success ratio, failure reason breakdown + trend)
 - Rate Limiting Violations (total, offenders, outcomes)
 - GEO Violations (actions + top countries)
 - Prometheus helper panel (examples and guidance sourced from `/admin/monitoring` payload as the single contract source, including explicit `/metrics` semantics, `/admin/monitoring?hours=1-720&limit=1-50` bounded-query examples, sample text output, stat-extraction snippets, and copy actions for JS and curl examples with links to observability/API docs)
@@ -92,6 +93,7 @@ Tables:
 Controls:
 - Test mode toggle
 - Manual ban/unban
+- Ban IP duration inputs initialize from `ban_durations.admin` (same default source as Ban Durations config)
 - JS Required enforcement toggle
 - Rate limit (requests/minute) config
 - Honeypot controls (`honeypot_enabled`, `honeypots`)
@@ -169,6 +171,7 @@ dashboard/
   src/routes/+page.svelte
   src/routes/login.html/+page.svelte
   src/lib/components/dashboard/MonitoringTab.svelte
+  src/lib/components/dashboard/monitoring/*.svelte
   src/lib/components/dashboard/IpBansTab.svelte
   src/lib/components/dashboard/StatusTab.svelte
   src/lib/components/dashboard/ConfigTab.svelte
@@ -177,33 +180,20 @@ dashboard/
   src/lib/components/dashboard/primitives/StatCard.svelte
   src/lib/components/dashboard/primitives/TableWrapper.svelte
   src/lib/state/dashboard-store.js
-  src/lib/runtime/dashboard-effects.js
-  src/lib/runtime/dashboard-actions.js
-  src/lib/runtime/dashboard-runtime-config-dirty.js
-  src/lib/runtime/dashboard-runtime-orchestration.js
   src/lib/runtime/dashboard-runtime-refresh.js
-  src/lib/runtime/dashboard-runtime-tab-state.js
-  src/lib/runtime/dashboard-runtime.js
+  src/lib/runtime/dashboard-route-controller.js
   src/lib/runtime/dashboard-native-runtime.js
+  src/lib/domain/core/format.js
+  src/lib/domain/core/json-object.js
+  src/lib/domain/api-client.js
+  src/lib/domain/config-form-utils.js
+  src/lib/domain/config-schema.js
+  src/lib/domain/services/admin-endpoint.js
+  src/lib/domain/services/chart-runtime-adapter.js
+  src/lib/domain/status.js
+  src/lib/domain/dashboard-state.js
   static/assets/vendor/chart-lite-1.0.0.min.js
   package.json
-  modules/core/format.js
-  modules/core/dom.js
-  modules/core/json-object.js
-  modules/api-client.js
-  modules/config-draft-store.js
-  modules/config-form-utils.js
-  modules/config-schema.js
-  modules/config-controls.js
-  modules/input-validation.js
-  modules/services/admin-endpoint.js
-  modules/services/chart-runtime-adapter.js
-  modules/services/runtime-effects.js
-  modules/status.js
-  modules/status-view.js
-  modules/dashboard-state.js
-  modules/tables-view.js
-  modules/tab-lifecycle.js
   src/lib/components/dashboard/monitoring-view-model.js
   style.css
 
@@ -214,11 +204,11 @@ dist/
 ## 🐙 Data Flow (High Level)
 
 1. SvelteKit renders the dashboard page from `src/routes/+page.svelte` with dedicated tab components.
-2. On route mount, `src/lib/runtime/dashboard-runtime.js` mounts `src/lib/runtime/dashboard-native-runtime.js` as a single native runtime path (no compatibility flag matrix).
-3. Svelte-native orchestrators (`src/lib/state/dashboard-store.js`, `src/lib/runtime/dashboard-effects.js`, `src/lib/runtime/dashboard-actions.js`) own active-tab state, hash/keyboard navigation, session bootstrap, logout, and polling cadence.
-4. `src/lib/runtime/dashboard-native-runtime.js` provides lifecycle entrypoints (`mountDashboardApp()` / `unmountDashboardApp()`) and wiring, delegating tab/session orchestration to `src/lib/runtime/dashboard-runtime-orchestration.js`, refresh orchestration to `src/lib/runtime/dashboard-runtime-refresh.js`, tab-state transitions to `src/lib/runtime/dashboard-runtime-tab-state.js`, and config dirty-check orchestration to `src/lib/runtime/dashboard-runtime-config-dirty.js`.
-5. Monitoring rendering is Svelte-native (`src/lib/components/dashboard/MonitoringTab.svelte`) and consumes snapshot/view-model data from `src/lib/components/dashboard/monitoring-view-model.js`; runtime no longer mutates monitoring DOM by global IDs.
-6. Domain modules (`modules/api-client.js`, `modules/dashboard-state.js`, `modules/tables-view.js`, `modules/config-controls.js`, etc.) continue to enforce behavior contracts, with charts now mounted through instance-scoped runtime services (`createDashboardCharts`) rather than module-level chart singletons.
+2. On route mount, `src/routes/+page.svelte` directly calls `src/lib/runtime/dashboard-native-runtime.js` as a single native runtime path (no compatibility flag matrix).
+3. Route-local Svelte orchestration in `src/routes/+page.svelte` delegates lifecycle/polling/hash/session coordination to `src/lib/runtime/dashboard-route-controller.js`, using `src/lib/state/dashboard-store.js` for state and telemetry.
+4. `src/lib/runtime/dashboard-native-runtime.js` provides lifecycle entrypoints (`mountDashboardApp()` / `unmountDashboardApp()`), auth/session state, and domain API actions without legacy control binding/DOM mutation wiring.
+5. Monitoring rendering is Svelte-native (`src/lib/components/dashboard/MonitoringTab.svelte`) with focused subsection components in `src/lib/components/dashboard/monitoring/*.svelte`, consuming snapshot/view-model data from `src/lib/components/dashboard/monitoring-view-model.js`; runtime no longer mutates monitoring DOM by global IDs.
+6. Config, tuning, and IP-ban form state/save behavior are Svelte-owned in `src/lib/components/dashboard/ConfigTab.svelte`, `src/lib/components/dashboard/TuningTab.svelte`, and `src/lib/components/dashboard/IpBansTab.svelte`.
 7. Login is Svelte-native in `src/routes/login.html/+page.svelte` (no shell injection/bridge).
 8. `adapter-static` writes final static assets to `dist/dashboard`, which Spin serves for `/dashboard/...`.
 

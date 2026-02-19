@@ -680,7 +680,12 @@ mod admin_config_tests {
             "198.51.100.9",
             "invalid_proof",
         );
-        crate::observability::monitoring::record_rate_violation(&store, "203.0.113.11", "limited");
+        crate::observability::monitoring::record_rate_violation_with_path(
+            &store,
+            "203.0.113.11",
+            Some("/"),
+            "limited",
+        );
         crate::observability::monitoring::record_geo_violation(&store, Some("US"), "challenge");
 
         let req = make_request(Method::Get, "/admin/monitoring?hours=24&limit=5", Vec::new());
@@ -743,6 +748,36 @@ mod admin_config_tests {
                 .and_then(|v| v.as_u64())
                 .unwrap_or(0)
                 >= 1
+        );
+        assert!(
+            summary
+                .get("pow")
+                .and_then(|v| v.get("total_successes"))
+                .and_then(|v| v.as_u64())
+                .is_some()
+        );
+        assert!(
+            summary
+                .get("pow")
+                .and_then(|v| v.get("success_ratio"))
+                .and_then(|v| v.as_f64())
+                .is_some()
+        );
+        assert!(
+            summary
+                .get("pow")
+                .and_then(|v| v.get("outcomes"))
+                .and_then(|v| v.get("failure"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+                >= 1
+        );
+        assert!(
+            summary
+                .get("rate")
+                .and_then(|v| v.get("top_paths"))
+                .map(|v| v.is_array())
+                .unwrap_or(false)
         );
     }
 
@@ -3884,7 +3919,7 @@ fn monitoring_prometheus_helper_payload() -> serde_json::Value {
         "example_output": "# TYPE bot_defence_requests_total counter\nbot_defence_requests_total{path=\"main\"} 128\n# TYPE bot_defence_blocks_total counter\nbot_defence_blocks_total 9\n# TYPE bot_defence_bans_total counter\nbot_defence_bans_total{reason=\"honeypot\"} 3\n# TYPE bot_defence_active_bans gauge\nbot_defence_active_bans 2",
         "example_stats": "const lines = metricsText.split('\\n');\nconst metricValue = (prefix) => {\n  const line = lines.find((entry) => entry.startsWith(prefix));\n  return line ? Number(line.slice(prefix.length).trim()) : null;\n};\nconst stats = {\n  requestsMain: metricValue('bot_defence_requests_total{path=\\\"main\\\"} '),\n  honeypotBans: metricValue('bot_defence_bans_total{reason=\\\"honeypot\\\"} '),\n  blocksTotal: metricValue('bot_defence_blocks_total '),\n  activeBans: metricValue('bot_defence_active_bans ')\n};",
         "example_windowed": "const apiKey = 'YOUR_ADMIN_API_KEY';\nconst params = new URLSearchParams({ hours: '24', limit: '10' });\nconst monitoring = await fetch(`/admin/monitoring?${params}`, {\n  headers: { Authorization: `Bearer ${apiKey}` }\n}).then(r => r.json());",
-        "example_summary_stats": "const stats = {\n  honeypotHits: monitoring.summary.honeypot.total_hits,\n  challengeFailures: monitoring.summary.challenge.total_failures,\n  powFailures: monitoring.summary.pow.total_failures,\n  rateViolations: monitoring.summary.rate.total_violations,\n  geoViolations: monitoring.summary.geo.total_violations\n};",
+        "example_summary_stats": "const stats = {\n  honeypotHits: monitoring.summary.honeypot.total_hits,\n  challengeFailures: monitoring.summary.challenge.total_failures,\n  powFailures: monitoring.summary.pow.total_failures,\n  powSuccesses: monitoring.summary.pow.total_successes,\n  powSuccessRatio: monitoring.summary.pow.success_ratio,\n  rateViolations: monitoring.summary.rate.total_violations,\n  geoViolations: monitoring.summary.geo.total_violations\n};",
         "docs": {
             "observability": "https://github.com/atomless/Shuma-Gorath/blob/main/docs/observability.md",
             "api": "https://github.com/atomless/Shuma-Gorath/blob/main/docs/api.md"

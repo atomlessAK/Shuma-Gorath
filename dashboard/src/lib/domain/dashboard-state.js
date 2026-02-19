@@ -48,6 +48,14 @@ const createTabStatusState = () => {
   return next;
 };
 
+const createSnapshotVersionState = () => {
+  const next = {};
+  SNAPSHOT_KEYS.forEach((key) => {
+    next[key] = 0;
+  });
+  return next;
+};
+
 export const normalizeTab = (raw) => {
   const tab = String(raw || '').trim().toLowerCase();
   return DASHBOARD_TABS.includes(tab) ? tab : DEFAULT_TAB;
@@ -70,6 +78,7 @@ export const createInitialState = (initialTab = DEFAULT_TAB) => ({
     monitoring: null,
     config: null
   },
+  snapshotVersions: createSnapshotVersionState(),
   tabStatus: createTabStatusState()
 });
 
@@ -79,6 +88,7 @@ export const actions = Object.freeze({
   setActiveTab: (tab) => ({ type: 'set-active-tab', tab }),
   setSession: (session) => ({ type: 'set-session', session }),
   setSnapshot: (key, value) => ({ type: 'set-snapshot', key, value }),
+  setSnapshots: (snapshots) => ({ type: 'set-snapshots', snapshots }),
   setTabLoading: (tab, loading) => ({ type: 'set-tab-loading', tab, loading }),
   setTabError: (tab, message) => ({ type: 'set-tab-error', tab, message }),
   clearTabError: (tab) => ({ type: 'clear-tab-error', tab }),
@@ -111,11 +121,66 @@ export const reduceState = (prevState, event = {}) => {
     case 'set-snapshot': {
       const key = String(event.key || '');
       if (!SNAPSHOT_KEYS.includes(key)) return prev;
+      if (Object.is(prev.snapshots[key], event.value)) return prev;
       return {
         ...prev,
         snapshots: {
           ...prev.snapshots,
           [key]: event.value
+        },
+        snapshotVersions: {
+          ...prev.snapshotVersions,
+          [key]: Number(prev.snapshotVersions[key] || 0) + 1
+        }
+      };
+    }
+    case 'set-snapshots': {
+      const updates =
+        event && event.snapshots && typeof event.snapshots === 'object'
+          ? event.snapshots
+          : null;
+      if (!updates) return prev;
+
+      let changed = false;
+      const nextSnapshots = { ...prev.snapshots };
+      const nextVersions = { ...prev.snapshotVersions };
+
+      SNAPSHOT_KEYS.forEach((key) => {
+        if (!Object.prototype.hasOwnProperty.call(updates, key)) return;
+        const nextValue = updates[key];
+        if (Object.is(prev.snapshots[key], nextValue)) return;
+        changed = true;
+        nextSnapshots[key] = nextValue;
+        nextVersions[key] = Number(nextVersions[key] || 0) + 1;
+      });
+
+      if (!changed) return prev;
+
+      return {
+        ...prev,
+        snapshots: nextSnapshots,
+        snapshotVersions: nextVersions
+      };
+    }
+    case 'mark-tab-updated': {
+      const tab = normalizeTab(event.tab);
+      const updatedAt = String(event.updatedAt || timestampNow());
+      if (prev.stale[tab] === false && prev.tabStatus[tab].updatedAt === updatedAt) {
+        return prev;
+      }
+      return {
+        ...prev,
+        stale: {
+          ...prev.stale,
+          [tab]: false
+        },
+        tabStatus: {
+          ...prev.tabStatus,
+          [tab]: {
+            ...prev.tabStatus[tab],
+            loading: false,
+            updatedAt
+          }
         }
       };
     }
@@ -183,24 +248,6 @@ export const reduceState = (prevState, event = {}) => {
         }
       };
     }
-    case 'mark-tab-updated': {
-      const tab = normalizeTab(event.tab);
-      return {
-        ...prev,
-        stale: {
-          ...prev.stale,
-          [tab]: false
-        },
-        tabStatus: {
-          ...prev.tabStatus,
-          [tab]: {
-            ...prev.tabStatus[tab],
-            loading: false,
-            updatedAt: String(event.updatedAt || timestampNow())
-          }
-        }
-      };
-    }
     case 'invalidate': {
       const scope = String(event.scope || 'all');
       const tabs = INVALIDATION_SCOPES[scope] || INVALIDATION_SCOPES.all;
@@ -238,6 +285,11 @@ export const selectors = Object.freeze({
   snapshot: (state, key) => (Object.prototype.hasOwnProperty.call(state.snapshots, key)
     ? state.snapshots[key]
     : null),
+  snapshotVersion: (state, key) =>
+    (Object.prototype.hasOwnProperty.call(state.snapshotVersions, key)
+      ? Number(state.snapshotVersions[key] || 0)
+      : 0),
+  snapshotVersions: (state) => ({ ...state.snapshotVersions }),
   tabStatus: (state, tabName) => {
     const tab = normalizeTab(tabName);
     return {
@@ -280,8 +332,20 @@ export const create = (options = {}) => {
     apply(actions.setSnapshot(key, value));
   };
 
+  const setSnapshots = (updates = {}) => {
+    apply(actions.setSnapshots(updates));
+  };
+
   const getSnapshot = (key) => {
     return selectors.snapshot(state, key);
+  };
+
+  const getSnapshotVersion = (key) => {
+    return selectors.snapshotVersion(state, key);
+  };
+
+  const getSnapshotVersions = () => {
+    return selectors.snapshotVersions(state);
   };
 
   const setTabLoading = (tabName, loading, message = undefined) => {
@@ -344,7 +408,10 @@ export const create = (options = {}) => {
     setSession,
     getSession,
     setSnapshot,
+    setSnapshots,
     getSnapshot,
+    getSnapshotVersion,
+    getSnapshotVersions,
     setTabLoading,
     setTabError,
     clearTabError,

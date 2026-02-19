@@ -422,6 +422,8 @@ pub fn handle_pow_verify(req: &Request, ip: &str, pow_enabled: bool) -> Response
         return Response::new(400, "Invalid proof");
     }
 
+    record_pow_success();
+
     Response::builder()
         .status(200)
         .header(
@@ -481,6 +483,12 @@ fn record_sequence_policy_violation(
 fn record_pow_failure(reason: &str, ip: &str) {
     if let Some(store) = try_open_default_store() {
         crate::observability::monitoring::record_pow_failure(&store, ip, reason);
+    }
+}
+
+fn record_pow_success() {
+    if let Some(store) = try_open_default_store() {
+        crate::observability::monitoring::record_pow_success(&store);
     }
 }
 

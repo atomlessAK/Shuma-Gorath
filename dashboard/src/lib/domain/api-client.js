@@ -15,10 +15,12 @@
  * @property {unknown} [json]
  * @property {BodyInit | null} [body]
  * @property {AbortSignal} [signal]
+ * @property {number} [timeoutMs]
  * @property {HTMLElement | null} [messageTarget]
  */
 
 const JSON_CONTENT_TYPE = 'application/json';
+const DEFAULT_REQUEST_TIMEOUT_MS = 12000;
 const isWriteMethod = (method) => {
   const upper = String(method || 'GET').toUpperCase();
   return upper === 'POST' || upper === 'PUT' || upper === 'PATCH' || upper === 'DELETE';
@@ -48,6 +50,71 @@ export function DashboardApiError(message, status, path, method) {
  */
 const asRecord = (value) =>
   value && typeof value === 'object' ? /** @type {Record<string, unknown>} */ (value) : {};
+
+/**
+ * @param {unknown} value
+ * @param {number} fallback
+ * @returns {number}
+ */
+const normalizeTimeoutMs = (value, fallback = DEFAULT_REQUEST_TIMEOUT_MS) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
+  return Math.max(1, Math.floor(numeric));
+};
+
+/**
+ * @param {AbortSignal | undefined} externalSignal
+ * @param {number} timeoutMs
+ */
+const createRequestSignal = (externalSignal, timeoutMs) => {
+  if (typeof AbortController !== 'function') {
+    return {
+      signal: externalSignal,
+      didTimeout: () => false,
+      cleanup: () => {}
+    };
+  }
+
+  const controller = new AbortController();
+  let didTimeout = false;
+  let timeoutId = null;
+
+  const abortFromExternal = () => {
+    if (!controller.signal.aborted) {
+      controller.abort();
+    }
+  };
+
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      abortFromExternal();
+    } else {
+      externalSignal.addEventListener('abort', abortFromExternal, { once: true });
+    }
+  }
+
+  const safeTimeoutMs = normalizeTimeoutMs(timeoutMs, DEFAULT_REQUEST_TIMEOUT_MS);
+  timeoutId = setTimeout(() => {
+    didTimeout = true;
+    if (!controller.signal.aborted) {
+      controller.abort();
+    }
+  }, safeTimeoutMs);
+
+  return {
+    signal: controller.signal,
+    didTimeout: () => didTimeout,
+    cleanup: () => {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      if (externalSignal) {
+        externalSignal.removeEventListener('abort', abortFromExternal);
+      }
+    }
+  };
+};
 
 /**
  * @param {unknown} value
@@ -285,13 +352,32 @@ export const create = (options = {}) => {
       body = JSON.stringify(options.json);
     }
 
-    const response = await requestImpl(`${context.endpoint}${path}`, {
-      method,
-      headers,
-      credentials: context && context.sessionAuth === true ? 'same-origin' : undefined,
-      body: method === 'GET' || method === 'HEAD' ? undefined : body,
-      signal: options.signal
-    });
+    const timeoutMs = normalizeTimeoutMs(options.timeoutMs, DEFAULT_REQUEST_TIMEOUT_MS);
+    const requestSignal = createRequestSignal(options.signal, timeoutMs);
+    let response;
+    try {
+      response = await requestImpl(`${context.endpoint}${path}`, {
+        method,
+        headers,
+        credentials: context && context.sessionAuth === true ? 'same-origin' : undefined,
+        body: method === 'GET' || method === 'HEAD' ? undefined : body,
+        signal: requestSignal.signal
+      });
+    } catch (error) {
+      if (requestSignal.didTimeout()) {
+        const timeoutError = new DashboardApiError(
+          `Request timed out after ${timeoutMs}ms`,
+          0,
+          path,
+          method
+        );
+        if (onApiError) onApiError(timeoutError);
+        throw timeoutError;
+      }
+      throw error;
+    } finally {
+      requestSignal.cleanup();
+    }
 
     const payload = await parseResponsePayload(response);
 

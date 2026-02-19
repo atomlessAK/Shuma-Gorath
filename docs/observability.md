@@ -21,11 +21,14 @@ GET /admin/monitoring?hours=24&limit=10
 This endpoint returns bounded-cardinality summaries for:
 - honeypot hits (top crawler buckets + top paths)
 - challenge failures (reasons + trend)
-- PoW failures (reasons + trend)
-- rate-limiting violations (outcomes + offenders)
+- PoW verification outcomes (success/failure + reasons + trend)
+- rate-limiting violations (outcomes + offenders + top paths)
 - GEO violations (actions + top countries)
 
 Use this endpoint for dashboard UX and operator API queries; use `/metrics` for external time-series scraping.
+
+Prometheus parity scope for Monitoring widgets is tracked in:
+- `docs/monitoring-prometheus-parity-audit.md`
 
 ### 🐙 Metrics Included
 
@@ -37,6 +40,7 @@ Use this endpoint for dashboard UX and operator API queries; use `/metrics` for 
 - `bot_defence_challenge_solved_total`
 - `bot_defence_challenge_incorrect_total`
 - `bot_defence_challenge_expired_replay_total`
+- `bot_defence_cdp_detections_total`
 - `bot_defence_whitelisted_total`
 - `bot_defence_test_mode_actions_total`
 - `bot_defence_maze_hits_total`
@@ -57,6 +61,11 @@ Use this endpoint for dashboard UX and operator API queries; use `/metrics` for 
 - `bot_defence_rate_limiter_state_drift_observations_total{route_class="...",delta_band="delta_0|delta_1_5|delta_6_20|delta_21_plus"}`
 - `bot_defence_policy_matches_total{level="L*...",action="A*...",detection="D*..."}`
 - `bot_defence_policy_signals_total{signal="S_*"}`
+- `bot_defence_monitoring_challenge_failures_total{reason="incorrect|expired_replay|sequence_violation|invalid_output|forbidden"}`
+- `bot_defence_monitoring_pow_verifications_total{outcome="success|failure"}`
+- `bot_defence_monitoring_pow_failures_total{reason="invalid_proof|missing_seed_nonce|sequence_violation|expired_replay|binding_timing_mismatch"}`
+- `bot_defence_monitoring_rate_violations_total{outcome="limited|banned|fallback_allow|fallback_deny"}`
+- `bot_defence_monitoring_geo_violations_total{action="block|challenge|maze"}`
 
 ## 🐙 Prometheus Scrape Example
 

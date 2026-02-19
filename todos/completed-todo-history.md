@@ -539,3 +539,79 @@ Moved from active TODO files on 2026-02-14.
 - [x] DSH-SVLT-EX30 Remove superseded/unused dashboard controller abstractions (for example unused feature-controller wrapper paths) and add dead-code guard checks to module tests.
 - [x] DSH-SVLT-EX31 Add architecture/perf gates for the refactor: coordinator LOC budget, duplicate-state path regression checks, and remount/listener leak checks across decomposed runtime modules.
 - [x] DSH-SVLT-EX32 Publish an ADR that locks the current dashboard runtime policy (single-instance pre-launch, no backward DOM-ID compatibility shims, no bridge flag matrix) and align implementation/tests to that scope.
+
+## Additional completions (2026-02-19, section-preserving archive)
+
+### todos/todo.md
+
+#### P1 Dashboard SvelteKit Excellence Finalization
+Policy stance for this section: no backward DOM-ID compatibility is required pre-launch; prefer idiomatic Svelte component-local state/props and declarative rendering over imperative runtime bridges.
+
+- [x] DSH-SX-1 Convert Config/Ip Bans/Tuning from DOM-controlled islands to Svelte-owned state and event handling.
+- [x] DSH-SX-1.a Remove `dashboard/src/lib/runtime/dashboard-native-runtime.js` dependencies on `document.getElementById`-driven field mutation for tab-level rendering.
+- [x] DSH-SX-1.b Replace generic DOM save wiring with explicit Svelte submit handlers and domain API services.
+- [x] DSH-SX-1.c Move config dirty-state to component-local declarative selectors (baseline + derived validity/dirty state) instead of per-input imperative listeners.
+- [x] DSH-SX-2 Convert monitoring charts/time-range orchestration to Svelte-local lifecycle and derived state; remove imperative chart button binding in legacy modules.
+- [x] DSH-SX-3 Convert IP bans table rendering and row actions to declarative Svelte lists; remove imperative row patching and delegated DOM event glue.
+- [x] DSH-SX-4 Remove superseded runtime effect/action adapter layers and keep orchestration route-local in Svelte.
+- [x] DSH-SX-5 Reduce route `onMount` orchestration where possible by using SvelteKit route data/state primitives for bootstrap and auth redirect decisions.
+- [x] DSH-SX-5.a Keep route bootstrap inputs in `dashboard/src/routes/+page.js` (`base`, chart asset path, image asset path, initial hash tab).
+- [x] DSH-SX-5.b Move hash-sync and visibility lifecycle handling to `<svelte:window>` / `<svelte:document>` in `dashboard/src/routes/+page.svelte`.
+- [x] DSH-SX-6 Remove HTML injection surfaces in dashboard components (`{@html}`) unless sanitizer-backed and justified; prefer plain text rendering.
+- [x] DSH-SX-7 Delete superseded dashboard runtime glue/modules after each cutover slice and enforce no-dead-module graph constraints.
+- [x] DSH-SX-8 Rewrite dashboard tests toward behavior/outcome contracts for Svelte-owned UI flows (tab state, save state, auth, refresh, table/chart rendering), removing legacy DOM-glue assumptions.
+- [x] DSH-SX-9 Update docs/ADR dashboard architecture notes to reflect final Svelte-owned runtime model and removed bridge layers.
+- [x] DSH-SX-10 Audit dependency and setup paths (`package.json`, scripts, `make setup`, CI) so only required SvelteKit/runtime/test deps remain and all required deps bootstrap deterministically.
+- [x] DSH-SX-10.a Keep `make setup` as deterministic bootstrap path for SvelteKit + Playwright Chromium and verify dependency checks gate on `node_modules/.pnpm`, `vite`, `svelte`, `@sveltejs/kit`, `@playwright/test`.
+- [x] DSH-SX-10.b Validate restricted-sandbox e2e behavior path: Playwright preflight failure is surfaced and can cleanly short-circuit via `PLAYWRIGHT_SANDBOX_ALLOW_SKIP=1` (without launching failing browser suite).
+
+## Additional completions (2026-02-19, section-preserving archive)
+
+### todos/todo.md
+
+#### P1 Dashboard SvelteKit Excellence Finalization (Domain Convergence + Runtime Simplification)
+- [x] DSH-SX-11 Move remaining dashboard shared domain adapters from `dashboard/modules/*` into `dashboard/src/lib/domain/*` and rewire all runtime/component/store imports.
+- [x] DSH-SX-12 Remove superseded runtime wrapper layers (`dashboard/src/lib/runtime/dashboard-runtime.js`, `dashboard/src/lib/runtime/dashboard-runtime-tab-state.js`) and keep route/runtime wiring directly on `dashboard-native-runtime`.
+- [x] DSH-SX-13 Make native runtime import path SvelteKit-safe by removing SSR-unsafe top-level `window` reads in runtime mount option normalization.
+- [x] DSH-SX-14 Update dashboard architecture docs and module-boundary docs to reflect final `src/lib/domain` + direct native-runtime wiring model.
+- [x] DSH-SX-15 Update dashboard module/unit graph tests to assert the new domain layering and direct route->native runtime wiring contract.
+- [x] DSH-SX-16 Re-run canonical verification for this slice (`make test-dashboard-unit`, `make verify`, `make build`, `PLAYWRIGHT_SANDBOX_ALLOW_SKIP=1 make test`) and confirm green results.
+
+## Additional completions (2026-02-19, section-preserving archive)
+
+### todos/todo.md
+
+#### P0 Dashboard SvelteKit Security/Sanitization/Performance Hardening
+- [x] DSH-SP-SEC-1 Add dashboard API-client request timeout guards with abort-safe behavior so stalled admin endpoints cannot hang route refresh/polling indefinitely.
+- [x] DSH-SP-SAN-1 Add bounded sanitization for Monitoring summary/range datasets (rows, trend points, and numeric coercion) to prevent pathological payloads from driving excessive DOM/chart work.
+- [x] DSH-SP-PERF-1 Remove redundant trend chart updates and abort inactive long-range fetches to reduce unnecessary chart redraw/network churn.
+- [x] DSH-SP-TEST-1 Add/update dashboard unit contracts covering timeout behavior and monitoring data-bound guards.
+- [x] DSH-SP-DOC-1 Update dashboard docs with the new timeout and bounded-monitoring render policy.
+
+## Additional completions (2026-02-19, section-preserving archive)
+
+### todos/todo.md
+
+#### P3 Monitoring Signal Expansion (Dashboard + Telemetry)
+- [x] DSH-MON-7 Deliberate Prometheus parity scope for Monitoring completed with widget-by-widget audit matrix, parity classifications, prioritized add-list, and cardinality/cost guardrails. (`docs/monitoring-prometheus-parity-audit.md`)
+
+#### P1 Dashboard SvelteKit Excellence Continuation
+- [x] DSH-SX-17 Extract route orchestration from `dashboard/src/routes/+page.svelte` into a dedicated runtime controller module (`dashboard/src/lib/runtime/dashboard-route-controller.js`) while preserving hash/polling/session behavior contracts.
+- [x] DSH-SX-18 Decompose `dashboard/src/lib/components/dashboard/MonitoringTab.svelte` into focused monitoring subsection components under `dashboard/src/lib/components/dashboard/monitoring/` and keep existing monitoring DOM ID contracts for smoke/e2e assertions.
+- [x] DSH-SX-19 Update dashboard architecture guard tests to enforce controller/module decomposition and monitoring subsection component usage.
+
+## Additional completions (2026-02-19, section-preserving archive)
+
+### todos/todo.md
+
+#### P3 Monitoring Signal Expansion (Dashboard + Telemetry)
+- [x] DSH-MON-8 Implement Priority-1 low-cardinality missing-export metric families from `docs/monitoring-prometheus-parity-audit.md` (`cdp_detections`, challenge reason totals, PoW outcomes/reasons, rate outcomes, GEO action totals).
+- [x] DSH-MON-9 Add `/metrics` regression coverage and dashboard parity assertions for newly exported monitoring families (including cardinality guardrail tests).
+- [x] MON-TEL-4 Add rate-limit violation summary endpoint (or equivalent aggregation contract) that returns filtered offender/top-path/top-window data without requiring expensive client-side filtering over generic event feeds.
+
+## Additional completions (2026-02-19, section-preserving archive)
+
+### todos/todo.md
+
+#### P3 Platform and Configuration Clarity
+- [x] Initialize Ban IP pane duration controls from the current Admin Manual Ban default duration so Ban IP and Ban Durations panes stay consistent.

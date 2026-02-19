@@ -1,35 +1,54 @@
 <script>
-  import { base } from '$app/paths';
   import { onDestroy, onMount } from 'svelte';
-  import ConfigTab from '$lib/components/dashboard/ConfigTab.svelte';
   import IpBansTab from '$lib/components/dashboard/IpBansTab.svelte';
   import MonitoringTab from '$lib/components/dashboard/MonitoringTab.svelte';
   import StatusTab from '$lib/components/dashboard/StatusTab.svelte';
-  import TuningTab from '$lib/components/dashboard/TuningTab.svelte';
-  import { createDashboardActions } from '$lib/runtime/dashboard-actions.js';
-  import { createDashboardEffects } from '$lib/runtime/dashboard-effects.js';
   import {
+    buildDashboardLoginPath,
+    dashboardIndexPath,
     normalizeDashboardBasePath,
     resolveDashboardAssetPath
   } from '$lib/runtime/dashboard-paths.js';
+  import { createDashboardRouteController } from '$lib/runtime/dashboard-route-controller.js';
   import {
+    banDashboardIp,
+    getDashboardEvents,
+    getDashboardRobotsPreview,
     getDashboardSessionState,
     logoutDashboardSession,
-    mountDashboardRuntime,
+    mountDashboardApp,
     refreshDashboardTab,
-    restoreDashboardSession,
     setDashboardActiveTab,
-    unmountDashboardRuntime
-  } from '$lib/runtime/dashboard-runtime.js';
+    unbanDashboardIp,
+    unmountDashboardApp,
+    updateDashboardConfig,
+    restoreDashboardSession
+  } from '$lib/runtime/dashboard-native-runtime.js';
   import {
     createDashboardStore,
     DASHBOARD_TABS,
     normalizeTab
   } from '$lib/state/dashboard-store.js';
 
-  const dashboardBasePath = normalizeDashboardBasePath(base);
-  const chartRuntimeSrc = resolveDashboardAssetPath(dashboardBasePath, 'assets/vendor/chart-lite-1.0.0.min.js');
-  const shumaImageSrc = resolveDashboardAssetPath(dashboardBasePath, 'assets/shuma-gorath-pencil.png');
+  export let data;
+  const TAB_LOADING_MESSAGES = Object.freeze({
+    monitoring: 'Loading monitoring data...',
+    'ip-bans': 'Loading ban list...',
+    status: 'Loading status signals...',
+    config: 'Loading config...',
+    tuning: 'Loading tuning values...'
+  });
+
+  const fallbackBasePath = normalizeDashboardBasePath();
+  const dashboardBasePath = typeof data?.dashboardBasePath === 'string'
+    ? data.dashboardBasePath
+    : fallbackBasePath;
+  const chartRuntimeSrc = typeof data?.chartRuntimeSrc === 'string'
+    ? data.chartRuntimeSrc
+    : resolveDashboardAssetPath(dashboardBasePath, 'assets/vendor/chart-lite-1.0.0.min.js');
+  const shumaImageSrc = typeof data?.shumaImageSrc === 'string'
+    ? data.shumaImageSrc
+    : resolveDashboardAssetPath(dashboardBasePath, 'assets/shuma-gorath-pencil.png');
 
   const dashboardStore = createDashboardStore({ initialTab: 'monitoring' });
 
@@ -37,47 +56,134 @@
   let runtimeTelemetry = dashboardStore.getRuntimeTelemetry();
   let storeUnsubscribe = () => {};
   let telemetryUnsubscribe = () => {};
-  let dashboardActions = null;
   let runtimeReady = false;
   let runtimeError = '';
   let loggingOut = false;
+  let adminMessageText = '';
+  let adminMessageKind = 'info';
+  let ConfigTabComponent = null;
+  let TuningTabComponent = null;
+  const tabLinks = {};
 
   $: activeTabKey = normalizeTab(dashboardState.activeTab);
   $: tabStatus = dashboardState?.tabStatus || {};
   $: activeTabStatus = tabStatus[activeTabKey] || {};
   $: lastUpdatedText = activeTabStatus.updatedAt ? `updated: ${activeTabStatus.updatedAt}` : '';
   $: snapshots = dashboardState?.snapshots || {};
+  $: snapshotVersions = dashboardState?.snapshotVersions || {};
   $: analyticsSnapshot = snapshots.analytics || {};
   $: testModeEnabled = analyticsSnapshot.test_mode === true;
 
-  async function bootstrapNativeRuntime() {
-    await mountDashboardRuntime({
-      initialTab: normalizeTab(window.location.hash.replace(/^#/, '')),
-      chartRuntimeSrc,
-      basePath: dashboardBasePath,
-      store: dashboardStore
-    });
-
-    const effects = createDashboardEffects({ basePath: dashboardBasePath });
-    dashboardActions = createDashboardActions({
-      store: dashboardStore,
-      effects,
-      runtime: {
-        refreshTab: refreshDashboardTab,
-        setActiveTab: setDashboardActiveTab,
-        restoreSession: restoreDashboardSession,
-        getSessionState: getDashboardSessionState,
-        logout: logoutDashboardSession
+  function registerTabLink(node, tab) {
+    let key = normalizeTab(tab);
+    tabLinks[key] = node;
+    return {
+      update(nextTab) {
+        delete tabLinks[key];
+        key = normalizeTab(nextTab);
+        tabLinks[key] = node;
+      },
+      destroy() {
+        delete tabLinks[key];
       }
-    });
-
-    dashboardActions.init();
-    const authenticated = await dashboardActions.bootstrapSession();
-    if (!authenticated) return;
-    runtimeReady = true;
+    };
   }
 
+  function focusTab(tab) {
+    const node = tabLinks[normalizeTab(tab)];
+    if (node && typeof node.focus === 'function') {
+      node.focus();
+      return true;
+    }
+    return false;
+  }
+
+  function requestNextFrame(callback) {
+    if (typeof callback !== 'function') return;
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(callback);
+      return;
+    }
+    setTimeout(callback, 0);
+  }
+
+  function nowMs() {
+    if (typeof window !== 'undefined' && window.performance && typeof window.performance.now === 'function') {
+      return window.performance.now();
+    }
+    return Date.now();
+  }
+
+  function readHashTab() {
+    if (typeof window === 'undefined') return '';
+    return String(window.location.hash || '').replace(/^#/, '');
+  }
+
+  function writeHashTab(tab, options = {}) {
+    if (typeof window === 'undefined') return;
+    const normalized = String(tab || '').replace(/^#/, '');
+    if (!normalized) return;
+    const nextHash = `#${normalized}`;
+    if (window.location.hash === nextHash) return;
+    if (options && options.replace === true) {
+      const nextUrl = `${window.location.pathname}${window.location.search}${nextHash}`;
+      window.history.replaceState(null, '', nextUrl);
+      return;
+    }
+    window.location.hash = nextHash;
+  }
+
+  function isPageVisible() {
+    if (typeof document === 'undefined') return true;
+    return document.visibilityState !== 'hidden';
+  }
+
+  function resolveLoginRedirectPath() {
+    if (typeof window === 'undefined') {
+      return buildDashboardLoginPath({ basePath: dashboardBasePath });
+    }
+    const pathname = String(window.location?.pathname || dashboardIndexPath(dashboardBasePath));
+    const search = String(window.location?.search || '');
+    const hash = String(window.location?.hash || '');
+    return buildDashboardLoginPath({
+      basePath: dashboardBasePath,
+      nextPath: `${pathname}${search}${hash}`
+    });
+  }
+
+  function redirectToLogin() {
+    if (typeof window === 'undefined') return;
+    window.location.replace(resolveLoginRedirectPath());
+  }
+
+  const routeController = createDashboardRouteController({
+    tabs: DASHBOARD_TABS,
+    normalizeTab,
+    tabLoadingMessages: TAB_LOADING_MESSAGES,
+    store: dashboardStore,
+    mountDashboardApp,
+    restoreDashboardSession,
+    getDashboardSessionState,
+    setDashboardActiveTab,
+    refreshDashboardTab,
+    selectRefreshInterval: (tab) => dashboardStore.selectRefreshInterval(tab),
+    setPollingContext: (tab, intervalMs) => dashboardStore.setPollingContext(tab, intervalMs),
+    recordPollingSkip: (reason, tab, intervalMs) =>
+      dashboardStore.recordPollingSkip(reason, tab, intervalMs),
+    recordPollingResume: (reason, tab, intervalMs) =>
+      dashboardStore.recordPollingResume(reason, tab, intervalMs),
+    recordRefreshMetrics: (metrics) => dashboardStore.recordRefreshMetrics(metrics),
+    isAuthenticated: () => dashboardStore.getState().session.authenticated === true,
+    requestNextFrame,
+    nowMs,
+    readHashTab,
+    writeHashTab,
+    isPageVisible,
+    redirectToLogin
+  });
+
   onMount(async () => {
+    routeController.setMounted(true);
     storeUnsubscribe = dashboardStore.subscribe((value) => {
       dashboardState = value;
     });
@@ -86,49 +192,147 @@
     });
 
     try {
-      await bootstrapNativeRuntime();
+      const [{ default: loadedConfigTab }, { default: loadedTuningTab }] = await Promise.all([
+        import('$lib/components/dashboard/ConfigTab.svelte'),
+        import('$lib/components/dashboard/TuningTab.svelte')
+      ]);
+      ConfigTabComponent = loadedConfigTab;
+      TuningTabComponent = loadedTuningTab;
+
+      const bootstrapped = await routeController.bootstrapRuntime({
+        initialTab: normalizeTab(data?.initialHashTab || readHashTab()),
+        chartRuntimeSrc,
+        basePath: dashboardBasePath
+      });
+      runtimeReady = bootstrapped === true;
     } catch (error) {
       runtimeError = error && error.message ? error.message : 'Dashboard bootstrap failed.';
     }
   });
 
   onDestroy(() => {
-    if (dashboardActions) {
-      dashboardActions.destroy();
-      dashboardActions = null;
-    }
+    const runtimeWasMounted = routeController.getRuntimeMounted();
+    routeController.dispose();
     storeUnsubscribe();
     telemetryUnsubscribe();
-    unmountDashboardRuntime();
+    if (runtimeWasMounted) {
+      unmountDashboardApp();
+    }
   });
 
   function onTabClick(event, tab) {
-    if (!dashboardActions) return;
-    dashboardActions.onTabClick(event, tab);
+    event.preventDefault();
+    void routeController.applyActiveTab(tab, { reason: 'click', syncHash: true });
   }
 
   function onTabKeydown(event, tab) {
-    if (!dashboardActions) return;
-    dashboardActions.onTabKeydown(event, tab);
+    const target = routeController.keyNavTarget(tab, event.key);
+    if (!target) return;
+    event.preventDefault();
+    void routeController.applyActiveTab(target, { reason: 'keyboard', syncHash: true });
+    requestNextFrame(() => {
+      focusTab(target);
+    });
+  }
+
+  function onWindowHashChange() {
+    if (!routeController.getRuntimeMounted()) return;
+    routeController.syncFromHash('hashchange');
+  }
+
+  function onDocumentVisibilityChange() {
+    routeController.handleVisibilityChange();
+  }
+
+  function setAdminMessage(text = '', kind = 'info') {
+    adminMessageText = String(text || '');
+    adminMessageKind = String(kind || 'info');
+  }
+
+  function formatActionError(error, fallback = 'Action failed.') {
+    if (error && typeof error.message === 'string' && error.message.trim()) {
+      return error.message.trim();
+    }
+    return fallback;
+  }
+
+  async function onSaveConfig(patch, options = {}) {
+    const successMessage = options && typeof options.successMessage === 'string'
+      ? options.successMessage
+      : 'Configuration saved';
+    setAdminMessage('Saving configuration...', 'info');
+    try {
+      const nextConfig = await updateDashboardConfig(patch || {});
+      await routeController.refreshTab(activeTabKey, 'config-save');
+      setAdminMessage(successMessage, 'success');
+      return nextConfig;
+    } catch (error) {
+      const message = formatActionError(error, 'Failed to save configuration.');
+      setAdminMessage(`Error: ${message}`, 'error');
+      throw error;
+    }
+  }
+
+  async function onBan(payload = {}) {
+    const ip = String(payload.ip || '').trim();
+    const duration = Number(payload.duration || 0);
+    if (!ip || !Number.isFinite(duration) || duration <= 0) return;
+    setAdminMessage(`Banning ${ip}...`, 'info');
+    try {
+      await banDashboardIp(ip, duration, 'manual_ban');
+      await routeController.refreshTab('ip-bans', 'ban-save');
+      setAdminMessage(`Banned ${ip} for ${duration}s`, 'success');
+    } catch (error) {
+      const message = formatActionError(error, 'Failed to ban IP.');
+      setAdminMessage(`Error: ${message}`, 'error');
+      throw error;
+    }
+  }
+
+  async function onUnban(payload = {}) {
+    const ip = String(payload.ip || '').trim();
+    if (!ip) return;
+    setAdminMessage(`Unbanning ${ip}...`, 'info');
+    try {
+      await unbanDashboardIp(ip);
+      await routeController.refreshTab('ip-bans', 'unban-save');
+      setAdminMessage(`Unbanned ${ip}`, 'success');
+    } catch (error) {
+      const message = formatActionError(error, 'Failed to unban IP.');
+      setAdminMessage(`Error: ${message}`, 'error');
+      throw error;
+    }
+  }
+
+  async function onRobotsPreview() {
+    return getDashboardRobotsPreview();
+  }
+
+  async function onFetchEventsRange(hours, options = {}) {
+    return getDashboardEvents(hours, options || {});
   }
 
   async function onLogoutClick(event) {
-    if (!dashboardActions) return;
+    if (!routeController.getRuntimeMounted()) return;
     event.preventDefault();
     if (loggingOut) return;
     loggingOut = true;
     try {
-      await dashboardActions.logout();
+      routeController.abortInFlightRefresh();
+      await logoutDashboardSession();
+      dashboardStore.setSession({ authenticated: false, csrfToken: '' });
+      routeController.clearPolling();
+      redirectToLogin();
     } finally {
       loggingOut = false;
     }
   }
-
 </script>
-
 <svelte:head>
   <title>Shuma-Gorath Dashboard</title>
 </svelte:head>
+<svelte:window on:hashchange={onWindowHashChange} />
+<svelte:document on:visibilitychange={onDocumentVisibilityChange} />
 
 <span id="last-updated" class="text-muted">{lastUpdatedText}</span>
 <div class="container panel panel-border" data-dashboard-runtime-mode="native">
@@ -161,6 +365,7 @@
           tabindex={selected ? 0 : -1}
           on:click={(event) => onTabClick(event, tab)}
           on:keydown={(event) => onTabKeydown(event, tab)}
+          use:registerTabLink={tab}
         >
           {tab === 'ip-bans' ? 'IP Bans' : tab.charAt(0).toUpperCase() + tab.slice(1)}
         </a>
@@ -182,6 +387,7 @@
     cdpSnapshot={snapshots.cdp}
     cdpEventsSnapshot={snapshots.cdpEvents}
     monitoringSnapshot={snapshots.monitoring}
+    onFetchEventsRange={onFetchEventsRange}
   />
 
   <div
@@ -191,7 +397,15 @@
     aria-hidden={activeTabKey === 'monitoring' ? 'true' : 'false'}
   >
     <div class="admin-groups">
-      <IpBansTab managed={true} isActive={activeTabKey === 'ip-bans'} tabStatus={tabStatus['ip-bans'] || {}} />
+      <IpBansTab
+        managed={true}
+        isActive={activeTabKey === 'ip-bans'}
+        tabStatus={tabStatus['ip-bans'] || {}}
+        bansSnapshot={snapshots.bans}
+        configSnapshot={snapshots.config}
+        onBan={onBan}
+        onUnban={onUnban}
+      />
       <StatusTab
         managed={true}
         isActive={activeTabKey === 'status'}
@@ -199,15 +413,54 @@
         tabStatus={tabStatus.status || {}}
         configSnapshot={snapshots.config}
       />
-      <ConfigTab
-        managed={true}
-        isActive={activeTabKey === 'config'}
-        tabStatus={tabStatus.config || {}}
-        analyticsSnapshot={snapshots.analytics}
-      />
-      <TuningTab managed={true} isActive={activeTabKey === 'tuning'} tabStatus={tabStatus.tuning || {}} />
+      {#if ConfigTabComponent}
+        <svelte:component
+          this={ConfigTabComponent}
+          managed={true}
+          isActive={activeTabKey === 'config'}
+          tabStatus={tabStatus.config || {}}
+          analyticsSnapshot={snapshots.analytics}
+          configSnapshot={snapshots.config}
+          configVersion={snapshotVersions.config || 0}
+          onSaveConfig={onSaveConfig}
+          onFetchRobotsPreview={onRobotsPreview}
+        />
+      {:else}
+        <section
+          id="dashboard-panel-config"
+          class="admin-group"
+          data-dashboard-tab-panel="config"
+          aria-labelledby="dashboard-tab-config"
+          hidden={activeTabKey !== 'config'}
+          aria-hidden={activeTabKey === 'config' ? 'false' : 'true'}
+        >
+          <p class="message info">Loading config controls...</p>
+        </section>
+      {/if}
+      {#if TuningTabComponent}
+        <svelte:component
+          this={TuningTabComponent}
+          managed={true}
+          isActive={activeTabKey === 'tuning'}
+          tabStatus={tabStatus.tuning || {}}
+          configSnapshot={snapshots.config}
+          configVersion={snapshotVersions.config || 0}
+          onSaveConfig={onSaveConfig}
+        />
+      {:else}
+        <section
+          id="dashboard-panel-tuning"
+          class="admin-group"
+          data-dashboard-tab-panel="tuning"
+          aria-labelledby="dashboard-tab-tuning"
+          hidden={activeTabKey !== 'tuning'}
+          aria-hidden={activeTabKey === 'tuning' ? 'false' : 'true'}
+        >
+          <p class="message info">Loading tuning controls...</p>
+        </section>
+      {/if}
     </div>
-    <div id="admin-msg" class="message"></div>
+    <div id="admin-msg" class={`message ${adminMessageKind}`}>{adminMessageText}</div>
   </div>
 
   {#if runtimeError}
