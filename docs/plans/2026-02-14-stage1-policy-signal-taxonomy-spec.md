@@ -29,7 +29,7 @@ Use stable IDs so policy, logs, and metrics can reference a single vocabulary.
    - Low-cost shaping controls (for Stage 1 scope: tighter rate posture and response-surface reduction; no challenge yet).
 5. `L4_VERIFY_JS`
    - JS verification gate.
-6. `L5_CHALLENGE_LITE`
+6. `L5_NOT_A_BOT`
    - Low-friction human check (planned path; not yet implemented).
 7. `L6_CHALLENGE_STRONG`
    - Strong challenge path (current puzzle challenge and PoW-backed JS flows).
@@ -198,7 +198,7 @@ Transitions are monotonic within a request unless an explicit de-escalation rule
 2. If suspicious but below friction threshold -> `L1_ALLOW_TAGGED` or `L2_MONITOR`.
 3. If shaping threshold reached -> `L3_SHAPE`.
 4. If JS gate required -> `L4_VERIFY_JS`.
-5. If challenge threshold reached -> `L6_CHALLENGE_STRONG` (or `L5_CHALLENGE_LITE` when implemented).
+5. If challenge threshold reached -> `L6_CHALLENGE_STRONG` (or `L5_NOT_A_BOT` when implemented).
 6. If maze threshold reached and maze enabled -> `L7_DECEPTION_EXPLICIT`.
 7. If covert-decoy policy is enabled and trigger conditions met -> `L8_DECEPTION_COVERT` (planned).
 8. If tarpit policy is enabled and high-confidence persistence is observed -> `L9_COST_IMPOSITION` (planned).

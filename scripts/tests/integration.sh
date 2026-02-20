@@ -211,6 +211,7 @@ info "Using honeypot path: $HONEYPOT_PATH"
 # Test 2: PoW challenge (if enabled)
 info "Testing PoW challenge..."
 pow_verified=false
+pow_enabled=true
 pow_attempt=1
 while [[ $pow_attempt -le 3 ]]; do
   pow_resp=$(curl -s -w "HTTPSTATUS:%{http_code}" "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -H "User-Agent: ${INTEGRATION_USER_AGENT}" "$BASE_URL/pow")
@@ -219,6 +220,7 @@ while [[ $pow_attempt -le 3 ]]; do
   if [[ "$pow_status" == "404" ]]; then
     info "PoW disabled; skipping PoW verification"
     pow_verified=true
+    pow_enabled=false
     break
   fi
   if ! python3 -c 'import json,sys; json.loads(sys.stdin.read())' <<< "$pow_body" >/dev/null 2>&1; then
@@ -295,6 +297,108 @@ if [[ "$pow_verified" != "true" ]]; then
   fail "PoW verification failed after retries"
 fi
 
+if [[ "$pow_enabled" == "true" ]]; then
+  info "Testing PoW verify failure branches..."
+  pow_fail_resp=$(curl -s -w "HTTPSTATUS:%{http_code}" "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -H "User-Agent: ${INTEGRATION_USER_AGENT}" "$BASE_URL/pow")
+  pow_fail_body=$(echo "$pow_fail_resp" | sed -e 's/HTTPSTATUS:.*//')
+  pow_fail_status=$(echo "$pow_fail_resp" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+  if [[ "$pow_fail_status" != "200" ]]; then
+    fail "Failed to obtain PoW seed for failure-branch tests"
+    echo -e "${YELLOW}DEBUG /pow status:${NC} $pow_fail_status"
+    echo -e "${YELLOW}DEBUG /pow body:${NC} $pow_fail_body"
+  else
+    pow_fail_seed=$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read()).get("seed",""))' <<< "$pow_fail_body")
+    pow_fail_difficulty=$(python3 -c 'import json,sys; print(int(json.loads(sys.stdin.read()).get("difficulty",0)))' <<< "$pow_fail_body")
+    if [[ -z "$pow_fail_seed" || "$pow_fail_difficulty" -le 0 ]]; then
+      fail "PoW failure-branch preflight could not parse seed/difficulty"
+      echo -e "${YELLOW}DEBUG /pow body:${NC} $pow_fail_body"
+    else
+      missing_seed_payload=$(python3 - <<'PY'
+import json
+print(json.dumps({"nonce": "1"}))
+PY
+)
+      missing_seed_resp=$(curl -s -w "HTTPSTATUS:%{http_code}" "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -H "User-Agent: ${INTEGRATION_USER_AGENT}" \
+        -H "Content-Type: application/json" -X POST -d "$missing_seed_payload" "$BASE_URL/pow/verify")
+      missing_seed_body=$(echo "$missing_seed_resp" | sed -e 's/HTTPSTATUS:.*//')
+      missing_seed_status=$(echo "$missing_seed_resp" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+      if [[ "$missing_seed_status" == "400" ]] && echo "$missing_seed_body" | grep -q 'Missing seed'; then
+        pass "PoW verify rejects missing seed payload"
+      else
+        fail "PoW verify did not reject missing seed payload as expected"
+        echo -e "${YELLOW}DEBUG missing-seed status:${NC} $missing_seed_status"
+        echo -e "${YELLOW}DEBUG missing-seed body:${NC} $missing_seed_body"
+      fi
+
+      missing_nonce_payload=$(python3 - "$pow_fail_seed" <<'PY'
+import json,sys
+print(json.dumps({"seed": sys.argv[1]}))
+PY
+)
+      missing_nonce_resp=$(curl -s -w "HTTPSTATUS:%{http_code}" "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -H "User-Agent: ${INTEGRATION_USER_AGENT}" \
+        -H "Content-Type: application/json" -X POST -d "$missing_nonce_payload" "$BASE_URL/pow/verify")
+      missing_nonce_body=$(echo "$missing_nonce_resp" | sed -e 's/HTTPSTATUS:.*//')
+      missing_nonce_status=$(echo "$missing_nonce_resp" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+      if [[ "$missing_nonce_status" == "400" ]] && echo "$missing_nonce_body" | grep -q 'Missing nonce'; then
+        pass "PoW verify rejects missing nonce payload"
+      else
+        fail "PoW verify did not reject missing nonce payload as expected"
+        echo -e "${YELLOW}DEBUG missing-nonce status:${NC} $missing_nonce_status"
+        echo -e "${YELLOW}DEBUG missing-nonce body:${NC} $missing_nonce_body"
+      fi
+
+      bad_nonce=$(python3 - "$pow_fail_seed" "$pow_fail_difficulty" <<'PY'
+import hashlib
+import sys
+
+seed = sys.argv[1]
+bits = int(sys.argv[2])
+
+def has_leading_zero_bits(h, bits):
+    remaining = bits
+    for b in h:
+        if remaining <= 0:
+            return True
+        if remaining >= 8:
+            if b != 0:
+                return False
+            remaining -= 8
+        else:
+            mask = 0xFF << (8 - remaining)
+            return (b & mask) == 0
+    return True
+
+nonce = 0
+while True:
+    msg = f"{seed}:{nonce}".encode()
+    digest = hashlib.sha256(msg).digest()
+    if not has_leading_zero_bits(digest, bits):
+        print(nonce)
+        break
+    nonce += 1
+PY
+)
+      sleep 2
+      bad_proof_payload=$(python3 - "$pow_fail_seed" "$bad_nonce" <<'PY'
+import json,sys
+print(json.dumps({"seed": sys.argv[1], "nonce": sys.argv[2]}))
+PY
+)
+      bad_proof_resp=$(curl -s -w "HTTPSTATUS:%{http_code}" "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 127.0.0.1" -H "User-Agent: ${INTEGRATION_USER_AGENT}" \
+        -H "Content-Type: application/json" -X POST -d "$bad_proof_payload" "$BASE_URL/pow/verify")
+      bad_proof_body=$(echo "$bad_proof_resp" | sed -e 's/HTTPSTATUS:.*//')
+      bad_proof_status=$(echo "$bad_proof_resp" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+      if [[ "$bad_proof_status" == "400" ]] && echo "$bad_proof_body" | grep -q 'Invalid proof'; then
+        pass "PoW verify rejects incorrect proof"
+      else
+        fail "PoW verify did not reject incorrect proof as expected"
+        echo -e "${YELLOW}DEBUG invalid-proof status:${NC} $bad_proof_status"
+        echo -e "${YELLOW}DEBUG invalid-proof body:${NC} $bad_proof_body"
+      fi
+    fi
+  fi
+fi
+
 # Test 3: Root endpoint (should return JS challenge or OK)
 info "Testing root endpoint..."
 
@@ -358,7 +462,65 @@ else
   echo -e "${YELLOW}DEBUG enable response:${NC} $enable_resp"
 fi
 
-# Test 9: Challenge flow is single-use (incorrect then replay expires)
+# Test 9: Not-a-Bot flow validates pass + replay rejection in test mode
+info "Testing /challenge/not-a-bot-checkbox flow..."
+not_a_bot_page=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 10.0.0.151" -H "User-Agent: ${INTEGRATION_USER_AGENT}" "$BASE_URL/challenge/not-a-bot-checkbox")
+if echo "$not_a_bot_page" | grep -q 'I am not a bot'; then
+  pass "GET /challenge/not-a-bot-checkbox returns not-a-bot page in test mode"
+else
+  fail "GET /challenge/not-a-bot-checkbox did not return not-a-bot page in test mode"
+  echo -e "${YELLOW}DEBUG not-a-bot page:${NC} $not_a_bot_page"
+fi
+
+not_a_bot_seed=$(python3 -c 'import re,sys; html=sys.stdin.read(); m=re.search(r"name=\"seed\" value=\"([^\"]+)\"", html); print(m.group(1) if m else "")' <<< "$not_a_bot_page")
+if [[ -z "$not_a_bot_seed" ]]; then
+  fail "Could not parse not-a-bot seed from page"
+  echo -e "${YELLOW}DEBUG parsed not-a-bot seed:${NC} $not_a_bot_seed"
+else
+  not_a_bot_headers=$(mktemp)
+  not_a_bot_body=$(mktemp)
+  not_a_bot_telemetry='{"has_pointer":true,"pointer_move_count":42,"pointer_path_length":560.0,"pointer_direction_changes":18,"down_up_ms":220,"focus_changes":1,"visibility_changes":0,"interaction_elapsed_ms":1800,"keyboard_used":false,"touch_used":false,"events_order_valid":true}'
+  # Sequence timing guardrail: use >=2s to avoid second-boundary flakes.
+  sleep 2
+  not_a_bot_status=$(curl -s -D "$not_a_bot_headers" -o "$not_a_bot_body" -w "%{http_code}" \
+    "${FORWARDED_SECRET_HEADER[@]}" \
+    -H "X-Forwarded-For: 10.0.0.151" \
+    -H "User-Agent: ${INTEGRATION_USER_AGENT}" \
+    --data-urlencode "seed=$not_a_bot_seed" \
+    --data-urlencode "checked=1" \
+    --data-urlencode "telemetry=$not_a_bot_telemetry" \
+    -X POST "$BASE_URL/challenge/not-a-bot-checkbox")
+  if [[ "$not_a_bot_status" == "303" ]] \
+    && grep -qi '^Location: /' "$not_a_bot_headers" \
+    && grep -qi '^Set-Cookie: shuma_not_a_bot=' "$not_a_bot_headers"; then
+    pass "POST /challenge/not-a-bot-checkbox returns redirect + marker cookie on pass"
+  else
+    fail "POST /challenge/not-a-bot-checkbox did not return expected pass response"
+    echo -e "${YELLOW}DEBUG not-a-bot status:${NC} $not_a_bot_status"
+    echo -e "${YELLOW}DEBUG not-a-bot headers:${NC}"
+    sed -n '1,60p' "$not_a_bot_headers"
+    echo -e "${YELLOW}DEBUG not-a-bot body:${NC}"
+    sed -n '1,60p' "$not_a_bot_body"
+  fi
+
+  not_a_bot_replay_status=$(curl -s -o /dev/null -w "%{http_code}" \
+    "${FORWARDED_SECRET_HEADER[@]}" \
+    -H "X-Forwarded-For: 10.0.0.151" \
+    -H "User-Agent: ${INTEGRATION_USER_AGENT}" \
+    --data-urlencode "seed=$not_a_bot_seed" \
+    --data-urlencode "checked=1" \
+    --data-urlencode "telemetry=$not_a_bot_telemetry" \
+    -X POST "$BASE_URL/challenge/not-a-bot-checkbox")
+  if [[ "$not_a_bot_replay_status" != "303" ]]; then
+    pass "Replay submit for /challenge/not-a-bot-checkbox is rejected"
+  else
+    fail "Replay submit for /challenge/not-a-bot-checkbox unexpectedly returned pass redirect"
+  fi
+
+  rm -f "$not_a_bot_headers" "$not_a_bot_body"
+fi
+
+# Test 10: Challenge flow is single-use (incorrect then replay expires)
 info "Testing /challenge/puzzle single-use flow..."
 challenge_page=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 10.0.0.150" -H "User-Agent: ${INTEGRATION_USER_AGENT}" "$BASE_URL/challenge/puzzle")
 if echo "$challenge_page" | grep -q 'Puzzle'; then
@@ -420,7 +582,7 @@ else
   fi
 fi
 
-# Test 10: Test mode allows honeypot access without blocking
+# Test 11: Test mode allows honeypot access without blocking
 info "Testing test_mode behavior (honeypot should not block)..."
 # First, unban the test IP to ensure clean state
 curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST "$BASE_URL/admin/unban?ip=10.0.0.99" > /dev/null
@@ -442,7 +604,7 @@ else
   echo -e "${YELLOW}DEBUG subsequent response:${NC} $subsequent_resp"
 fi
 
-# Test 11: Disable test mode and verify blocking resumes
+# Test 12: Disable test mode and verify blocking resumes
 info "Testing POST /admin/config to disable test_mode..."
 disable_resp=$(curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST -H "Content-Type: application/json" \
   -d '{"test_mode": false}' "$BASE_URL/admin/config")
@@ -453,7 +615,7 @@ else
   echo -e "${YELLOW}DEBUG disable response:${NC} $disable_resp"
 fi
 
-# Test 12: Verify blocking works again after test mode disabled
+# Test 13: Verify blocking works again after test mode disabled
 info "Testing that blocking resumes after test_mode disabled..."
 # Unban first to get clean state
 curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST "$BASE_URL/admin/unban?ip=10.0.0.100" > /dev/null

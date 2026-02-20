@@ -46,7 +46,7 @@ Puzzle challenge is implemented (`/challenge/puzzle`) with signed seed, determin
 
 ### C. Adaptive routing
 
-- Trigger puzzle only for uncertainty bands where lite challenge is inconclusive.
+- Trigger puzzle only for uncertainty bands where the not-a-bot checkbox is inconclusive.
 - Escalate repeatedly failed puzzle sessions to maze/tarpit/block policy.
 
 ### D. Accessibility parity
@@ -67,7 +67,7 @@ Puzzle challenge is implemented (`/challenge/puzzle`) with signed seed, determin
 2. PZ-2: Add variant rotation controls and metadata logging.
 3. PZ-3: Add submission nonce binding and stricter replay guarantees.
 4. PZ-4: Add optional solve-integrity telemetry features.
-5. PZ-5: Add adaptive routing from challenge-lite outcomes.
+5. PZ-5: Add adaptive routing from not-a-bot outcomes.
 6. PZ-6: Add repeated-failure escalation rules.
 7. PZ-7: Add accessibility-equivalent modality with equal verification strength.
 8. PZ-8: Add per-variant solve-rate and latency metrics.

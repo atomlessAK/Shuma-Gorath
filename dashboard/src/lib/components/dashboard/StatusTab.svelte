@@ -24,12 +24,6 @@
     return raw;
   };
 
-  const toPlainText = (value) =>
-    String(value || '')
-      .replace(/<[^>]*>/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-
   $: statusSnapshot = deriveStatusSnapshot(configSnapshot || {});
   $: featureStatusItems = buildFeatureStatusItems(statusSnapshot);
   $: statusVariableGroups = buildVariableInventoryGroups(statusSnapshot);
@@ -53,7 +47,7 @@
         {#each featureStatusItems as item}
           <div class="status-item">
             <h3>{item.title}</h3>
-            <p class="control-desc text-muted">{toPlainText(item.description)}</p>
+            <p class="control-desc text-muted">{@html item.description}</p>
             <div class="status-rows">
               <div class="info-row">
                 <span class="info-label text-muted">Status:</span>
@@ -108,8 +102,9 @@
     <div class="control-group panel-soft pad-md">
       <h3>Runtime Performance Telemetry</h3>
       <p class="control-desc text-muted">
-        Operator thresholds: keep rolling p95 fetch latency under <strong>500 ms</strong>, rolling p95 render
-        timing under <strong>16 ms</strong>, and investigate sustained polling skip/resume churn.
+        Operator thresholds for auto-refresh tabs (<code>monitoring</code> and <code>ip-bans</code>): keep rolling
+        p95 fetch latency under <strong>500 ms</strong>, rolling p95 render timing under <strong>16 ms</strong>,
+        and investigate sustained polling skip/resume churn.
       </p>
       <div class="stats-cards stats-cards--compact">
         <div class="card panel panel-border pad-md">

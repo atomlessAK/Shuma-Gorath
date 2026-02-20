@@ -8,6 +8,7 @@
   export let configVersion = 0;
   export let onSaveConfig = null;
 
+  let notABotThreshold = 2;
   let challengeThreshold = 3;
   let mazeThreshold = 6;
   let weightJsRequired = 1;
@@ -17,6 +18,7 @@
   let savingBotness = false;
 
   let baseline = {
+    notABotThreshold: 2,
     challengeThreshold: 3,
     mazeThreshold: 6,
     weightJsRequired: 1,
@@ -41,6 +43,7 @@
       ? config.botness_weights
       : {};
     return {
+      notABotThreshold: parseInteger(config.not_a_bot_risk_threshold, 2),
       challengeThreshold: parseInteger(config.challenge_puzzle_risk_threshold, 3),
       mazeThreshold: parseInteger(config.botness_maze_threshold, 6),
       weightJsRequired: parseInteger(weights.js_required, 1),
@@ -53,6 +56,7 @@
   function applyConfig(config = {}) {
     const next = toBotnessBaseline(config);
     baseline = next;
+    notABotThreshold = next.notABotThreshold;
     challengeThreshold = next.challengeThreshold;
     mazeThreshold = next.mazeThreshold;
     weightJsRequired = next.weightJsRequired;
@@ -65,6 +69,7 @@
     if (!botnessValid || !botnessDirty || !writable || typeof onSaveConfig !== 'function') return;
     savingBotness = true;
     const payload = {
+      not_a_bot_risk_threshold: Number(notABotThreshold),
       challenge_puzzle_risk_threshold: Number(challengeThreshold),
       botness_maze_threshold: Number(mazeThreshold),
       botness_weights: {
@@ -78,6 +83,7 @@
     try {
       await onSaveConfig(payload, { successMessage: 'Botness scoring saved' });
       baseline = {
+        notABotThreshold: Number(notABotThreshold),
         challengeThreshold: Number(challengeThreshold),
         mazeThreshold: Number(mazeThreshold),
         weightJsRequired: Number(weightJsRequired),
@@ -91,6 +97,7 @@
   }
 
   $: writable = configSnapshot && configSnapshot.admin_config_write_enabled === true;
+  $: notABotDefault = parseInteger(configSnapshot?.not_a_bot_risk_threshold_default, 2);
   $: challengeDefault = parseInteger(configSnapshot?.challenge_puzzle_risk_threshold_default, 3);
   $: mazeDefault = parseInteger(configSnapshot?.botness_maze_threshold_default, 6);
   $: signalDefinitions = configSnapshot && typeof configSnapshot.botness_signal_definitions === 'object'
@@ -104,7 +111,9 @@
     : [];
 
   $: botnessValid = (
+    inRange(notABotThreshold, 1, 10) &&
     inRange(challengeThreshold, 1, 10) &&
+    (Number(challengeThreshold) <= 1 || Number(notABotThreshold) < Number(challengeThreshold)) &&
     inRange(mazeThreshold, 1, 10) &&
     inRange(weightJsRequired, 0, 10) &&
     inRange(weightGeoRisk, 0, 10) &&
@@ -112,6 +121,7 @@
     inRange(weightRateHigh, 0, 10)
   );
   $: botnessDirty = (
+    Number(notABotThreshold) !== baseline.notABotThreshold ||
     Number(challengeThreshold) !== baseline.challengeThreshold ||
     Number(mazeThreshold) !== baseline.mazeThreshold ||
     Number(weightJsRequired) !== baseline.weightJsRequired ||
@@ -145,6 +155,10 @@
       <p class="control-desc text-muted">Weighted signals form a unified score. Moderate scores get the challenge; higher scores route to maze.</p>
       <div class="admin-controls">
         <div class="input-row">
+          <label class="control-label" for="not-a-bot-threshold-score">Not-a-Bot (score)</label>
+          <input class="input-field" type="number" id="not-a-bot-threshold-score" min="1" max="10" step="1" inputmode="numeric" aria-label="Not-a-Bot risk threshold" bind:value={notABotThreshold} disabled={!writable}>
+        </div>
+        <div class="input-row">
           <label class="control-label" for="challenge-puzzle-threshold">Challenge (score)</label>
           <input class="input-field" type="number" id="challenge-puzzle-threshold" min="1" max="10" step="1" inputmode="numeric" aria-label="Challenge risk threshold" bind:value={challengeThreshold} disabled={!writable}>
         </div>
@@ -173,6 +187,10 @@
           <div class="info-row">
             <span class="info-label text-muted">Config:</span>
             <span id="botness-config-status" class="status-value">{writable ? 'EDITABLE' : 'READ ONLY'}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label text-muted">Default Not-a-Bot:</span>
+            <span id="not-a-bot-default">{notABotDefault}</span>
           </div>
           <div class="info-row">
             <span class="info-label text-muted">Default Challenge:</span>

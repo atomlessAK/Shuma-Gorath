@@ -270,14 +270,7 @@ export function createDashboardRefreshRuntime(options = {}) {
       const cachedIpBans = readCache(IP_BANS_CACHE_KEY);
       if (cachedIpBans) {
         applySnapshots(cachedIpBans);
-        const cachedBans = Array.isArray(cachedIpBans.bans?.bans)
-          ? cachedIpBans.bans.bans
-          : [];
-        if (cachedBans.length === 0) {
-          showTabEmpty('ip-bans', 'No active bans.');
-        } else {
-          clearTabStateMessage('ip-bans');
-        }
+        clearTabStateMessage('ip-bans');
         return;
       }
     }
@@ -302,11 +295,7 @@ export function createDashboardRefreshRuntime(options = {}) {
       clearCache(MONITORING_CACHE_KEY);
     }
 
-    if (!Array.isArray(bansData.bans) || bansData.bans.length === 0) {
-      showTabEmpty('ip-bans', 'No active bans.');
-    } else {
-      clearTabStateMessage('ip-bans');
-    }
+    clearTabStateMessage('ip-bans');
   }
 
   async function refreshConfigBackedTab(

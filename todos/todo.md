@@ -6,14 +6,6 @@ This is the active work queue.
 `todos/security-review.md` tracks security finding validity and closure status.
 Completed items are archived in `todos/completed-todo-history.md`.
 
-## Direction Snapshot (for next implementation stages)
-- [ ] Follow internal-first delivery policy: harden Shuma-native capability paths before completing external-provider parity for the same capability; use enterprise/Akamai patterns to inform design, not as baseline dependencies.
-
-## P0 Priority Override (Highest Priority Queue)
-- [x] Complete the remaining SvelteKit migration work (`DSH-SVLT-NEXT1.*`, `DSH-SVLT-NEXT2.*`, `DSH-SVLT-NEXT3.*`, `DSH-SVLT-TEST1.*`, `DSH-SVLT-TEST2.*`) before non-critical roadmap work.
-- [x] Treat all non-blocking research/backlog items below as lower priority until the Svelte-native dashboard path replaces the bridge path.
-- [x] Complete the dashboard excellence remediation slice (`DSH-MON-EX1`..`DSH-MON-EX7`) before picking up additional roadmap/research backlog items.
-
 ## P1 Privacy and Data-Protection Follow-up
 - [ ] SEC-GDPR-2 Enforce deterministic cleanup/expiry for stale fingerprint state keys (`fp:state:*`, `fp:flow:*`, `fp:flow:last_bucket:*`) aligned to configured fingerprint TTL/window controls.
 - [ ] SEC-GDPR-3 Add an optional event-log IP minimization mode (raw vs masked/pseudonymized) for privacy-sensitive deployments, with explicit tradeoff documentation.
@@ -23,37 +15,14 @@ Completed items are archived in `todos/completed-todo-history.md`.
 Completion rule for every paper TODO below: capture key findings, map to `self_hosted_minimal` vs `enterprise_akamai` ownership, and propose concrete Shuma TODO updates.
 
 ### Fingerprinting, JS Verification, and CDP-Adjacent Detection
-- [x] Strengthen fingerprinting by hardening internal baseline signals first, then ingesting trusted upstream edge signals (JA3/JA4 and similar) with provenance checks and explicit internal fallback when edge headers are absent or untrusted.
 - Completed research tranche (`R-FP-01`..`R-FP-09`) archived in `docs/research/2026-02-16-fingerprinting-research-synthesis.md` and `todos/completed-todo-history.md`.
-
-#### Phase 1: Foundation and guardrails
-- [x] Normalize fingerprint signals with provenance/confidence metadata for rule evaluation.
-- [x] FP-R11 Add feature-family entropy budgeting and per-family confidence caps (avoid over-weighting high-cardinality unstable attributes).
-- [x] FP-R20 Add fingerprint data-minimization and retention controls (TTL/pseudonymization/export visibility) plus operator documentation.
-
-#### Phase 2: Core internal detection quality
-- [x] FP-R15 Expand cross-layer inconsistency rules: UA, client hints, runtime/browser APIs, and transport-level fingerprints.
-- [x] Add mismatch heuristics (for example UA/client-hint versus transport fingerprint anomalies).
-- [x] FP-R12 Add temporal coherence modeling with per-attribute churn classes and impossible-transition detection IDs.
-- [x] FP-R16 Add flow-centric fingerprint telemetry extraction and bounded per-flow aggregation windows.
-
-#### Phase 3: Hardening and controlled signal expansion
-- [x] FP-R13 Add JS/CDP detector-surface rotation support (versioned probe families + staged rollout + rollback controls).
-- [x] Add trusted-header ingestion for transport fingerprints supplied by CDN/proxy.
-- [x] FP-R14 Add multi-store persistence-abuse signals (cookie/localStorage/sessionStorage/IndexedDB recovery patterns) as suspicious automation features.
-- [x] FP-R17 Add optional challenge-bound, short-lived device-class marker path (Picasso-inspired) for replay-resistant continuity checks.
-- [x] FP-R18 Add optional low-friction behavioral micro-signals in challenge contexts (mouse/timing), with privacy guardrails and conservative weighting.
-
-#### Phase 4: Operatorization and validation
-- [x] Add fingerprint-centric admin visibility for investigations and tuning.
-- [x] FP-R19 Add evasive-regression coverage for detector fingerprinting, temporal drift, and inconsistency-bypass attempts.
 - [ ] Run a Finch comparison spike to see if Shuma might benefit from enabling enhancing its internal capabilities with allowing users to integrate finch alongside it(no direct dependency in core runtime).
 
 ### Challenges: PoW, Not-a-Bot, and Puzzle Escalation
 - [ ] R-CH-01 Review Dwork/Naor, "Pricing via Processing or Combatting Junk Mail" (CRYPTO 1992) and extract adaptive requester-cost principles for modern web bot defence. https://www.microsoft.com/en-us/research/publication/pricing-via-processing-or-combatting-junk-mail/
 - [ ] R-CH-02 Review Juels/Brainard, "Client Puzzles" (NDSS 1999) and define stateless verification patterns for Shuma PoW endpoints. https://www.ndss-symposium.org/ndss1999/cryptographic-defense-against-connection-depletion-attacks/
 - [ ] R-CH-03 Review Adam Back, "Hashcash: A Denial of Service Counter-Measure" (2002) and assess modern browser-side PoW cost tuning constraints. https://nakamotoinstitute.org/library/hashcash/
-- [ ] R-CH-04 Review von Ahn et al., "CAPTCHA: Using Hard AI Problems for Security" (EUROCRYPT 2003) and capture challenge-design principles still valid for Challenge Lite. https://doi.org/10.1007/3-540-39200-9_18
+- [ ] R-CH-04 Review von Ahn et al., "CAPTCHA: Using Hard AI Problems for Security" (EUROCRYPT 2003) and capture challenge-design principles still valid for the Not-a-Bot checkbox step. https://doi.org/10.1007/3-540-39200-9_18
 - [ ] R-CH-05 Review von Ahn et al., "reCAPTCHA: Human-based character recognition via Web security measures" (Science 2008) and extract lessons for useful-human-work and abuse resistance tradeoffs. https://doi.org/10.1126/science.1160379
 - [ ] R-CH-06 Review Bursztein et al., "Easy Does It: More Usable CAPTCHAs" (CHI 2014) and derive practical usability thresholds/metrics for Shuma challenge UX. https://doi.org/10.1145/2556288.2557322
 - [ ] R-CH-07 Review Golle, "Machine Learning Attacks Against the ASIRRA CAPTCHA" (CCS 2008) and define anti-ML solvability requirements for puzzle challenge variants. https://doi.org/10.1145/1455770.1455838
@@ -119,63 +88,29 @@ Completion rule for every paper TODO below: capture key findings, map to `self_h
 - [ ] Document operational guidance for IP-range policy safety (false-positive controls, dry-run/test mode, observability, rollback).
 
 ## P2 Challenge Roadmap
-- [ ] Implement Challenge Lite (`/challenge/not-a-bot-checkbox`) per `todos/challenge-lite-spec.md` with signed short-lived single-use nonce and IP-bucket binding.
-- [ ] Implement Challenge Lite telemetry capture/validation and scoring model (`0..10`) with server-side threshold routing (`pass`, `escalate_puzzle`, `maze_or_block`).
-- [ ] Add Challenge Lite verification marker/token issuance after pass and enforce it in routing flow.
-- [ ] Add Challenge Lite admin visibility/config controls for thresholds, TTL, and attempt caps (read-only defaults plus optional mutability controls).
-- [ ] Add Challenge Lite metrics and dashboard exposure (`served`, `pass`, `escalate`, `fail`, `replay`, latency).
-- [ ] Add unit/integration/e2e coverage for Challenge Lite lifecycle and replay/abuse paths.
-- [ ] Add an accessibility-equivalent challenge modality with equivalent verification strength (expiry, single-use, signature, IP-bucket checks).
-- [ ] Add post-success human-verification token issuance and enforcement for protected flows.
-- [ ] Add challenge operational metrics for abandonment/latency (for example median solve time and incomplete challenge rate).
+- [x] NAB-0 Research and policy synthesis: keep `docs/research/2026-02-19-not-a-bot-challenge-research-synthesis.md`, `docs/plans/2026-02-13-not-a-bot-excellence-plan.md`, and `todos/not-a-bot-spec.md` aligned as the single implementation source.
+- [x] NAB-1 Implement Not-a-Bot checkbox (`/challenge/not-a-bot-checkbox`) per `todos/not-a-bot-spec.md` with signed short-lived single-use nonce and IP-bucket binding.
+- [x] NAB-2 Implement Not-a-Bot telemetry capture/validation and deterministic scoring model (`0..10`) with threshold routing (`pass`, `escalate_puzzle`, `maze_or_block`).
+- [x] NAB-3 Add Not-a-Bot verification marker/token issuance after pass and enforce it in routing flow.
+- [x] NAB-4 Add Not-a-Bot routing integration so medium-certainty traffic hits Not-a-Bot before puzzle escalation, with deterministic maze/block fallback.
+- [x] NAB-5 Add Not-a-Bot admin visibility/config controls for thresholds, TTL, and attempt caps (read-only defaults plus optional mutability controls).
+- [x] NAB-6 Add Not-a-Bot monitoring parity (`served`, `pass`, `escalate`, `fail`, `replay`, solve-latency buckets, abandonment estimate) and dashboard exposure.
+- [x] NAB-7 Add dedicated e2e browser coverage for Not-a-Bot lifecycle and replay/abuse paths (unit + integration coverage is now in place).
+- [x] NAB-8 Add operator docs and threshold tuning guidance aligned to low-friction managed-first routing.
+- [x] NAB-9 Align Not-a-Bot control behavior to one-step state-of-the-art UX (checkbox-like control + auto-progress on activation).
+- [x] NAB-10 Explicitly document the very-low-certainty managed/invisible path mapping (passive + JS/PoW) and keep Not-a-Bot medium-certainty only.
+- [x] NAB-11 Preserve accessibility-neutral scoring policy: keyboard/touch flows remain pass-capable; assistive paths are never direct negative signals.
+- [ ] NAB-12 Evaluate optional PAT-style private attestation signal ingestion as additive evidence only (non-blocking).
 
 ## P2 GEO Defence Maturity
 - [ ] Add ASN/network dimensions in GEO policy logic (not just country list). (`src/signals/geo/mod.rs`, `src/config/mod.rs`, `src/admin/api.rs`)
 - [ ] Add GEO/ASN observability and alerting (metrics, dashboard panels, docs). (`src/observability/metrics.rs`, dashboard, docs)
 
 ## P2 Modularization and Future Repository Boundaries
-- [ ] Restructure source into clearer domain modules (policy engine, maze/tarpit, challenges, fingerprint signals, admin adapters).
-- [ ] Extract policy decision flow from HTTP plumbing to enable isolated testing and future reuse.
-- [ ] Define module interface contracts and dependency direction (core domain first, adapters second).
 - [ ] Write objective criteria for future repo splits (API stability, release cadence, ownership, operational coupling).
-
-
-### H4 Pluggable provider architecture (internal by default, external-capable)
-Implementation rule: when internal feature work touches provider-managed capabilities, route changes through provider interfaces and registry paths (no new direct orchestration-path module calls).
-### H5 Execution and rollout discipline
-- [ ] Execute this hardening work as small, test-backed slices (one boundary family at a time) to avoid broad regressions.
-- [ ] Require each structural slice to pass full verification via Makefile (`make test`; includes unit + integration + dashboard e2e) before merge.
-- [ ] Track and enforce "no net behavior change" for refactor-only slices unless explicitly scoped otherwise.
 ## P3 Platform and Configuration Clarity
 - [ ] Design runtime-agnostic architecture that keeps core detection logic portable while preserving Fermyon-first performance paths.
 - [ ] Evaluate renaming `SHUMA_CHALLENGE_PUZZLE_RISK_THRESHOLD` to `SHUMA_BOTNESS_CHALLENGE_PUZZLE_THRESHOLD` to reflect botness semantics.
 - [ ] Standardize terminology across code/UI/docs so `honeypot` and `maze` are used consistently instead of interchangeably.
-- [x] Initialize Ban IP pane duration controls from the current Admin Manual Ban default duration so Ban IP and Ban Durations panes stay consistent.
-- [x] Dashboard modernization now follows SvelteKit full cutover (`DSH-SVLT-*`) with static adapter output served via Spin (`dist/dashboard`), superseding the prior framework migration direction.
 - [ ] Document setup-time config bootstrapping clearly: how `make setup` creates/populates local env, how env-only vars are sourced, and how KV defaults are seeded and later overridden.
 - [ ] Long-term option: integrate upstream identity/proxy auth (OIDC/SAML) for dashboard/admin instead of app-level key login.
-
-### P3 Monitoring Signal Expansion (Dashboard + Telemetry)
-- [x] DSH-MON-1 Add a `Honeypot Hits` monitoring section (mirroring maze summary style) with: total hits, unique crawler buckets, top crawler buckets, and top honeypot paths hit.
-- [x] DSH-MON-2 Add a `Challenge Failures` monitoring section with time-windowed totals and reason breakdown (`incorrect`, `expired/replay`, `sequence_violation`, `invalid_output`, `forbidden`), plus trend chart.
-- [x] DSH-MON-3 Add a `PoW Failures` monitoring section with time-windowed totals and reason breakdown (`invalid_proof`, `missing_seed/nonce`, `sequence_violation`, `expired/replay`, `binding/timing mismatch`), plus trend chart.
-- [x] DSH-MON-4 Add a `Rate Limiting Violations` monitoring section with totals, unique offender buckets, top offender buckets, and enforcement outcomes (`limited`, `banned`, `fallback_allow`, `fallback_deny`).
-- [x] DSH-MON-5 Add a `GEO Violations` monitoring section with totals by route/action (`block`, `challenge`, `maze`) and top country codes causing policy actions.
-- [x] DSH-MON-6 Add a Monitoring-page helper panel that explains how to export/scrape the same signals in Prometheus format (`/metrics`) for external visualization platforms (for example Prometheus/Grafana), including copyable scrape examples.
-- [x] DSH-MON-7 Deliberate Prometheus parity scope for Monitoring: audit each Monitoring widget/signal as `already_exported`, `derivable_from_existing_series`, or `missing_export`; then define a prioritized add-list with cardinality/cost guardrails before implementing new metric series. (`docs/monitoring-prometheus-parity-audit.md`)
-- [x] DSH-MON-8 Implement Priority-1 low-cardinality missing-export metric families from `docs/monitoring-prometheus-parity-audit.md` (`cdp_detections`, challenge reason totals, PoW outcomes/reasons, rate outcomes, GEO action totals).
-- [x] DSH-MON-9 Add `/metrics` regression coverage and dashboard parity assertions for newly exported monitoring families (including cardinality guardrail tests).
-- [x] MON-TEL-1 Add structured honeypot hit telemetry (KV/metric counters by IP bucket and path key) so dashboard can report path-level honeypot activity without relying on free-form event text parsing.
-- [x] MON-TEL-2 Add challenge-submit failure telemetry with explicit counters and optional event records for failure classes that currently only increment coarse counters (enable top-offender and reason panels).
-- [x] MON-TEL-3 Add explicit PoW verify outcome telemetry (success + failure classes) since invalid-proof and malformed-request paths are not currently surfaced as dashboard-ready counters/events.
-- [x] MON-TEL-3.a Add PoW verify success-class telemetry and decide whether Monitoring should expose success/fail ratio or keep failures-only.
-- [x] MON-TEL-4 Add rate-limit violation summary endpoint (or equivalent aggregation contract) that returns filtered offender/top-path/top-window data without requiring expensive client-side filtering over generic event feeds.
-- [x] MON-TEL-5 Add GEO enforcement telemetry keyed by action + country (bounded cardinality, ISO country normalization) so GEO monitoring panels are robust and not dependent on outcome-string parsing.
-- [x] MON-TEL-6 Add admin API surface for these monitoring summaries (`/admin/honeypot`, `/admin/challenge`, `/admin/pow`, `/admin/rate`, `/admin/geo` or consolidated endpoint) with strict response schema + docs.
-- [x] MON-TEL-7 Add tests for telemetry correctness and dashboard rendering states (empty/loading/error/data) for each new monitoring section, including cardinality guardrails and retention-window behavior.
-- [x] MON-TEL-7.a Extend dashboard automated tests to assert new monitoring cards/tables/charts across empty/loading/error/data states, not just adapter contracts.
-
-## Recurring Quality Gates
-- [ ] Keep unit, integration, e2e, and CI flows passing; clean up defunct tests quickly.
-- [ ] Identify and prioritize missing tests for new defence stages before implementation.
-- [ ] Reassess data retention policy as event and metrics volume grows.

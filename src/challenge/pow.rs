@@ -526,6 +526,31 @@ mod tests {
         builder.build()
     }
 
+    fn make_pow_verify_request_raw(body: &[u8], user_agent: &str) -> Request {
+        let mut builder = Request::builder();
+        builder
+            .method(Method::Post)
+            .uri("/pow/verify")
+            .header("content-type", "application/json")
+            .header("user-agent", user_agent)
+            .body(body.to_vec());
+        builder.build()
+    }
+
+    fn issue_adjusted_pow_seed(
+        ip: &str,
+        user_agent: &str,
+        difficulty: u8,
+        ttl_seconds: u64,
+        adjust: impl FnOnce(&mut PowPayload),
+    ) -> (String, PowPayload) {
+        let challenge = issue_pow_challenge(ip, user_agent, difficulty, ttl_seconds);
+        let mut payload = parse_seed_token(&challenge.seed).expect("issued seed should parse");
+        adjust(&mut payload);
+        let seed = make_seed_token(&payload);
+        (seed, payload)
+    }
+
     fn find_valid_nonce(seed: &str, difficulty: u8) -> String {
         for attempt in 0..200_000u64 {
             let nonce = format!("{:x}", attempt);
@@ -657,5 +682,258 @@ mod tests {
             String::from_utf8_lossy(resp.body()),
             "Suspicious request cadence"
         );
+    }
+
+    #[test]
+    fn pow_verify_returns_not_found_when_disabled() {
+        let _lock = setup_pow_test_env();
+        let req = make_pow_verify_request_raw(br#"{"seed":"abc","nonce":"def"}"#, "DisabledUA/1.0");
+        let resp = handle_pow_verify(&req, "198.51.100.21", false);
+        assert_eq!(*resp.status(), 404u16);
+        assert_eq!(String::from_utf8_lossy(resp.body()), "PoW disabled");
+    }
+
+    #[test]
+    fn pow_verify_rejects_non_post_method() {
+        let _lock = setup_pow_test_env();
+        let req = Request::builder()
+            .method(Method::Get)
+            .uri("/pow/verify")
+            .body(Vec::new())
+            .build();
+        let resp = handle_pow_verify(&req, "198.51.100.22", true);
+        assert_eq!(*resp.status(), 405u16);
+        assert_eq!(String::from_utf8_lossy(resp.body()), "Method Not Allowed");
+    }
+
+    #[test]
+    fn pow_verify_rejects_invalid_json_body() {
+        let _lock = setup_pow_test_env();
+        let req = make_pow_verify_request_raw(br#"{"seed":"abc""#, "JsonUA/1.0");
+        let resp = handle_pow_verify(&req, "198.51.100.23", true);
+        assert_eq!(*resp.status(), 400u16);
+        assert_eq!(String::from_utf8_lossy(resp.body()), "Invalid JSON");
+    }
+
+    #[test]
+    fn pow_verify_requires_seed_field() {
+        let _lock = setup_pow_test_env();
+        let req = make_pow_verify_request_raw(br#"{"nonce":"abc"}"#, "MissingSeedUA/1.0");
+        let resp = handle_pow_verify(&req, "198.51.100.24", true);
+        assert_eq!(*resp.status(), 400u16);
+        assert_eq!(String::from_utf8_lossy(resp.body()), "Missing seed");
+    }
+
+    #[test]
+    fn pow_verify_requires_nonce_field() {
+        let _lock = setup_pow_test_env();
+        let challenge = issue_pow_challenge("198.51.100.25", "MissingNonceUA/1.0", 8, 120);
+        let payload = serde_json::json!({ "seed": challenge.seed });
+        let req = make_pow_verify_request_raw(
+            serde_json::to_string(&payload)
+                .expect("payload must serialize")
+                .as_bytes(),
+            "MissingNonceUA/1.0",
+        );
+        let resp = handle_pow_verify(&req, "198.51.100.25", true);
+        assert_eq!(*resp.status(), 400u16);
+        assert_eq!(String::from_utf8_lossy(resp.body()), "Missing nonce");
+    }
+
+    #[test]
+    fn pow_verify_rejects_invalid_seed_format_before_parsing() {
+        let _lock = setup_pow_test_env();
+        let req = make_pow_verify_request_raw(
+            br#"{"seed":"not valid","nonce":"abc"}"#,
+            "InvalidSeedFormatUA/1.0",
+        );
+        let resp = handle_pow_verify(&req, "198.51.100.26", true);
+        assert_eq!(*resp.status(), 400u16);
+        assert_eq!(String::from_utf8_lossy(resp.body()), "Invalid seed");
+    }
+
+    #[test]
+    fn pow_verify_rejects_invalid_nonce_format() {
+        let _lock = setup_pow_test_env();
+        let challenge = issue_pow_challenge("198.51.100.27", "InvalidNonceUA/1.0", 8, 120);
+        let payload = serde_json::json!({ "seed": challenge.seed, "nonce": "bad nonce" });
+        let req = make_pow_verify_request_raw(
+            serde_json::to_string(&payload)
+                .expect("payload must serialize")
+                .as_bytes(),
+            "InvalidNonceUA/1.0",
+        );
+        let resp = handle_pow_verify(&req, "198.51.100.27", true);
+        assert_eq!(*resp.status(), 400u16);
+        assert_eq!(String::from_utf8_lossy(resp.body()), "Invalid nonce");
+    }
+
+    #[test]
+    fn pow_verify_rejects_seed_with_missing_operation_id() {
+        let _lock = setup_pow_test_env();
+        let now = crate::admin::now_ts();
+        let (seed, payload) = issue_adjusted_pow_seed(
+            "198.51.100.28",
+            "MissingOpUA/1.0",
+            8,
+            120,
+            |p| {
+                p.operation_id.clear();
+                p.issued_at = now.saturating_sub(2);
+                p.expires_at = now + 120;
+            },
+        );
+        let nonce = find_valid_nonce(seed.as_str(), payload.difficulty);
+        let req = make_pow_verify_request(seed.as_str(), nonce.as_str(), "MissingOpUA/1.0");
+        let resp = handle_pow_verify(&req, "198.51.100.28", true);
+        assert_eq!(*resp.status(), 400u16);
+        assert_eq!(String::from_utf8_lossy(resp.body()), "Invalid seed");
+    }
+
+    #[test]
+    fn pow_verify_rejects_seed_with_invalid_operation_envelope() {
+        let _lock = setup_pow_test_env();
+        let now = crate::admin::now_ts();
+        let (seed, payload) = issue_adjusted_pow_seed(
+            "198.51.100.29",
+            "BadEnvelopeUA/1.0",
+            8,
+            120,
+            |p| {
+                p.flow_id = "wrong_flow".to_string();
+                p.issued_at = now.saturating_sub(2);
+                p.expires_at = now + 120;
+            },
+        );
+        let nonce = find_valid_nonce(seed.as_str(), payload.difficulty);
+        let req = make_pow_verify_request(seed.as_str(), nonce.as_str(), "BadEnvelopeUA/1.0");
+        let resp = handle_pow_verify(&req, "198.51.100.29", true);
+        assert_eq!(*resp.status(), 400u16);
+        assert_eq!(String::from_utf8_lossy(resp.body()), "Invalid seed");
+    }
+
+    #[test]
+    fn pow_verify_rejects_tampered_signature_seed() {
+        let _lock = setup_pow_test_env();
+        let challenge = issue_pow_challenge("198.51.100.30", "TamperUA/1.0", 8, 120);
+        let mut tampered = challenge.seed;
+        if let Some(last) = tampered.pop() {
+            tampered.push(if last == 'A' { 'B' } else { 'A' });
+        }
+        let req = make_pow_verify_request(tampered.as_str(), "abc", "TamperUA/1.0");
+        let resp = handle_pow_verify(&req, "198.51.100.30", true);
+        assert_eq!(*resp.status(), 400u16);
+        assert_eq!(String::from_utf8_lossy(resp.body()), "Invalid seed");
+    }
+
+    #[test]
+    fn pow_verify_rejects_invalid_step_order() {
+        let _lock = setup_pow_test_env();
+        let now = crate::admin::now_ts();
+        let (seed, payload) = issue_adjusted_pow_seed(
+            "198.51.100.31",
+            "StepOrderUA/1.0",
+            8,
+            120,
+            |p| {
+                p.step_index = 1;
+                p.issued_at = now.saturating_sub(2);
+                p.expires_at = now + 120;
+            },
+        );
+        let nonce = find_valid_nonce(seed.as_str(), payload.difficulty);
+        let req = make_pow_verify_request(seed.as_str(), nonce.as_str(), "StepOrderUA/1.0");
+        let resp = handle_pow_verify(&req, "198.51.100.31", true);
+        assert_eq!(*resp.status(), 400u16);
+        assert_eq!(String::from_utf8_lossy(resp.body()), "Invalid step order");
+    }
+
+    #[test]
+    fn pow_verify_rejects_sequence_window_exceeded() {
+        let _lock = setup_pow_test_env();
+        let now = crate::admin::now_ts();
+        let (seed, payload) = issue_adjusted_pow_seed(
+            "198.51.100.32",
+            "WindowUA/1.0",
+            8,
+            120,
+            |p| {
+                p.issued_at = now
+                    .saturating_sub(crate::challenge::operation_envelope::MAX_STEP_WINDOW_SECONDS_JS_POW_VERIFY)
+                    .saturating_sub(5);
+                p.expires_at = now + 120;
+            },
+        );
+        let nonce = find_valid_nonce(seed.as_str(), payload.difficulty);
+        let req = make_pow_verify_request(seed.as_str(), nonce.as_str(), "WindowUA/1.0");
+        let resp = handle_pow_verify(&req, "198.51.100.32", true);
+        assert_eq!(*resp.status(), 400u16);
+        assert_eq!(String::from_utf8_lossy(resp.body()), "Seed expired");
+    }
+
+    #[test]
+    fn pow_verify_rejects_binding_mismatch() {
+        let _lock = setup_pow_test_env();
+        let now = crate::admin::now_ts();
+        let (seed, payload) = issue_adjusted_pow_seed(
+            "198.51.100.33",
+            "BindingUA/1.0",
+            8,
+            120,
+            |p| {
+                p.issued_at = now.saturating_sub(2);
+                p.expires_at = now + 120;
+            },
+        );
+        let nonce = find_valid_nonce(seed.as_str(), payload.difficulty);
+        let req = make_pow_verify_request(seed.as_str(), nonce.as_str(), "DifferentUA/1.0");
+        let resp = handle_pow_verify(&req, "198.51.100.33", true);
+        assert_eq!(*resp.status(), 400u16);
+        assert_eq!(String::from_utf8_lossy(resp.body()), "Binding mismatch");
+    }
+
+    #[test]
+    fn pow_verify_rejects_invalid_proof() {
+        let _lock = setup_pow_test_env();
+        let now = crate::admin::now_ts();
+        let (seed, payload) =
+            issue_adjusted_pow_seed("198.51.100.34", "InvalidProofUA/1.0", 8, 120, |p| {
+                p.issued_at = now.saturating_sub(2);
+                p.expires_at = now + 120;
+            });
+        let mut bad_nonce = String::from("0");
+        while verify_pow(seed.as_str(), bad_nonce.as_str(), payload.difficulty) {
+            bad_nonce.push('1');
+        }
+        let req = make_pow_verify_request(seed.as_str(), bad_nonce.as_str(), "InvalidProofUA/1.0");
+        let resp = handle_pow_verify(&req, "198.51.100.34", true);
+        assert_eq!(*resp.status(), 400u16);
+        assert_eq!(String::from_utf8_lossy(resp.body()), "Invalid proof");
+    }
+
+    #[test]
+    fn pow_verify_success_sets_js_verified_cookie() {
+        let _lock = setup_pow_test_env();
+        let now = crate::admin::now_ts();
+        let (seed, payload) = issue_adjusted_pow_seed(
+            "198.51.100.35",
+            "SuccessUA/1.0",
+            8,
+            120,
+            |p| {
+                p.issued_at = now.saturating_sub(2);
+                p.expires_at = now + 120;
+            },
+        );
+        let nonce = find_valid_nonce(seed.as_str(), payload.difficulty);
+        let req = make_pow_verify_request(seed.as_str(), nonce.as_str(), "SuccessUA/1.0");
+        let resp = handle_pow_verify(&req, "198.51.100.35", true);
+        assert_eq!(*resp.status(), 200u16);
+        let set_cookie = resp
+            .headers()
+            .find(|(k, _)| k.eq_ignore_ascii_case("set-cookie"))
+            .and_then(|(_, v)| v.as_str())
+            .unwrap_or("");
+        assert!(set_cookie.contains("js_verified="));
     }
 }

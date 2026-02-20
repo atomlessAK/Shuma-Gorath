@@ -180,37 +180,6 @@ ensure_env_local_default_from_defaults() {
     fi
 }
 
-detect_primary_ipv4() {
-    local iface=""
-    local ip=""
-    if [[ "$(uname)" == "Darwin" ]] && command -v route &> /dev/null && command -v ipconfig &> /dev/null; then
-        iface="$(route -n get default 2>/dev/null | awk '/interface:/{print $2; exit}')"
-        if [[ -n "$iface" ]]; then
-            ip="$(ipconfig getifaddr "$iface" 2>/dev/null || true)"
-        fi
-    fi
-    printf '%s' "$ip"
-}
-
-default_admin_ip_allowlist_value() {
-    local primary_ip=""
-    primary_ip="$(detect_primary_ipv4)"
-    if [[ -n "$primary_ip" ]]; then
-        printf '127.0.0.1,::1,%s' "$primary_ip"
-    else
-        printf '127.0.0.1,::1'
-    fi
-}
-
-ensure_admin_ip_allowlist_local_default() {
-    local current_value=""
-    current_value="$(read_env_local_value "SHUMA_ADMIN_IP_ALLOWLIST")"
-    if [[ -n "$current_value" ]]; then
-        return
-    fi
-    upsert_env_local_value "SHUMA_ADMIN_IP_ALLOWLIST" "$(default_admin_ip_allowlist_value)"
-}
-
 echo -e "${CYAN}"
 echo "╔═══════════════════════════════════════════════════╗"
 echo "║     WASM Bot Defence - Development Setup             ║"
@@ -442,7 +411,7 @@ ensure_env_local_default_from_defaults "SHUMA_POW_SECRET"
 ensure_env_local_default_from_defaults "SHUMA_CHALLENGE_SECRET"
 ensure_env_local_default_from_defaults "SHUMA_MAZE_PREVIEW_SECRET"
 ensure_env_local_default_from_defaults "SHUMA_HEALTH_SECRET"
-ensure_admin_ip_allowlist_local_default
+ensure_env_local_default_from_defaults "SHUMA_ADMIN_IP_ALLOWLIST"
 ensure_env_local_default_from_defaults "SHUMA_ADMIN_AUTH_FAILURE_LIMIT_PER_MINUTE"
 ensure_env_local_default_from_defaults "SHUMA_EVENT_LOG_RETENTION_HOURS"
 ensure_env_local_default_from_defaults "SHUMA_ADMIN_CONFIG_WRITE_ENABLED"

@@ -70,6 +70,7 @@ Shuma-Gorath exists to provide layered, practical bot defense that teams can dep
 
 - MUST keep core policy logic decoupled from platform adapter details.
 - MUST support self-hosted and enterprise deployment personas through profile-gated adapters/state backends, not persona-specific policy forks.
+- MUST deliver and harden Shuma-native capability paths first; enterprise/provider-specific integrations should be additive and must not block internal baseline maturity for the same capability.
 - SHOULD keep provider interfaces explicit and swappable.
 - SHOULD avoid tying core behavior to a single runtime unless required for performance or safety.
 

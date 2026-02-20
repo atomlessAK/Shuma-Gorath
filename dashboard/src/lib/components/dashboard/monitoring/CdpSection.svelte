@@ -1,4 +1,6 @@
 <script>
+  import { formatCompactNumber } from '../../../domain/core/format.js';
+
   export let loading = false;
   export let cdpDetections = 0;
   export let cdpAutoBans = 0;
@@ -13,21 +15,21 @@
   <h2>CDP Detections</h2>
   <p class="section-desc text-muted">Browser automation detection and bans in the last 24hrs</p>
   <div class="stats-cards stats-cards--compact">
-    <div class="card panel panel-border pad-md">
+    <div class="card panel panel-border pad-md-b">
       <h3 class="caps-label">Total Detections</h3>
-      <div class="stat-value stat-value" id="cdp-total-detections">{loading ? '...' : cdpDetections.toLocaleString()}</div>
+      <div class="stat-value stat-value" id="cdp-total-detections">{loading ? '...' : formatCompactNumber(cdpDetections, '0')}</div>
     </div>
-    <div class="card panel panel-border pad-md">
+    <div class="card panel panel-border pad-md-b">
       <h3 class="caps-label">Auto-Bans</h3>
-      <div class="stat-value stat-value" id="cdp-total-auto-bans">{loading ? '...' : cdpAutoBans.toLocaleString()}</div>
+      <div class="stat-value stat-value" id="cdp-total-auto-bans">{loading ? '...' : formatCompactNumber(cdpAutoBans, '0')}</div>
     </div>
-    <div class="card panel panel-border pad-md">
+    <div class="card panel panel-border pad-md-b">
       <h3 class="caps-label">FP Mismatch Events</h3>
-      <div class="stat-value stat-value" id="cdp-fp-events">{loading ? '...' : cdpFingerprintEvents.toLocaleString()}</div>
+      <div class="stat-value stat-value" id="cdp-fp-events">{loading ? '...' : formatCompactNumber(cdpFingerprintEvents, '0')}</div>
     </div>
-    <div class="card panel panel-border pad-md">
+    <div class="card panel panel-border pad-md-b">
       <h3 class="caps-label">FP Flow Violations</h3>
-      <div class="stat-value stat-value" id="cdp-fp-flow-violations">{loading ? '...' : cdpFingerprintFlowViolations.toLocaleString()}</div>
+      <div class="stat-value stat-value" id="cdp-fp-flow-violations">{loading ? '...' : formatCompactNumber(cdpFingerprintFlowViolations, '0')}</div>
     </div>
   </div>
   <div class="table-wrapper">

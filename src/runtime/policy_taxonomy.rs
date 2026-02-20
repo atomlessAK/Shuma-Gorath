@@ -6,7 +6,7 @@ pub enum EscalationLevelId {
     L2Monitor,
     L3Shape,
     L4VerifyJs,
-    L5ChallengeLite,
+    L5NotABot,
     L6ChallengeStrong,
     L7DeceptionExplicit,
     L8DeceptionCovert,
@@ -23,7 +23,7 @@ impl EscalationLevelId {
             EscalationLevelId::L2Monitor => "L2_MONITOR",
             EscalationLevelId::L3Shape => "L3_SHAPE",
             EscalationLevelId::L4VerifyJs => "L4_VERIFY_JS",
-            EscalationLevelId::L5ChallengeLite => "L5_CHALLENGE_LITE",
+            EscalationLevelId::L5NotABot => "L5_NOT_A_BOT",
             EscalationLevelId::L6ChallengeStrong => "L6_CHALLENGE_STRONG",
             EscalationLevelId::L7DeceptionExplicit => "L7_DECEPTION_EXPLICIT",
             EscalationLevelId::L8DeceptionCovert => "L8_DECEPTION_COVERT",
@@ -40,7 +40,7 @@ impl EscalationLevelId {
             EscalationLevelId::L2Monitor => ActionId::Monitor,
             EscalationLevelId::L3Shape => ActionId::Shape,
             EscalationLevelId::L4VerifyJs => ActionId::VerifyJs,
-            EscalationLevelId::L5ChallengeLite => ActionId::ChallengeLite,
+            EscalationLevelId::L5NotABot => ActionId::NotABot,
             EscalationLevelId::L6ChallengeStrong => ActionId::ChallengeStrong,
             EscalationLevelId::L7DeceptionExplicit => ActionId::DeceptionExplicit,
             EscalationLevelId::L8DeceptionCovert => ActionId::DeceptionCovert,
@@ -58,7 +58,7 @@ pub enum ActionId {
     Monitor,
     Shape,
     VerifyJs,
-    ChallengeLite,
+    NotABot,
     ChallengeStrong,
     DeceptionExplicit,
     DeceptionCovert,
@@ -75,7 +75,7 @@ impl ActionId {
             ActionId::Monitor => "A_MONITOR",
             ActionId::Shape => "A_SHAPE",
             ActionId::VerifyJs => "A_VERIFY_JS",
-            ActionId::ChallengeLite => "A_CHALLENGE_LITE",
+            ActionId::NotABot => "A_NOT_A_BOT",
             ActionId::ChallengeStrong => "A_CHALLENGE_STRONG",
             ActionId::DeceptionExplicit => "A_DECEPTION_EXPLICIT",
             ActionId::DeceptionCovert => "A_DECEPTION_COVERT",
@@ -216,6 +216,7 @@ pub enum DetectionId {
     GeoRouteMazeFallbackChallenge,
     ChallengeDisabledFallbackMaze,
     ChallengeDisabledFallbackBlock,
+    BotnessGateNotABot,
     BotnessGateChallenge,
     BotnessGateMaze,
     JsVerificationRequired,
@@ -270,6 +271,7 @@ impl DetectionId {
             DetectionId::ChallengeDisabledFallbackBlock => {
                 "D_CHALLENGE_DISABLED_FALLBACK_BLOCK"
             }
+            DetectionId::BotnessGateNotABot => "D_BOTNESS_GATE_NOT_A_BOT",
             DetectionId::BotnessGateChallenge => "D_BOTNESS_GATE_CHALLENGE",
             DetectionId::BotnessGateMaze => "D_BOTNESS_GATE_MAZE",
             DetectionId::JsVerificationRequired => "D_JS_VERIFICATION_REQUIRED",
@@ -378,6 +380,7 @@ pub enum PolicyTransition {
     GeoRouteMazeFallbackChallenge,
     ChallengeDisabledFallbackMaze(Vec<SignalId>),
     ChallengeDisabledFallbackBlock(Vec<SignalId>),
+    BotnessGateNotABot(Vec<SignalId>),
     BotnessGateChallenge(Vec<SignalId>),
     BotnessGateMaze(Vec<SignalId>),
     JsVerificationRequired,
@@ -493,6 +496,11 @@ pub fn resolve_policy_match(transition: PolicyTransition) -> PolicyMatch {
         PolicyTransition::ChallengeDisabledFallbackBlock(signals) => PolicyMatch::new(
             EscalationLevelId::L10DenyTemp,
             DetectionId::ChallengeDisabledFallbackBlock,
+            signals,
+        ),
+        PolicyTransition::BotnessGateNotABot(signals) => PolicyMatch::new(
+            EscalationLevelId::L5NotABot,
+            DetectionId::BotnessGateNotABot,
             signals,
         ),
         PolicyTransition::BotnessGateChallenge(signals) => PolicyMatch::new(
@@ -709,6 +717,18 @@ mod tests {
             matched.signal_ids(),
             vec!["S_GEO_RISK", "S_JS_REQUIRED_MISSING", "S_RATE_USAGE_HIGH"]
         );
+    }
+
+    #[test]
+    fn not_a_bot_transition_maps_to_l5_not_a_bot() {
+        let matched = resolve_policy_match(PolicyTransition::BotnessGateNotABot(vec![
+            SignalId::GeoRisk,
+            SignalId::RateUsageMedium,
+        ]));
+        assert_eq!(matched.level_id(), "L5_NOT_A_BOT");
+        assert_eq!(matched.action_id(), "A_NOT_A_BOT");
+        assert_eq!(matched.detection_id(), "D_BOTNESS_GATE_NOT_A_BOT");
+        assert_eq!(matched.signal_ids(), vec!["S_GEO_RISK", "S_RATE_USAGE_MEDIUM"]);
     }
 
     #[test]

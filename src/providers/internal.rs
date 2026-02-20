@@ -82,8 +82,16 @@ impl ChallengeEngineProvider for InternalChallengeEngineProvider {
         crate::boundaries::challenge_puzzle_path()
     }
 
+    fn not_a_bot_path(&self) -> &'static str {
+        crate::boundaries::challenge_not_a_bot_path()
+    }
+
     fn render_challenge(&self, req: &Request, transform_count: usize) -> Response {
         crate::boundaries::render_challenge(req, transform_count)
+    }
+
+    fn render_not_a_bot(&self, req: &Request, cfg: &crate::config::Config) -> Response {
+        crate::boundaries::render_not_a_bot(req, cfg)
     }
 
     fn serve_challenge_page(
@@ -95,12 +103,30 @@ impl ChallengeEngineProvider for InternalChallengeEngineProvider {
         crate::boundaries::serve_challenge_page(req, test_mode, transform_count)
     }
 
+    fn serve_not_a_bot_page(
+        &self,
+        req: &Request,
+        test_mode: bool,
+        cfg: &crate::config::Config,
+    ) -> Response {
+        crate::boundaries::serve_not_a_bot_page(req, test_mode, cfg)
+    }
+
     fn handle_challenge_submit_with_outcome(
         &self,
         store: &Store,
         req: &Request,
     ) -> (Response, crate::challenge::ChallengeSubmitOutcome) {
         crate::boundaries::handle_challenge_submit_with_outcome(store, req)
+    }
+
+    fn handle_not_a_bot_submit_with_outcome(
+        &self,
+        store: &Store,
+        req: &Request,
+        cfg: &crate::config::Config,
+    ) -> crate::challenge::NotABotSubmitResult {
+        crate::boundaries::handle_not_a_bot_submit_with_outcome(store, req, cfg)
     }
 
     fn handle_pow_challenge(

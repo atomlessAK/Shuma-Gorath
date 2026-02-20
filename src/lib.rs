@@ -152,7 +152,13 @@ pub(crate) fn should_bypass_expensive_bot_checks_for_static(req: &Request, path:
     }
     if matches!(
         path,
-        "/health" | "/metrics" | "/robots.txt" | "/pow" | "/pow/verify" | "/challenge/puzzle"
+        "/health"
+            | "/metrics"
+            | "/robots.txt"
+            | "/pow"
+            | "/pow/verify"
+            | "/challenge/puzzle"
+            | "/challenge/not-a-bot-checkbox"
     ) {
         return false;
     }

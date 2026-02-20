@@ -34,6 +34,18 @@ const POW_TTL_MIN: u64 = crate::config::POW_TTL_MIN;
 const POW_TTL_MAX: u64 = crate::config::POW_TTL_MAX;
 const CHALLENGE_TRANSFORM_COUNT_MIN: u64 = 4;
 const CHALLENGE_TRANSFORM_COUNT_MAX: u64 = 8;
+const NOT_A_BOT_THRESHOLD_MIN: u64 = 1;
+const NOT_A_BOT_THRESHOLD_MAX: u64 = 10;
+const NOT_A_BOT_SCORE_MIN: u64 = 1;
+const NOT_A_BOT_SCORE_MAX: u64 = 10;
+const NOT_A_BOT_NONCE_TTL_MIN: u64 = 30;
+const NOT_A_BOT_NONCE_TTL_MAX: u64 = 300;
+const NOT_A_BOT_MARKER_TTL_MIN: u64 = 60;
+const NOT_A_BOT_MARKER_TTL_MAX: u64 = 3600;
+const NOT_A_BOT_ATTEMPT_LIMIT_MIN: u64 = 1;
+const NOT_A_BOT_ATTEMPT_LIMIT_MAX: u64 = 100;
+const NOT_A_BOT_ATTEMPT_WINDOW_MIN: u64 = 30;
+const NOT_A_BOT_ATTEMPT_WINDOW_MAX: u64 = 3600;
 const CONFIG_EXPORT_SECRET_KEYS: [&str; 10] = [
     "SHUMA_API_KEY",
     "SHUMA_ADMIN_READONLY_API_KEY",
@@ -296,7 +308,59 @@ mod tests {
                 .unwrap();
         }
 
-        assert!(expensive_admin_read_is_limited_internal(&store, &req));
+        assert!(expensive_admin_read_limit_check_internal_with_identity(
+            &store,
+            &ip,
+            ADMIN_EXPENSIVE_READ_SITE_ID,
+            ADMIN_EXPENSIVE_READ_LIMIT_PER_MINUTE
+        ));
+    }
+
+    #[test]
+    fn dashboard_refresh_limiter_blocks_session_burst_at_limit() {
+        let store = MockStore::new();
+        let auth = crate::admin::auth::AdminAuthResult {
+            method: Some(crate::admin::auth::AdminAuthMethod::SessionCookie),
+            access: Some(crate::admin::auth::AdminAccessLevel::ReadWrite),
+            csrf_token: Some("csrf-token".to_string()),
+            session_id: Some("session-abc".to_string()),
+        };
+
+        let session_scope = dashboard_refresh_session_scope(&auth).expect("session scope");
+        let bucket = crate::signals::ip_identity::bucket_ip(&session_scope);
+        let now_window = now_ts() / 60;
+        for window in [now_window, now_window + 1] {
+            let key = format!(
+                "rate:{}:{}:{}",
+                ADMIN_DASHBOARD_REFRESH_SESSION_SITE_ID, bucket, window
+            );
+            store
+                .set(
+                    &key,
+                    ADMIN_DASHBOARD_REFRESH_SESSION_LIMIT_PER_MINUTE
+                        .to_string()
+                        .as_bytes(),
+                )
+                .unwrap();
+        }
+
+        assert!(expensive_admin_read_limit_check_internal_with_identity(
+            &store,
+            &session_scope,
+            ADMIN_DASHBOARD_REFRESH_SESSION_SITE_ID,
+            ADMIN_DASHBOARD_REFRESH_SESSION_LIMIT_PER_MINUTE
+        ));
+    }
+
+    #[test]
+    fn dashboard_refresh_limiter_ignores_non_session_auth() {
+        let auth = crate::admin::auth::AdminAuthResult {
+            method: Some(crate::admin::auth::AdminAuthMethod::BearerToken),
+            access: Some(crate::admin::auth::AdminAccessLevel::ReadOnly),
+            csrf_token: None,
+            session_id: None,
+        };
+        assert!(dashboard_refresh_session_scope(&auth).is_none());
     }
 
     #[test]
@@ -573,6 +637,9 @@ mod admin_config_tests {
         assert_eq!(*resp.status(), 200u16);
         let body: serde_json::Value = serde_json::from_slice(resp.body()).unwrap();
         assert!(body.get("challenge_puzzle_risk_threshold").is_some());
+        assert!(body.get("not_a_bot_risk_threshold").is_some());
+        assert!(body.get("not_a_bot_enabled").is_some());
+        assert!(body.get("not_a_bot_risk_threshold_default").is_some());
         assert!(body.get("challenge_puzzle_enabled").is_some());
         assert!(body.get("challenge_puzzle_risk_threshold_default").is_some());
         assert!(body.get("challenge_puzzle_transform_count").is_some());
@@ -758,6 +825,8 @@ mod admin_config_tests {
             "limited",
         );
         crate::observability::monitoring::record_geo_violation(&store, Some("US"), "challenge");
+        crate::observability::monitoring::record_not_a_bot_served(&store);
+        crate::observability::monitoring::record_not_a_bot_submit(&store, "pass", Some(1400));
 
         let req = make_request(Method::Get, "/admin/monitoring?hours=24&limit=5", Vec::new());
         let resp = handle_admin_monitoring(&req, &store);
@@ -768,6 +837,7 @@ mod admin_config_tests {
 
         assert!(summary.get("honeypot").is_some());
         assert!(summary.get("challenge").is_some());
+        assert!(summary.get("not_a_bot").is_some());
         assert!(summary.get("pow").is_some());
         assert!(summary.get("rate").is_some());
         assert!(summary.get("geo").is_some());
@@ -816,6 +886,23 @@ mod admin_config_tests {
                 .get("challenge")
                 .and_then(|v| v.get("reasons"))
                 .and_then(|v| v.get("incorrect"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+                >= 1
+        );
+        assert!(
+            summary
+                .get("not_a_bot")
+                .and_then(|v| v.get("pass"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+                >= 1
+        );
+        assert!(
+            summary
+                .get("not_a_bot")
+                .and_then(|v| v.get("solve_latency_buckets"))
+                .and_then(|v| v.get("1_3s"))
                 .and_then(|v| v.as_u64())
                 .unwrap_or(0)
                 >= 1
@@ -1248,6 +1335,102 @@ mod admin_config_tests {
     }
 
     #[test]
+    fn admin_config_updates_not_a_bot_controls() {
+        let _lock = crate::test_support::lock_env();
+        std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
+        let store = TestStore::default();
+
+        let post_req = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{
+                "not_a_bot_enabled": false,
+                "not_a_bot_risk_threshold": 2,
+                "not_a_bot_score_pass_min": 8,
+                "not_a_bot_score_escalate_min": 5,
+                "not_a_bot_nonce_ttl_seconds": 150,
+                "not_a_bot_marker_ttl_seconds": 900,
+                "not_a_bot_attempt_limit_per_window": 9,
+                "not_a_bot_attempt_window_seconds": 420
+            }"#
+            .to_vec(),
+        );
+        let post_resp = handle_admin_config(&post_req, &store, "default");
+        assert_eq!(*post_resp.status(), 200u16);
+        let post_json: serde_json::Value = serde_json::from_slice(post_resp.body()).unwrap();
+        let cfg = post_json.get("config").unwrap();
+        assert_eq!(cfg.get("not_a_bot_enabled"), Some(&serde_json::Value::Bool(false)));
+        assert_eq!(
+            cfg.get("not_a_bot_risk_threshold"),
+            Some(&serde_json::Value::Number(2.into()))
+        );
+        assert_eq!(
+            cfg.get("not_a_bot_score_pass_min"),
+            Some(&serde_json::Value::Number(8.into()))
+        );
+        assert_eq!(
+            cfg.get("not_a_bot_score_escalate_min"),
+            Some(&serde_json::Value::Number(5.into()))
+        );
+        assert_eq!(
+            cfg.get("not_a_bot_nonce_ttl_seconds"),
+            Some(&serde_json::Value::Number(150.into()))
+        );
+        assert_eq!(
+            cfg.get("not_a_bot_marker_ttl_seconds"),
+            Some(&serde_json::Value::Number(900.into()))
+        );
+        assert_eq!(
+            cfg.get("not_a_bot_attempt_limit_per_window"),
+            Some(&serde_json::Value::Number(9.into()))
+        );
+        assert_eq!(
+            cfg.get("not_a_bot_attempt_window_seconds"),
+            Some(&serde_json::Value::Number(420.into()))
+        );
+
+        let saved_bytes = store.get("config:default").unwrap().unwrap();
+        let saved_cfg: crate::config::Config = serde_json::from_slice(&saved_bytes).unwrap();
+        assert!(!saved_cfg.not_a_bot_enabled);
+        assert_eq!(saved_cfg.not_a_bot_risk_threshold, 2);
+        assert_eq!(saved_cfg.not_a_bot_score_pass_min, 8);
+        assert_eq!(saved_cfg.not_a_bot_score_escalate_min, 5);
+        assert_eq!(saved_cfg.not_a_bot_nonce_ttl_seconds, 150);
+        assert_eq!(saved_cfg.not_a_bot_marker_ttl_seconds, 900);
+        assert_eq!(saved_cfg.not_a_bot_attempt_limit_per_window, 9);
+        assert_eq!(saved_cfg.not_a_bot_attempt_window_seconds, 420);
+
+        clear_env(&["SHUMA_ADMIN_CONFIG_WRITE_ENABLED"]);
+    }
+
+    #[test]
+    fn admin_config_rejects_invalid_not_a_bot_controls() {
+        let _lock = crate::test_support::lock_env();
+        std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
+        let store = TestStore::default();
+
+        let invalid_threshold = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{"not_a_bot_risk_threshold": 11}"#.to_vec(),
+        );
+        let invalid_threshold_resp = handle_admin_config(&invalid_threshold, &store, "default");
+        assert_eq!(*invalid_threshold_resp.status(), 400u16);
+        assert!(String::from_utf8_lossy(invalid_threshold_resp.body()).contains("not_a_bot_risk_threshold out of range"));
+
+        let invalid_score_order = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{"not_a_bot_score_pass_min": 6, "not_a_bot_score_escalate_min": 7}"#.to_vec(),
+        );
+        let invalid_score_order_resp = handle_admin_config(&invalid_score_order, &store, "default");
+        assert_eq!(*invalid_score_order_resp.status(), 400u16);
+        assert!(String::from_utf8_lossy(invalid_score_order_resp.body()).contains("not_a_bot_score_escalate_min must be <= not_a_bot_score_pass_min"));
+
+        clear_env(&["SHUMA_ADMIN_CONFIG_WRITE_ENABLED"]);
+    }
+
+    #[test]
     fn admin_config_updates_defence_modes() {
         let _lock = crate::test_support::lock_env();
         std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
@@ -1634,6 +1817,10 @@ fn too_many_admin_auth_attempts_response() -> Response {
 
 const ADMIN_EXPENSIVE_READ_SITE_ID: &str = "admin-read-expensive";
 const ADMIN_EXPENSIVE_READ_LIMIT_PER_MINUTE: u32 = 60;
+const ADMIN_EXPENSIVE_READ_SESSION_SITE_ID: &str = "admin-read-expensive-session";
+const ADMIN_EXPENSIVE_READ_SESSION_LIMIT_PER_MINUTE: u32 = 45;
+const ADMIN_DASHBOARD_REFRESH_SESSION_SITE_ID: &str = "admin-dashboard-refresh-session";
+const ADMIN_DASHBOARD_REFRESH_SESSION_LIMIT_PER_MINUTE: u32 = 8;
 
 fn too_many_admin_read_requests_response() -> Response {
     Response::builder()
@@ -1647,30 +1834,117 @@ fn too_many_admin_read_requests_response() -> Response {
 fn expensive_admin_read_is_limited(
     store: &Store,
     req: &Request,
+    auth: &crate::admin::auth::AdminAuthResult,
+    provider_registry: Option<&crate::providers::registry::ProviderRegistry>,
+) -> bool {
+    if expensive_admin_read_limit_check(
+        store,
+        req,
+        ADMIN_EXPENSIVE_READ_SITE_ID,
+        ADMIN_EXPENSIVE_READ_LIMIT_PER_MINUTE,
+        provider_registry,
+    ) {
+        return true;
+    }
+    if auth.method == Some(crate::admin::auth::AdminAuthMethod::SessionCookie) {
+        let session_scope = auth
+            .session_id
+            .as_deref()
+            .map(|session_id| format!("session:{}", session_id));
+        if let Some(session_scope) = session_scope {
+            if expensive_admin_read_limit_check_with_identity(
+                store,
+                session_scope.as_str(),
+                ADMIN_EXPENSIVE_READ_SESSION_SITE_ID,
+                ADMIN_EXPENSIVE_READ_SESSION_LIMIT_PER_MINUTE,
+                provider_registry,
+            ) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn dashboard_refresh_session_scope(
+    auth: &crate::admin::auth::AdminAuthResult,
+) -> Option<String> {
+    if auth.method != Some(crate::admin::auth::AdminAuthMethod::SessionCookie) {
+        return None;
+    }
+    auth.session_id
+        .as_deref()
+        .map(|session_id| format!("dashboard-session:{session_id}"))
+}
+
+fn dashboard_refresh_is_limited(
+    store: &Store,
+    auth: &crate::admin::auth::AdminAuthResult,
+    provider_registry: Option<&crate::providers::registry::ProviderRegistry>,
+) -> bool {
+    let Some(session_scope) = dashboard_refresh_session_scope(auth) else {
+        return false;
+    };
+    expensive_admin_read_limit_check_with_identity(
+        store,
+        session_scope.as_str(),
+        ADMIN_DASHBOARD_REFRESH_SESSION_SITE_ID,
+        ADMIN_DASHBOARD_REFRESH_SESSION_LIMIT_PER_MINUTE,
+        provider_registry,
+    )
+}
+
+fn expensive_admin_read_limit_check(
+    store: &Store,
+    req: &Request,
+    site_id: &str,
+    limit_per_minute: u32,
     provider_registry: Option<&crate::providers::registry::ProviderRegistry>,
 ) -> bool {
     let ip = crate::extract_client_ip(req);
+    expensive_admin_read_limit_check_with_identity(
+        store,
+        &ip,
+        site_id,
+        limit_per_minute,
+        provider_registry,
+    )
+}
+
+fn expensive_admin_read_limit_check_with_identity(
+    store: &Store,
+    identity: &str,
+    site_id: &str,
+    limit_per_minute: u32,
+    provider_registry: Option<&crate::providers::registry::ProviderRegistry>,
+) -> bool {
     if let Some(registry) = provider_registry {
         return registry.rate_limiter_provider().check_rate_limit(
             store,
-            ADMIN_EXPENSIVE_READ_SITE_ID,
-            &ip,
-            ADMIN_EXPENSIVE_READ_LIMIT_PER_MINUTE,
+            site_id,
+            identity,
+            limit_per_minute,
         ) == crate::providers::contracts::RateLimitDecision::Limited;
     }
-    expensive_admin_read_is_limited_internal(store, req)
+    expensive_admin_read_limit_check_internal_with_identity(
+        store,
+        identity,
+        site_id,
+        limit_per_minute,
+    )
 }
 
-fn expensive_admin_read_is_limited_internal<S: crate::challenge::KeyValueStore>(
+fn expensive_admin_read_limit_check_internal_with_identity<S: crate::challenge::KeyValueStore>(
     store: &S,
-    req: &Request,
+    identity: &str,
+    site_id: &str,
+    limit_per_minute: u32,
 ) -> bool {
-    let ip = crate::extract_client_ip(req);
     !crate::enforcement::rate::check_rate_limit(
         store,
-        ADMIN_EXPENSIVE_READ_SITE_ID,
-        &ip,
-        ADMIN_EXPENSIVE_READ_LIMIT_PER_MINUTE,
+        site_id,
+        identity,
+        limit_per_minute,
     )
 }
 
@@ -1950,6 +2224,10 @@ fn challenge_threshold_default() -> u8 {
     crate::config::defaults().challenge_puzzle_risk_threshold
 }
 
+fn not_a_bot_threshold_default() -> u8 {
+    crate::config::defaults().not_a_bot_risk_threshold
+}
+
 fn maze_threshold_default() -> u8 {
     crate::config::defaults().botness_maze_threshold
 }
@@ -2143,6 +2421,38 @@ fn config_export_env_entries(cfg: &crate::config::Config) -> Vec<(String, String
         (
             "SHUMA_CHALLENGE_PUZZLE_RISK_THRESHOLD".to_string(),
             cfg.challenge_puzzle_risk_threshold.to_string(),
+        ),
+        (
+            "SHUMA_NOT_A_BOT_ENABLED".to_string(),
+            bool_env(cfg.not_a_bot_enabled).to_string(),
+        ),
+        (
+            "SHUMA_NOT_A_BOT_RISK_THRESHOLD".to_string(),
+            cfg.not_a_bot_risk_threshold.to_string(),
+        ),
+        (
+            "SHUMA_NOT_A_BOT_SCORE_PASS_MIN".to_string(),
+            cfg.not_a_bot_score_pass_min.to_string(),
+        ),
+        (
+            "SHUMA_NOT_A_BOT_SCORE_ESCALATE_MIN".to_string(),
+            cfg.not_a_bot_score_escalate_min.to_string(),
+        ),
+        (
+            "SHUMA_NOT_A_BOT_NONCE_TTL_SECONDS".to_string(),
+            cfg.not_a_bot_nonce_ttl_seconds.to_string(),
+        ),
+        (
+            "SHUMA_NOT_A_BOT_MARKER_TTL_SECONDS".to_string(),
+            cfg.not_a_bot_marker_ttl_seconds.to_string(),
+        ),
+        (
+            "SHUMA_NOT_A_BOT_ATTEMPT_LIMIT_PER_WINDOW".to_string(),
+            cfg.not_a_bot_attempt_limit_per_window.to_string(),
+        ),
+        (
+            "SHUMA_NOT_A_BOT_ATTEMPT_WINDOW_SECONDS".to_string(),
+            cfg.not_a_bot_attempt_window_seconds.to_string(),
         ),
         (
             "SHUMA_BOTNESS_MAZE_THRESHOLD".to_string(),
@@ -2582,6 +2892,7 @@ fn parse_maze_seed_provider_json(
 fn admin_config_payload(
     cfg: &crate::config::Config,
     challenge_default: u8,
+    not_a_bot_default: u8,
     maze_default: u8,
 ) -> serde_json::Value {
     let mut payload = serde_json::to_value(cfg).unwrap_or_else(|_| json!({}));
@@ -2620,6 +2931,10 @@ fn admin_config_payload(
     obj.insert(
         "challenge_puzzle_risk_threshold_default".to_string(),
         serde_json::Value::Number(challenge_default.into()),
+    );
+    obj.insert(
+        "not_a_bot_risk_threshold_default".to_string(),
+        serde_json::Value::Number(not_a_bot_default.into()),
     );
     obj.insert(
         "botness_maze_threshold_default".to_string(),
@@ -3299,6 +3614,163 @@ fn handle_admin_config(
             );
         }
 
+        let old_not_a_bot_enabled = cfg.not_a_bot_enabled;
+        let old_not_a_bot_threshold = cfg.not_a_bot_risk_threshold;
+        let old_not_a_bot_score_pass_min = cfg.not_a_bot_score_pass_min;
+        let old_not_a_bot_score_escalate_min = cfg.not_a_bot_score_escalate_min;
+        let old_not_a_bot_nonce_ttl_seconds = cfg.not_a_bot_nonce_ttl_seconds;
+        let old_not_a_bot_marker_ttl_seconds = cfg.not_a_bot_marker_ttl_seconds;
+        let old_not_a_bot_attempt_limit_per_window = cfg.not_a_bot_attempt_limit_per_window;
+        let old_not_a_bot_attempt_window_seconds = cfg.not_a_bot_attempt_window_seconds;
+        let mut not_a_bot_changed = false;
+
+        if let Some(not_a_bot_enabled) = json.get("not_a_bot_enabled").and_then(|v| v.as_bool()) {
+            if cfg.not_a_bot_enabled != not_a_bot_enabled {
+                cfg.not_a_bot_enabled = not_a_bot_enabled;
+                changed = true;
+                not_a_bot_changed = true;
+            }
+        }
+        if let Some(value) = json
+            .get("not_a_bot_risk_threshold")
+            .and_then(|v| v.as_u64())
+        {
+            if !(NOT_A_BOT_THRESHOLD_MIN..=NOT_A_BOT_THRESHOLD_MAX).contains(&value) {
+                return Response::new(400, "not_a_bot_risk_threshold out of range (1-10)");
+            }
+            let next = value as u8;
+            if cfg.not_a_bot_risk_threshold != next {
+                cfg.not_a_bot_risk_threshold = next;
+                changed = true;
+                not_a_bot_changed = true;
+            }
+        }
+        if let Some(value) = json
+            .get("not_a_bot_score_pass_min")
+            .and_then(|v| v.as_u64())
+        {
+            if !(NOT_A_BOT_SCORE_MIN..=NOT_A_BOT_SCORE_MAX).contains(&value) {
+                return Response::new(400, "not_a_bot_score_pass_min out of range (1-10)");
+            }
+            let next = value as u8;
+            if cfg.not_a_bot_score_pass_min != next {
+                cfg.not_a_bot_score_pass_min = next;
+                changed = true;
+                not_a_bot_changed = true;
+            }
+        }
+        if let Some(value) = json
+            .get("not_a_bot_score_escalate_min")
+            .and_then(|v| v.as_u64())
+        {
+            if !(NOT_A_BOT_SCORE_MIN..=NOT_A_BOT_SCORE_MAX).contains(&value) {
+                return Response::new(400, "not_a_bot_score_escalate_min out of range (1-10)");
+            }
+            let next = value as u8;
+            if cfg.not_a_bot_score_escalate_min != next {
+                cfg.not_a_bot_score_escalate_min = next;
+                changed = true;
+                not_a_bot_changed = true;
+            }
+        }
+        if cfg.not_a_bot_score_escalate_min > cfg.not_a_bot_score_pass_min {
+            return Response::new(
+                400,
+                "not_a_bot_score_escalate_min must be <= not_a_bot_score_pass_min",
+            );
+        }
+        if let Some(value) = json
+            .get("not_a_bot_nonce_ttl_seconds")
+            .and_then(|v| v.as_u64())
+        {
+            if !(NOT_A_BOT_NONCE_TTL_MIN..=NOT_A_BOT_NONCE_TTL_MAX).contains(&value) {
+                return Response::new(400, "not_a_bot_nonce_ttl_seconds out of range (30-300)");
+            }
+            if cfg.not_a_bot_nonce_ttl_seconds != value {
+                cfg.not_a_bot_nonce_ttl_seconds = value;
+                changed = true;
+                not_a_bot_changed = true;
+            }
+        }
+        if let Some(value) = json
+            .get("not_a_bot_marker_ttl_seconds")
+            .and_then(|v| v.as_u64())
+        {
+            if !(NOT_A_BOT_MARKER_TTL_MIN..=NOT_A_BOT_MARKER_TTL_MAX).contains(&value) {
+                return Response::new(400, "not_a_bot_marker_ttl_seconds out of range (60-3600)");
+            }
+            if cfg.not_a_bot_marker_ttl_seconds != value {
+                cfg.not_a_bot_marker_ttl_seconds = value;
+                changed = true;
+                not_a_bot_changed = true;
+            }
+        }
+        if let Some(value) = json
+            .get("not_a_bot_attempt_limit_per_window")
+            .and_then(|v| v.as_u64())
+        {
+            if !(NOT_A_BOT_ATTEMPT_LIMIT_MIN..=NOT_A_BOT_ATTEMPT_LIMIT_MAX).contains(&value) {
+                return Response::new(
+                    400,
+                    "not_a_bot_attempt_limit_per_window out of range (1-100)",
+                );
+            }
+            let next = value as u32;
+            if cfg.not_a_bot_attempt_limit_per_window != next {
+                cfg.not_a_bot_attempt_limit_per_window = next;
+                changed = true;
+                not_a_bot_changed = true;
+            }
+        }
+        if let Some(value) = json
+            .get("not_a_bot_attempt_window_seconds")
+            .and_then(|v| v.as_u64())
+        {
+            if !(NOT_A_BOT_ATTEMPT_WINDOW_MIN..=NOT_A_BOT_ATTEMPT_WINDOW_MAX).contains(&value) {
+                return Response::new(
+                    400,
+                    "not_a_bot_attempt_window_seconds out of range (30-3600)",
+                );
+            }
+            if cfg.not_a_bot_attempt_window_seconds != value {
+                cfg.not_a_bot_attempt_window_seconds = value;
+                changed = true;
+                not_a_bot_changed = true;
+            }
+        }
+
+        if not_a_bot_changed {
+            log_event(
+                store,
+                &EventLogEntry {
+                    ts: now_ts(),
+                    event: EventType::AdminAction,
+                    ip: None,
+                    reason: Some("not_a_bot_config_update".to_string()),
+                    outcome: Some(format!(
+                        "enabled:{}->{} threshold:{}->{} score_pass:{}->{} score_escalate:{}->{} nonce_ttl:{}->{} marker_ttl:{}->{} attempts:{}->{} window:{}->{}",
+                        old_not_a_bot_enabled,
+                        cfg.not_a_bot_enabled,
+                        old_not_a_bot_threshold,
+                        cfg.not_a_bot_risk_threshold,
+                        old_not_a_bot_score_pass_min,
+                        cfg.not_a_bot_score_pass_min,
+                        old_not_a_bot_score_escalate_min,
+                        cfg.not_a_bot_score_escalate_min,
+                        old_not_a_bot_nonce_ttl_seconds,
+                        cfg.not_a_bot_nonce_ttl_seconds,
+                        old_not_a_bot_marker_ttl_seconds,
+                        cfg.not_a_bot_marker_ttl_seconds,
+                        old_not_a_bot_attempt_limit_per_window,
+                        cfg.not_a_bot_attempt_limit_per_window,
+                        old_not_a_bot_attempt_window_seconds,
+                        cfg.not_a_bot_attempt_window_seconds
+                    )),
+                    admin: Some(crate::admin::auth::get_admin_id(req)),
+                },
+            );
+        }
+
         let mut provider_selection_changed = false;
         let old_provider_backends = cfg.provider_backends.clone();
         let old_edge_integration_mode = cfg.edge_integration_mode;
@@ -3523,6 +3995,15 @@ fn handle_admin_config(
             }
         }
 
+        if cfg.challenge_puzzle_risk_threshold > 1
+            && cfg.not_a_bot_risk_threshold >= cfg.challenge_puzzle_risk_threshold
+        {
+            return Response::new(
+                400,
+                "not_a_bot_risk_threshold must be lower than challenge_puzzle_risk_threshold",
+            );
+        }
+
         if botness_changed {
             log_event(store, &EventLogEntry {
                     ts: now_ts(),
@@ -3567,11 +4048,12 @@ fn handle_admin_config(
         }
 
         let challenge_default = challenge_threshold_default();
+        let not_a_bot_default = not_a_bot_threshold_default();
         let maze_default = maze_threshold_default();
 
         let body = serde_json::to_string(&json!({
             "status": "updated",
-            "config": admin_config_payload(&cfg, challenge_default, maze_default)
+            "config": admin_config_payload(&cfg, challenge_default, not_a_bot_default, maze_default)
         }))
         .unwrap();
         return Response::new(200, body);
@@ -3593,9 +4075,15 @@ fn handle_admin_config(
         },
     );
     let challenge_default = challenge_threshold_default();
+    let not_a_bot_default = not_a_bot_threshold_default();
     let maze_default = maze_threshold_default();
     let body =
-        serde_json::to_string(&admin_config_payload(&cfg, challenge_default, maze_default))
+        serde_json::to_string(&admin_config_payload(
+            &cfg,
+            challenge_default,
+            not_a_bot_default,
+            maze_default,
+        ))
             .unwrap();
     Response::new(200, body)
 }
@@ -4032,7 +4520,7 @@ fn monitoring_prometheus_helper_payload() -> serde_json::Value {
         "example_output": "# TYPE bot_defence_requests_total counter\nbot_defence_requests_total{path=\"main\"} 128\n# TYPE bot_defence_blocks_total counter\nbot_defence_blocks_total 9\n# TYPE bot_defence_bans_total counter\nbot_defence_bans_total{reason=\"honeypot\"} 3\n# TYPE bot_defence_active_bans gauge\nbot_defence_active_bans 2",
         "example_stats": "const lines = metricsText.split('\\n');\nconst metricValue = (prefix) => {\n  const line = lines.find((entry) => entry.startsWith(prefix));\n  return line ? Number(line.slice(prefix.length).trim()) : null;\n};\nconst stats = {\n  requestsMain: metricValue('bot_defence_requests_total{path=\\\"main\\\"} '),\n  honeypotBans: metricValue('bot_defence_bans_total{reason=\\\"honeypot\\\"} '),\n  blocksTotal: metricValue('bot_defence_blocks_total '),\n  activeBans: metricValue('bot_defence_active_bans ')\n};",
         "example_windowed": "const apiKey = 'YOUR_ADMIN_API_KEY';\nconst params = new URLSearchParams({ hours: '24', limit: '10' });\nconst monitoring = await fetch(`/admin/monitoring?${params}`, {\n  headers: { Authorization: `Bearer ${apiKey}` }\n}).then(r => r.json());",
-        "example_summary_stats": "const stats = {\n  honeypotHits: monitoring.summary.honeypot.total_hits,\n  challengeFailures: monitoring.summary.challenge.total_failures,\n  powFailures: monitoring.summary.pow.total_failures,\n  powSuccesses: monitoring.summary.pow.total_successes,\n  powSuccessRatio: monitoring.summary.pow.success_ratio,\n  rateViolations: monitoring.summary.rate.total_violations,\n  geoViolations: monitoring.summary.geo.total_violations\n};",
+        "example_summary_stats": "const stats = {\n  honeypotHits: monitoring.summary.honeypot.total_hits,\n  challengeFailures: monitoring.summary.challenge.total_failures,\n  notABotServed: monitoring.summary.not_a_bot.served,\n  notABotPass: monitoring.summary.not_a_bot.pass,\n  notABotAbandonmentRate: monitoring.summary.not_a_bot.abandonment_ratio,\n  powFailures: monitoring.summary.pow.total_failures,\n  powSuccesses: monitoring.summary.pow.total_successes,\n  powSuccessRatio: monitoring.summary.pow.success_ratio,\n  rateViolations: monitoring.summary.rate.total_violations,\n  geoViolations: monitoring.summary.geo.total_violations\n};",
         "docs": {
             "observability": "https://github.com/atomless/Shuma-Gorath/blob/main/docs/observability.md",
             "api": "https://github.com/atomless/Shuma-Gorath/blob/main/docs/api.md"
@@ -4143,7 +4631,7 @@ pub fn handle_admin(req: &Request) -> Response {
 
     match path {
         "/admin/events" => {
-            if expensive_admin_read_is_limited(&store, req, provider_registry.as_ref()) {
+            if expensive_admin_read_is_limited(&store, req, &auth, provider_registry.as_ref()) {
                 return too_many_admin_read_requests_response();
             }
             // Query event log for recent events, top IPs, and event statistics
@@ -4178,7 +4666,7 @@ pub fn handle_admin(req: &Request) -> Response {
             Response::new(200, body)
         }
         "/admin/cdp/events" => {
-            if expensive_admin_read_is_limited(&store, req, provider_registry.as_ref()) {
+            if expensive_admin_read_is_limited(&store, req, &auth, provider_registry.as_ref()) {
                 return too_many_admin_read_requests_response();
             }
             // Query params: ?hours=N&limit=M
@@ -4237,14 +4725,22 @@ pub fn handle_admin(req: &Request) -> Response {
             Response::new(200, body)
         }
         "/admin/monitoring" => {
-            if expensive_admin_read_is_limited(&store, req, provider_registry.as_ref()) {
+            if dashboard_refresh_is_limited(&store, &auth, provider_registry.as_ref())
+                || expensive_admin_read_is_limited(&store, req, &auth, provider_registry.as_ref())
+            {
                 return too_many_admin_read_requests_response();
             }
             handle_admin_monitoring(req, &store)
         }
         "/admin/ban" => {
             if *req.method() == spin_sdk::http::Method::Get
-                && expensive_admin_read_is_limited(&store, req, provider_registry.as_ref())
+                && (dashboard_refresh_is_limited(&store, &auth, provider_registry.as_ref())
+                    || expensive_admin_read_is_limited(
+                        &store,
+                        req,
+                        &auth,
+                        provider_registry.as_ref(),
+                    ))
             {
                 return too_many_admin_read_requests_response();
             }

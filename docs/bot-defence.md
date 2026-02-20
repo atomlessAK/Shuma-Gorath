@@ -48,7 +48,7 @@ This policy is the default for `enterprise_akamai` planning and implementation. 
 ### Leaning Internal (Shuma-native)
 
 - Puzzle challenge engine.
-- Challenge Lite scoring/verification flow.
+- Not-a-Bot checkbox scoring/verification flow.
 - PoW issuance/verification logic.
 - CDP detection execution/scoring.
 - HTTP tarpit behavior.
@@ -118,7 +118,7 @@ Shuma uses a canonical escalation taxonomy so policy, metrics, and event logs sh
 | `L2_MONITOR` | Monitor | Elevated observation only; no visitor friction. | Active |
 | `L3_SHAPE` | Shape | Low-cost shaping before interactive friction. | Reserved |
 | `L4_VERIFY_JS` | Verify | JS verification gate. | Active |
-| `L5_CHALLENGE_LITE` | Challenge (lite) | Low-friction human verification. | Planned |
+| `L5_NOT_A_BOT` | Not-a-Bot | Low-friction human verification. | Active |
 | `L6_CHALLENGE_STRONG` | Challenge (strong) | Strong challenge path (puzzle/PoW-backed flows). | Active |
 | `L7_DECEPTION_EXPLICIT` | Deception | Explicit maze routing. | Active |
 | `L8_DECEPTION_COVERT` | Deception | Covert decoy behavior in eligible non-maze responses for medium-suspicion traffic. | Active |
@@ -130,7 +130,7 @@ Shuma uses a canonical escalation taxonomy so policy, metrics, and event logs sh
 
 - The most restrictive eligible level wins for a request.
 - Current hard transitions route to `L10_DENY_TEMP` (for example honeypot hit, rate-limit hit, existing active ban, outdated browser policy hit, GEO block route, strong automation auto-ban paths).
-- Threshold-driven flows route to `L4` / `L6` / `L7` based on configured JS, challenge, and maze thresholds.
+- Threshold-driven flows route to `L4` / `L5` / `L6` / `L7` based on configured JS, not-a-bot, challenge, and maze thresholds.
 - `L11_DENY_HARD` is not automatic by default and should be gated by explicit policy.
 
 ### 🐙 Canonical IDs in Telemetry

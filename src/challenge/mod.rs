@@ -6,6 +6,11 @@ pub(crate) mod operation_envelope;
 pub(crate) mod pow;
 mod puzzle;
 
+pub(crate) use not_a_bot::{
+    handle_not_a_bot_submit_with_outcome, has_valid_marker as has_valid_not_a_bot_marker,
+    render_not_a_bot, serve_not_a_bot_page, NotABotDecision, NotABotSubmitOutcome,
+    NotABotSubmitResult,
+};
 #[cfg(test)]
 pub use puzzle::handle_challenge_submit;
 #[cfg(test)]
@@ -30,6 +35,7 @@ pub trait KeyValueStore {
 }
 
 pub(crate) const PUZZLE_PATH: &str = "/challenge/puzzle";
+pub(crate) const NOT_A_BOT_PATH: &str = "/challenge/not-a-bot-checkbox";
 
 impl KeyValueStore for Store {
     fn get(&self, key: &str) -> Result<Option<Vec<u8>>, ()> {

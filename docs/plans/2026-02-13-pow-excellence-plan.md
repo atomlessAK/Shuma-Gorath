@@ -54,7 +54,7 @@ PoW is currently available as an optional JS interstitial step (`/pow` and `/pow
 ### D. Escalation logic
 
 - Failed PoW does not always block immediately.
-- Route outcomes by policy: retry -> challenge-lite/puzzle -> maze/tarpit/block.
+- Route outcomes by policy: retry -> not-a-bot/puzzle -> maze/tarpit/block.
 
 ## Cost-allocation Targets
 

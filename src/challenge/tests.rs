@@ -448,6 +448,44 @@ mod tests {
     }
 
     #[test]
+    fn handle_challenge_submit_returns_incorrect_outcome_for_wrong_solution() {
+        let store = TestStore::default();
+        let now = crate::admin::now_ts();
+        let seed = ChallengeSeed {
+            seed_id: "seed-incorrect-outcome".to_string(),
+            operation_id: "aa00bb11".to_string(),
+            flow_id: crate::challenge::operation_envelope::FLOW_CHALLENGE_PUZZLE.to_string(),
+            step_id: crate::challenge::operation_envelope::STEP_CHALLENGE_PUZZLE_SUBMIT.to_string(),
+            step_index: crate::challenge::operation_envelope::STEP_INDEX_CHALLENGE_PUZZLE_SUBMIT,
+            issued_at: now.saturating_sub(2),
+            expires_at: now + 300,
+            token_version: crate::challenge::operation_envelope::TOKEN_VERSION_V1,
+            ip_bucket: crate::signals::ip_identity::bucket_ip("unknown"),
+            ua_bucket: crate::challenge::operation_envelope::user_agent_bucket(""),
+            path_class: crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
+                .to_string(),
+            grid_size: 4,
+            active_cells: 4,
+            transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
+            training_count: 2,
+            seed: 6001,
+        };
+        let puzzle = build_puzzle(&seed);
+        let mut output = grid_to_tritstring(&puzzle.test_output);
+        output.replace_range(0..1, if &output[0..1] == "1" { "0" } else { "1" });
+        let body = format!("seed={}&output={}", make_seed_token(&seed), output);
+        let req = Request::builder()
+            .method(Method::Post)
+            .uri("/challenge/puzzle")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(body.as_bytes().to_vec())
+            .build();
+        let (resp, outcome) = handle_challenge_submit_with_outcome(&store, &req);
+        assert_eq!(*resp.status(), 403u16);
+        assert_eq!(outcome, ChallengeSubmitOutcome::Incorrect);
+    }
+
+    #[test]
     fn handle_challenge_submit_is_single_attempt() {
         let store = TestStore::default();
         let now = crate::admin::now_ts();
@@ -567,6 +605,108 @@ mod tests {
         let body = String::from_utf8(resp.into_body()).unwrap();
         assert!(body.contains("Forbidden. Please request a new challenge."));
         assert!(body.contains("Request new challenge."));
+    }
+
+    #[test]
+    fn handle_challenge_submit_returns_invalid_output_when_output_missing() {
+        let store = TestStore::default();
+        let now = crate::admin::now_ts();
+        let seed = ChallengeSeed {
+            seed_id: "seed-missing-output".to_string(),
+            operation_id: "bb11cc22".to_string(),
+            flow_id: crate::challenge::operation_envelope::FLOW_CHALLENGE_PUZZLE.to_string(),
+            step_id: crate::challenge::operation_envelope::STEP_CHALLENGE_PUZZLE_SUBMIT.to_string(),
+            step_index: crate::challenge::operation_envelope::STEP_INDEX_CHALLENGE_PUZZLE_SUBMIT,
+            issued_at: now.saturating_sub(2),
+            expires_at: now + 300,
+            token_version: crate::challenge::operation_envelope::TOKEN_VERSION_V1,
+            ip_bucket: crate::signals::ip_identity::bucket_ip("unknown"),
+            ua_bucket: crate::challenge::operation_envelope::user_agent_bucket(""),
+            path_class: crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
+                .to_string(),
+            grid_size: 4,
+            active_cells: 4,
+            transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
+            training_count: 2,
+            seed: 6002,
+        };
+        let req = Request::builder()
+            .method(Method::Post)
+            .uri("/challenge/puzzle")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(format!("seed={}", make_seed_token(&seed)).as_bytes().to_vec())
+            .build();
+        let (resp, outcome) = handle_challenge_submit_with_outcome(&store, &req);
+        assert_eq!(*resp.status(), 400u16);
+        assert_eq!(outcome, ChallengeSubmitOutcome::InvalidOutput);
+        assert_eq!(String::from_utf8_lossy(resp.body()), "Invalid output");
+    }
+
+    #[test]
+    fn handle_challenge_submit_returns_invalid_output_for_bad_output_shape() {
+        let store = TestStore::default();
+        let now = crate::admin::now_ts();
+        let seed = ChallengeSeed {
+            seed_id: "seed-invalid-output-shape".to_string(),
+            operation_id: "cc22dd33".to_string(),
+            flow_id: crate::challenge::operation_envelope::FLOW_CHALLENGE_PUZZLE.to_string(),
+            step_id: crate::challenge::operation_envelope::STEP_CHALLENGE_PUZZLE_SUBMIT.to_string(),
+            step_index: crate::challenge::operation_envelope::STEP_INDEX_CHALLENGE_PUZZLE_SUBMIT,
+            issued_at: now.saturating_sub(2),
+            expires_at: now + 300,
+            token_version: crate::challenge::operation_envelope::TOKEN_VERSION_V1,
+            ip_bucket: crate::signals::ip_identity::bucket_ip("unknown"),
+            ua_bucket: crate::challenge::operation_envelope::user_agent_bucket(""),
+            path_class: crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
+                .to_string(),
+            grid_size: 4,
+            active_cells: 4,
+            transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
+            training_count: 2,
+            seed: 6003,
+        };
+        let req = Request::builder()
+            .method(Method::Post)
+            .uri("/challenge/puzzle")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(
+                format!("seed={}&output=bad", make_seed_token(&seed))
+                    .as_bytes()
+                    .to_vec(),
+            )
+            .build();
+        let (resp, outcome) = handle_challenge_submit_with_outcome(&store, &req);
+        assert_eq!(*resp.status(), 400u16);
+        assert_eq!(outcome, ChallengeSubmitOutcome::InvalidOutput);
+        assert_eq!(String::from_utf8_lossy(resp.body()), "Invalid output");
+    }
+
+    #[test]
+    fn handle_challenge_submit_returns_forbidden_when_seed_missing() {
+        let store = TestStore::default();
+        let req = Request::builder()
+            .method(Method::Post)
+            .uri("/challenge/puzzle")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(b"output=0000000000000000".to_vec())
+            .build();
+        let (resp, outcome) = handle_challenge_submit_with_outcome(&store, &req);
+        assert_eq!(*resp.status(), 403u16);
+        assert_eq!(outcome, ChallengeSubmitOutcome::Forbidden);
+    }
+
+    #[test]
+    fn handle_challenge_submit_returns_forbidden_on_non_utf8_form_body() {
+        let store = TestStore::default();
+        let req = Request::builder()
+            .method(Method::Post)
+            .uri("/challenge/puzzle")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(vec![0xff, 0xfe, 0xfd])
+            .build();
+        let (resp, outcome) = handle_challenge_submit_with_outcome(&store, &req);
+        assert_eq!(*resp.status(), 403u16);
+        assert_eq!(outcome, ChallengeSubmitOutcome::Forbidden);
     }
 
     #[test]
@@ -891,6 +1031,48 @@ mod tests {
         assert_eq!(outcome, ChallengeSubmitOutcome::SequenceOrderViolation);
         let body = String::from_utf8(resp.into_body()).unwrap();
         assert!(body.contains("Forbidden. Please request a new challenge."));
+    }
+
+    #[test]
+    fn handle_challenge_submit_returns_window_exceeded_when_step_window_elapsed() {
+        let store = TestStore::default();
+        let now = crate::admin::now_ts();
+        let seed = ChallengeSeed {
+            seed_id: "seed-window-exceeded".to_string(),
+            operation_id: "dd33ee44".to_string(),
+            flow_id: crate::challenge::operation_envelope::FLOW_CHALLENGE_PUZZLE.to_string(),
+            step_id: crate::challenge::operation_envelope::STEP_CHALLENGE_PUZZLE_SUBMIT.to_string(),
+            step_index: crate::challenge::operation_envelope::STEP_INDEX_CHALLENGE_PUZZLE_SUBMIT,
+            issued_at: now
+                .saturating_sub(crate::challenge::operation_envelope::MAX_STEP_WINDOW_SECONDS_CHALLENGE_PUZZLE)
+                .saturating_sub(5),
+            expires_at: now + 600,
+            token_version: crate::challenge::operation_envelope::TOKEN_VERSION_V1,
+            ip_bucket: crate::signals::ip_identity::bucket_ip("unknown"),
+            ua_bucket: crate::challenge::operation_envelope::user_agent_bucket(""),
+            path_class: crate::challenge::operation_envelope::PATH_CLASS_CHALLENGE_PUZZLE_SUBMIT
+                .to_string(),
+            grid_size: 4,
+            active_cells: 4,
+            transforms: vec![Transform::RotateCw90, Transform::ShiftDown],
+            training_count: 2,
+            seed: 6004,
+        };
+        let req = Request::builder()
+            .method(Method::Post)
+            .uri("/challenge/puzzle")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(
+                format!("seed={}&output=0000000000000000", make_seed_token(&seed))
+                    .as_bytes()
+                    .to_vec(),
+            )
+            .build();
+        let (resp, outcome) = handle_challenge_submit_with_outcome(&store, &req);
+        assert_eq!(*resp.status(), 403u16);
+        assert_eq!(outcome, ChallengeSubmitOutcome::SequenceWindowExceeded);
+        let body = String::from_utf8(resp.into_body()).unwrap();
+        assert!(body.contains("Expired"));
     }
 
     #[test]

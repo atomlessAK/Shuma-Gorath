@@ -138,7 +138,8 @@ Development:
 - Login flow: unauthenticated visits to `/dashboard/index.html` are redirected to `/dashboard/login.html`; enter API key once to create a short-lived same-origin admin session cookie
 - Admin API endpoint is inferred from the page origin (same-origin only)
 - `make dev` applies local-write defaults (`DEV_ADMIN_CONFIG_WRITE_ENABLED=true`) even when `.env.local` is stricter.
-- Override dev defaults per run if you want production-like read-only behavior (example: `make dev DEV_ADMIN_CONFIG_WRITE_ENABLED=false`).
+- `make dev` also clears `SHUMA_ADMIN_IP_ALLOWLIST` by default (`DEV_ADMIN_IP_ALLOWLIST=`) so localhost browser login works without trusted proxy headers.
+- Override dev defaults per run if you want production-like behavior (example: `make dev DEV_ADMIN_CONFIG_WRITE_ENABLED=false DEV_ADMIN_IP_ALLOWLIST=127.0.0.1,::1`).
 
 Production (recommended):
 - Protect the dashboard with auth

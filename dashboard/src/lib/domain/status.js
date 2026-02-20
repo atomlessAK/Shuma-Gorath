@@ -14,6 +14,8 @@ const INITIAL_STATE = Object.freeze({
     cdpAutoBan: false,
     jsRequiredEnforced: true,
     challengeEnabled: true,
+    notABotEnabled: true,
+    notABotThreshold: 2,
     challengeThreshold: 3,
     mazeThreshold: 6,
     rateLimit: 80,
@@ -131,6 +133,14 @@ const VAR_MEANINGS = Object.freeze({
     challenge_puzzle_transform_count: 'Challenge puzzle transform-option count.',
     challenge_puzzle_risk_threshold: 'Botness threshold for challenge step-up routing.',
     challenge_puzzle_risk_threshold_default: 'Default challenge threshold derived from environment seed.',
+    not_a_bot_enabled: 'Enables/disables Not-a-Bot checkbox routing at medium botness certainty.',
+    not_a_bot_risk_threshold: 'Botness threshold for serving the Not-a-Bot checkbox step.',
+    not_a_bot_score_pass_min: 'Minimum Not-a-Bot score required to pass and return to normal flow.',
+    not_a_bot_score_escalate_min: 'Minimum Not-a-Bot score required to escalate to puzzle instead of maze/block.',
+    not_a_bot_nonce_ttl_seconds: 'Not-a-Bot seed token lifetime in seconds.',
+    not_a_bot_marker_ttl_seconds: 'Not-a-Bot pass marker lifetime in seconds.',
+    not_a_bot_attempt_limit_per_window: 'Maximum Not-a-Bot submit attempts allowed per window per identity bucket.',
+    not_a_bot_attempt_window_seconds: 'Attempt-rate window in seconds for Not-a-Bot submit limits.',
     botness_maze_threshold: 'Botness threshold for maze routing.',
     botness_maze_threshold_default: 'Default maze threshold derived from environment seed.',
     'botness_weights.js_required': 'Botness points for missing JS verification.',
@@ -185,6 +195,7 @@ const VAR_GROUP_DEFINITIONS = Object.freeze([
       title: 'Risk Scoring and Challenge',
       matches: path => (
         path === 'js_required_enforced' ||
+        path.startsWith('not_a_bot_') ||
         path.startsWith('pow_') ||
         path.startsWith('challenge_') ||
         path.startsWith('botness_')
@@ -295,6 +306,8 @@ export function deriveStatusSnapshot(configSnapshot = {}) {
       cdpAutoBan: parseBoolLike(config.cdp_auto_ban, true),
       jsRequiredEnforced: parseBoolLike(config.js_required_enforced, true),
       challengeEnabled: parseBoolLike(config.challenge_puzzle_enabled, true),
+      notABotEnabled: parseBoolLike(config.not_a_bot_enabled, true),
+      notABotThreshold: parseIntegerLike(config.not_a_bot_risk_threshold, base.notABotThreshold),
       challengeThreshold: parseIntegerLike(
         config.challenge_puzzle_risk_threshold,
         base.challengeThreshold
@@ -422,7 +435,7 @@ const STATUS_DEFINITIONS = [
       status: snapshot => boolStatus(snapshot.powEnabled)
     },
     {
-      title: 'Challenge',
+      title: 'Challenge Puzzle',
       description: snapshot => (
         `Step-up routing sends suspicious traffic to the puzzle challenge when ${envVar('SHUMA_CHALLENGE_PUZZLE_ENABLED')} is true and cumulative botness reaches ${envVar('SHUMA_CHALLENGE_PUZZLE_RISK_THRESHOLD')} ` +
         `(enabled: <strong>${boolStatus(snapshot.challengeEnabled)}</strong>, current: <strong>${snapshot.challengeThreshold}</strong>). ` +
@@ -430,6 +443,16 @@ const STATUS_DEFINITIONS = [
         `Runtime updates are available only when ${envVar('SHUMA_ADMIN_CONFIG_WRITE_ENABLED')} is enabled.`
       ),
       status: snapshot => boolStatus(snapshot.challengeEnabled)
+    },
+    {
+      title: 'Challenge Not-A-Bot',
+      description: snapshot => (
+        `Lower-certainty step-up routing can serve the Not-a-Bot checkbox when ${envVar('SHUMA_NOT_A_BOT_ENABLED')} is true and cumulative botness reaches ${envVar('SHUMA_NOT_A_BOT_RISK_THRESHOLD')} ` +
+        `(enabled: <strong>${boolStatus(snapshot.notABotEnabled)}</strong>, current: <strong>${snapshot.notABotThreshold}</strong>). ` +
+        `Submit scoring uses ${envVar('SHUMA_NOT_A_BOT_SCORE_PASS_MIN')} and ${envVar('SHUMA_NOT_A_BOT_SCORE_ESCALATE_MIN')}. ` +
+        `Token and attempt controls are governed by ${envVar('SHUMA_NOT_A_BOT_NONCE_TTL_SECONDS')}, ${envVar('SHUMA_NOT_A_BOT_MARKER_TTL_SECONDS')}, ${envVar('SHUMA_NOT_A_BOT_ATTEMPT_LIMIT_PER_WINDOW')}, and ${envVar('SHUMA_NOT_A_BOT_ATTEMPT_WINDOW_SECONDS')}.`
+      ),
+      status: snapshot => boolStatus(snapshot.notABotEnabled)
     },
     {
       title: 'CDP Detection',

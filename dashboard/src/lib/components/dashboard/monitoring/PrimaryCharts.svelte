@@ -34,7 +34,7 @@
       <button type="button" class="btn time-btn" class:active={selectedTimeRange === 'month'} data-range="month" on:click={() => selectRange('month')}>30 Days</button>
     </div>
   </div>
-  <div class="chart-container panel-soft panel-border pad-md">
+  <div class="chart-container panel-soft panel-border pad-md-trb">
     <canvas id="timeSeriesChart" bind:this={timeSeriesCanvas}></canvas>
   </div>
 </div>

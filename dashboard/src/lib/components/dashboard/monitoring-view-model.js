@@ -1,3 +1,5 @@
+import { formatCompactNumber } from '../../domain/core/format.js';
+
 const CHALLENGE_REASON_LABELS = Object.freeze({
   incorrect: 'Incorrect',
   expired_replay: 'Expired/Replay',
@@ -21,11 +23,19 @@ const RATE_OUTCOME_LABELS = Object.freeze({
   fallback_deny: 'Fallback Deny'
 });
 
-const formatNumber = (value, fallback = '0') => {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return fallback;
-  return numeric.toLocaleString();
-};
+const NOT_A_BOT_OUTCOME_LABELS = Object.freeze({
+  pass: 'Pass',
+  escalate: 'Escalate',
+  fail: 'Fail',
+  replay: 'Replay'
+});
+
+const NOT_A_BOT_LATENCY_LABELS = Object.freeze({
+  lt_1s: '<1s',
+  '1_3s': '1-3s',
+  '3_10s': '3-10s',
+  '10s_plus': '10s+'
+});
 
 const toNonNegativeNumber = (value) => {
   const numeric = Number(value);
@@ -56,7 +66,7 @@ const deriveTopOffenderViewModel = (rawLabel, rawCount, singularUnit, pluralUnit
   const unit = formatUnitLabel(count, singularUnit, pluralUnit);
   return {
     value: normalizedLabel,
-    label: `Top Offender (${count.toLocaleString()} ${unit})`
+    label: `Top Offender (${formatCompactNumber(count, '0')} ${unit})`
   };
 };
 
@@ -92,9 +102,9 @@ export const deriveMazeStatsViewModel = (data = {}) => {
   const topCrawler =
     Array.isArray(data.top_crawlers) && data.top_crawlers.length ? data.top_crawlers[0] : null;
   return {
-    totalHits: formatNumber(data.total_hits, '0'),
-    uniqueCrawlers: formatNumber(data.unique_crawlers, '0'),
-    mazeAutoBans: formatNumber(data.maze_auto_bans, '0'),
+    totalHits: formatCompactNumber(data.total_hits, '0'),
+    uniqueCrawlers: formatCompactNumber(data.unique_crawlers, '0'),
+    mazeAutoBans: formatCompactNumber(data.maze_auto_bans, '0'),
     topOffender: deriveTopOffenderViewModel(
       topCrawler?.ip,
       topCrawler?.hits,
@@ -107,6 +117,7 @@ export const deriveMazeStatsViewModel = (data = {}) => {
 export const deriveMonitoringSummaryViewModel = (summary = {}) => {
   const honeypot = summary.honeypot || {};
   const challenge = summary.challenge || {};
+  const notABot = summary.not_a_bot || {};
   const pow = summary.pow || {};
   const rate = summary.rate || {};
   const geo = summary.geo || {};
@@ -155,11 +166,24 @@ export const deriveMonitoringSummaryViewModel = (summary = {}) => {
   const powSuccessRatio = Number.isFinite(powRatioRaw)
     ? Math.min(1, Math.max(0, powRatioRaw))
     : (powAttemptsTotal > 0 ? Math.min(1, Math.max(0, powSuccessTotal / powAttemptsTotal)) : 0);
+  const notABotServed = toNonNegativeNumber(notABot.served);
+  const notABotSubmitted = toNonNegativeNumber(notABot.submitted);
+  const notABotPass = toNonNegativeNumber(notABot.pass);
+  const notABotEscalate = toNonNegativeNumber(notABot.escalate);
+  const notABotFail = toNonNegativeNumber(notABot.fail);
+  const notABotReplay = toNonNegativeNumber(notABot.replay);
+  const notABotAbandonments = toNonNegativeNumber(notABot.abandonments_estimated);
+  const notABotAbandonmentRatioRaw = Number(notABot.abandonment_ratio);
+  const notABotAbandonmentRatio = Number.isFinite(notABotAbandonmentRatioRaw)
+    ? Math.min(1, Math.max(0, notABotAbandonmentRatioRaw))
+    : (notABotServed > 0
+      ? Math.min(1, Math.max(0, notABotAbandonments / notABotServed))
+      : 0);
 
   return {
     honeypot: {
-      totalHits: formatNumber(honeypot.total_hits, '0'),
-      uniqueCrawlers: formatNumber(honeypot.unique_crawlers, '0'),
+      totalHits: formatCompactNumber(honeypot.total_hits, '0'),
+      uniqueCrawlers: formatCompactNumber(honeypot.unique_crawlers, '0'),
       topOffender: deriveTopOffenderViewModel(
         topHoneypotCrawler?.label,
         topHoneypotCrawler?.count,
@@ -169,8 +193,8 @@ export const deriveMonitoringSummaryViewModel = (summary = {}) => {
       topPaths: honeypotTopPaths
     },
     challenge: {
-      totalFailures: formatNumber(challenge.total_failures, '0'),
-      uniqueOffenders: formatNumber(challenge.unique_offenders, '0'),
+      totalFailures: formatCompactNumber(challenge.total_failures, '0'),
+      uniqueOffenders: formatCompactNumber(challenge.unique_offenders, '0'),
       topOffender: deriveTopOffenderViewModel(
         topChallengeOffender?.label,
         topChallengeOffender?.count,
@@ -180,13 +204,25 @@ export const deriveMonitoringSummaryViewModel = (summary = {}) => {
       reasons: sortCountEntries(challenge.reasons),
       trend: deriveTrendSeries(challenge.trend)
     },
+    notABot: {
+      served: formatCompactNumber(notABotServed, '0'),
+      submitted: formatCompactNumber(notABotSubmitted, '0'),
+      pass: formatCompactNumber(notABotPass, '0'),
+      escalate: formatCompactNumber(notABotEscalate, '0'),
+      fail: formatCompactNumber(notABotFail, '0'),
+      replay: formatCompactNumber(notABotReplay, '0'),
+      abandonmentsEstimated: formatCompactNumber(notABotAbandonments, '0'),
+      abandonmentRate: `${(notABotAbandonmentRatio * 100).toFixed(1)}%`,
+      outcomes: sortCountEntries(notABot.outcomes),
+      latencyBuckets: sortCountEntries(notABot.solve_latency_buckets)
+    },
     pow: {
-      totalFailures: formatNumber(powFailureTotal, '0'),
-      totalSuccesses: formatNumber(powSuccessTotal, '0'),
-      totalAttempts: formatNumber(powAttemptsTotal, '0'),
+      totalFailures: formatCompactNumber(powFailureTotal, '0'),
+      totalSuccesses: formatCompactNumber(powSuccessTotal, '0'),
+      totalAttempts: formatCompactNumber(powAttemptsTotal, '0'),
       successRatio: powSuccessRatio,
       successRate: `${(powSuccessRatio * 100).toFixed(1)}%`,
-      uniqueOffenders: formatNumber(pow.unique_offenders, '0'),
+      uniqueOffenders: formatCompactNumber(pow.unique_offenders, '0'),
       topOffender: deriveTopOffenderViewModel(
         topPowOffender?.label,
         topPowOffender?.count,
@@ -198,8 +234,8 @@ export const deriveMonitoringSummaryViewModel = (summary = {}) => {
       trend: deriveTrendSeries(pow.trend)
     },
     rate: {
-      totalViolations: formatNumber(rate.total_violations, '0'),
-      uniqueOffenders: formatNumber(rate.unique_offenders, '0'),
+      totalViolations: formatCompactNumber(rate.total_violations, '0'),
+      uniqueOffenders: formatCompactNumber(rate.unique_offenders, '0'),
       topOffender: deriveTopOffenderViewModel(
         topRateOffender?.label,
         topRateOffender?.count,
@@ -209,11 +245,11 @@ export const deriveMonitoringSummaryViewModel = (summary = {}) => {
       outcomes: sortCountEntries(rate.outcomes)
     },
     geo: {
-      totalViolations: formatNumber(geo.total_violations, '0'),
+      totalViolations: formatCompactNumber(geo.total_violations, '0'),
       actionMix: {
-        block: Number(geo.actions?.block || 0).toLocaleString(),
-        challenge: Number(geo.actions?.challenge || 0).toLocaleString(),
-        maze: Number(geo.actions?.maze || 0).toLocaleString()
+        block: formatCompactNumber(geo.actions?.block || 0, '0'),
+        challenge: formatCompactNumber(geo.actions?.challenge || 0, '0'),
+        maze: formatCompactNumber(geo.actions?.maze || 0, '0')
       },
       topCountries: geoTopCountries
     }
@@ -259,6 +295,8 @@ export const derivePrometheusHelperViewModel = (prometheusData = {}, origin = ''
 
 export {
   CHALLENGE_REASON_LABELS,
+  NOT_A_BOT_OUTCOME_LABELS,
+  NOT_A_BOT_LATENCY_LABELS,
   POW_REASON_LABELS,
   RATE_OUTCOME_LABELS,
   normalizeOffenderBucketLabel

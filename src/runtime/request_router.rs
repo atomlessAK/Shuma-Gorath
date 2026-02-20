@@ -22,6 +22,164 @@ fn record_sequence_violation_for_challenge_submit(
     );
 }
 
+fn handle_not_a_bot_submit(
+    store: &Store,
+    req: &Request,
+    cfg: &crate::config::Config,
+) -> Response {
+    let submit_result = crate::boundaries::handle_not_a_bot_submit_with_outcome(store, req, cfg);
+    let provider_registry = crate::providers::registry::ProviderRegistry::from_config(cfg);
+    let ip = crate::extract_client_ip(req);
+    let ua = req
+        .header("user-agent")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+    let monitoring_outcome = match submit_result.outcome {
+        crate::challenge::NotABotSubmitOutcome::Pass => "pass",
+        crate::challenge::NotABotSubmitOutcome::EscalatePuzzle => "escalate",
+        crate::challenge::NotABotSubmitOutcome::Replay => "replay",
+        _ => "fail",
+    };
+    crate::observability::monitoring::record_not_a_bot_submit(
+        store,
+        monitoring_outcome,
+        submit_result.solve_ms,
+    );
+
+    match submit_result.decision {
+        crate::challenge::NotABotDecision::Pass => {
+            crate::observability::metrics::increment(
+                store,
+                crate::observability::metrics::MetricName::NotABotPassTotal,
+                None,
+            );
+            crate::admin::log_event(
+                store,
+                &crate::admin::EventLogEntry {
+                    ts: crate::admin::now_ts(),
+                    event: crate::admin::EventType::Challenge,
+                    ip: Some(ip.clone()),
+                    reason: Some("not_a_bot_pass".to_string()),
+                    outcome: Some(format!(
+                        "return_to={} solve_ms={}",
+                        submit_result.return_to,
+                        submit_result.solve_ms.unwrap_or_default()
+                    )),
+                    admin: None,
+                },
+            );
+            let mut builder = Response::builder();
+            builder.status(303);
+            builder.header("Location", submit_result.return_to.as_str());
+            builder.header("Cache-Control", "no-store");
+            if let Some(marker_cookie) = submit_result.marker_cookie {
+                builder.header("Set-Cookie", marker_cookie.as_str());
+            }
+            builder.body(Vec::new()).build()
+        }
+        crate::challenge::NotABotDecision::EscalatePuzzle => {
+            crate::observability::metrics::increment(
+                store,
+                crate::observability::metrics::MetricName::NotABotEscalateTotal,
+                None,
+            );
+            crate::admin::log_event(
+                store,
+                &crate::admin::EventLogEntry {
+                    ts: crate::admin::now_ts(),
+                    event: crate::admin::EventType::Challenge,
+                    ip: Some(ip.clone()),
+                    reason: Some("not_a_bot_escalate_puzzle".to_string()),
+                    outcome: Some(format!("{:?}", submit_result.outcome)),
+                    admin: None,
+                },
+            );
+            if cfg.challenge_puzzle_enabled {
+                crate::observability::metrics::increment(
+                    store,
+                    crate::observability::metrics::MetricName::ChallengesTotal,
+                    None,
+                );
+                crate::observability::metrics::increment(
+                    store,
+                    crate::observability::metrics::MetricName::ChallengeServedTotal,
+                    None,
+                );
+                return provider_registry
+                    .challenge_engine_provider()
+                    .render_challenge(req, cfg.challenge_puzzle_transform_count as usize);
+            }
+            if cfg.maze_enabled {
+                return provider_registry
+                    .maze_tarpit_provider()
+                    .serve_maze_with_tracking(
+                        req,
+                        store,
+                        cfg,
+                        ip.as_str(),
+                        ua,
+                        crate::maze::entry_path("not-a-bot-escalate-fallback").as_str(),
+                        "not_a_bot_escalate_puzzle_fallback_maze",
+                        "not_a_bot_escalate_puzzle challenge_disabled",
+                        None,
+                    );
+            }
+            Response::new(
+                403,
+                crate::enforcement::block_page::render_block_page(
+                    crate::enforcement::block_page::BlockReason::GeoPolicy,
+                ),
+            )
+        }
+        crate::challenge::NotABotDecision::MazeOrBlock => {
+            crate::observability::metrics::increment(
+                store,
+                crate::observability::metrics::MetricName::NotABotFailTotal,
+                None,
+            );
+            if submit_result.outcome == crate::challenge::NotABotSubmitOutcome::Replay {
+                crate::observability::metrics::increment(
+                    store,
+                    crate::observability::metrics::MetricName::NotABotReplayTotal,
+                    None,
+                );
+            }
+            crate::admin::log_event(
+                store,
+                &crate::admin::EventLogEntry {
+                    ts: crate::admin::now_ts(),
+                    event: crate::admin::EventType::Challenge,
+                    ip: Some(ip.clone()),
+                    reason: Some("not_a_bot_fail".to_string()),
+                    outcome: Some(format!("{:?}", submit_result.outcome)),
+                    admin: None,
+                },
+            );
+            if cfg.maze_enabled {
+                return provider_registry
+                    .maze_tarpit_provider()
+                    .serve_maze_with_tracking(
+                        req,
+                        store,
+                        cfg,
+                        ip.as_str(),
+                        ua,
+                        crate::maze::entry_path("not-a-bot-fail").as_str(),
+                        "not_a_bot_submit_fail_maze",
+                        format!("{:?}", submit_result.outcome).as_str(),
+                        None,
+                    );
+            }
+            Response::new(
+                403,
+                crate::enforcement::block_page::render_block_page(
+                    crate::enforcement::block_page::BlockReason::GeoPolicy,
+                ),
+            )
+        }
+    }
+}
+
 pub(crate) fn maybe_handle_early_route(req: &Request, path: &str) -> Option<Response> {
     if let Some(response) = crate::maze::assets::maybe_handle_asset(path, req.method()) {
         return Some(response);
@@ -84,6 +242,37 @@ pub(crate) fn maybe_handle_early_route(req: &Request, path: &str) -> Option<Resp
             "unavailable",
             mode,
         ));
+    }
+
+    if path == crate::boundaries::challenge_not_a_bot_path() && *req.method() == Method::Post {
+        if let Ok(store) = Store::open_default() {
+            let cfg = match crate::load_runtime_config(&store, "default", path) {
+                Ok(cfg) => cfg,
+                Err(resp) => return Some(resp),
+            };
+            return Some(handle_not_a_bot_submit(&store, req, &cfg));
+        }
+        return Some(Response::new(500, "Key-value store error"));
+    }
+
+    if path == crate::boundaries::challenge_not_a_bot_path() && *req.method() == Method::Get {
+        if let Ok(store) = Store::open_default() {
+            let cfg = match crate::load_runtime_config(&store, "default", path) {
+                Ok(cfg) => cfg,
+                Err(resp) => return Some(resp),
+            };
+            let response = crate::boundaries::serve_not_a_bot_page(req, cfg.test_mode, &cfg);
+            if *response.status() == 200 {
+                crate::observability::metrics::increment(
+                    &store,
+                    crate::observability::metrics::MetricName::NotABotServedTotal,
+                    None,
+                );
+                crate::observability::monitoring::record_not_a_bot_served(&store);
+            }
+            return Some(response);
+        }
+        return Some(Response::new(500, "Key-value store error"));
     }
 
     // Challenge POST handler

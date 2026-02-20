@@ -20,7 +20,7 @@ Each plan is structured to answer:
 2. `docs/plans/2026-02-13-js-verification-excellence-plan.md`
 3. `docs/plans/2026-02-13-cdp-detection-excellence-plan.md`
 4. `docs/plans/2026-02-13-pow-excellence-plan.md`
-5. `docs/plans/2026-02-13-challenge-lite-excellence-plan.md`
+5. `docs/plans/2026-02-13-not-a-bot-excellence-plan.md`
 6. `docs/plans/2026-02-13-puzzle-challenge-excellence-plan.md`
 7. `docs/plans/2026-02-13-rate-limiting-excellence-plan.md`
 8. `docs/plans/2026-02-13-http-tarpit-excellence-plan.md`
@@ -36,7 +36,7 @@ Each plan is structured to answer:
 4. Rate limiting
 5. IP range policy
 6. GEO fencing
-7. Challenge Lite
+7. Not-a-Bot checkbox
 8. Puzzle challenge
 9. PoW
 10. HTTP tarpit
@@ -46,7 +46,7 @@ Each plan is structured to answer:
 
 - Signal quality first: fingerprint + JS/CDP improve downstream policy precision.
 - Baseline control next: rate limiting + IP/GEO reduce obvious abuse volume.
-- Challenge depth after that: challenge-lite, puzzle, and PoW become better targeted.
+- Challenge depth after that: not-a-bot checkbox, puzzle, and PoW become better targeted.
 - Cost-imposition last: tarpit features are safest once scoring and policy quality are mature.
 
 ## Cross-Plan Guardrails

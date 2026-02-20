@@ -536,6 +536,14 @@ pub(crate) fn maybe_handle_botness(
     let botness_state_summary = crate::botness_signal_states_summary(&botness);
     let runtime_metadata_summary = crate::defence_runtime_metadata_summary(cfg);
     let provider_summary = crate::provider_implementations_summary(provider_registry);
+    let ua = req
+        .header("user-agent")
+        .map(|v| v.as_str().unwrap_or(""))
+        .unwrap_or("");
+    let base_outcome = format!(
+        "score={} signals={} signal_states={} {} providers={}",
+        botness.score, botness_summary, botness_state_summary, runtime_metadata_summary, provider_summary
+    );
     let botness_signal_ids = active_botness_signal_ids(&botness);
 
     if cfg.maze_enabled && botness.score >= cfg.botness_maze_threshold {
@@ -575,19 +583,59 @@ pub(crate) fn maybe_handle_botness(
         );
     }
 
-    if botness.score >= cfg.challenge_puzzle_risk_threshold {
-        let ua = req
-            .header("user-agent")
-            .map(|v| v.as_str().unwrap_or(""))
-            .unwrap_or("");
-        let base_outcome = format!(
-            "score={} signals={} signal_states={} {} providers={}",
-            botness.score,
-            botness_summary,
-            botness_state_summary,
-            runtime_metadata_summary,
-            provider_summary
+    let not_a_bot_threshold = cfg.not_a_bot_risk_threshold;
+    if cfg.not_a_bot_enabled
+        && cfg.challenge_puzzle_enabled
+        && not_a_bot_threshold > 0
+        && botness.score >= not_a_bot_threshold
+        && botness.score < cfg.challenge_puzzle_risk_threshold
+    {
+        if crate::challenge::has_valid_not_a_bot_marker(req, ip, ua) {
+            return None;
+        }
+        let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
+            crate::runtime::policy_taxonomy::PolicyTransition::BotnessGateNotABot(
+                botness_signal_ids.clone(),
+            ),
         );
+        crate::observability::metrics::record_policy_match(store, &policy_match);
+        crate::observability::metrics::increment(
+            store,
+            crate::observability::metrics::MetricName::ChallengesTotal,
+            None,
+        );
+        crate::observability::metrics::increment(
+            store,
+            crate::observability::metrics::MetricName::NotABotServedTotal,
+            None,
+        );
+        crate::observability::monitoring::record_not_a_bot_served(store);
+        crate::admin::log_event(
+            store,
+            &crate::admin::EventLogEntry {
+                ts: crate::admin::now_ts(),
+                event: crate::admin::EventType::Challenge,
+                ip: Some(ip.to_string()),
+                reason: Some("botness_gate_not_a_bot".to_string()),
+                outcome: Some(policy_match.annotate_outcome(base_outcome.as_str())),
+                admin: None,
+            },
+        );
+        let not_a_bot_response = provider_registry
+            .challenge_engine_provider()
+            .render_not_a_bot(req, cfg);
+        let response = crate::maze::covert_decoy::maybe_inject_non_maze_decoy(
+            req,
+            cfg,
+            ip,
+            ua,
+            not_a_bot_response,
+            botness.score,
+        );
+        return Some(response);
+    }
+
+    if botness.score >= cfg.challenge_puzzle_risk_threshold {
         if cfg.challenge_puzzle_enabled {
             let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
                 crate::runtime::policy_taxonomy::PolicyTransition::BotnessGateChallenge(

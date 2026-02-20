@@ -1,4 +1,5 @@
 use base64::{engine::general_purpose, Engine as _};
+#[cfg(not(test))]
 use once_cell::sync::Lazy;
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap};
@@ -31,9 +32,12 @@ const POW_REASON_KEYS: [&str; 5] = [
     "binding_timing_mismatch",
 ];
 const POW_OUTCOME_KEYS: [&str; 2] = ["success", "failure"];
+const NOT_A_BOT_OUTCOME_KEYS: [&str; 4] = ["pass", "escalate", "fail", "replay"];
+const NOT_A_BOT_SOLVE_MS_BUCKET_KEYS: [&str; 4] = ["lt_1s", "1_3s", "3_10s", "10s_plus"];
 const RATE_OUTCOME_KEYS: [&str; 4] = ["limited", "banned", "fallback_allow", "fallback_deny"];
 const GEO_ACTION_KEYS: [&str; 3] = ["block", "challenge", "maze"];
 
+#[cfg(not(test))]
 static LAST_MONITORING_CLEANUP_HOUR: Lazy<Mutex<u64>> = Lazy::new(|| Mutex::new(0));
 #[cfg(not(test))]
 static PENDING_COUNTER_BUFFER: Lazy<Mutex<PendingCounterBuffer>> =
@@ -106,11 +110,26 @@ pub(crate) struct GeoSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
+pub(crate) struct NotABotSummary {
+    pub served: u64,
+    pub submitted: u64,
+    pub pass: u64,
+    pub escalate: u64,
+    pub fail: u64,
+    pub replay: u64,
+    pub outcomes: BTreeMap<String, u64>,
+    pub solve_latency_buckets: BTreeMap<String, u64>,
+    pub abandonments_estimated: u64,
+    pub abandonment_ratio: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
 pub(crate) struct MonitoringSummary {
     pub generated_at: u64,
     pub hours: u64,
     pub honeypot: HoneypotSummary,
     pub challenge: FailureSummary,
+    pub not_a_bot: NotABotSummary,
     pub pow: PowSummary,
     pub rate: RateSummary,
     pub geo: GeoSummary,
@@ -253,6 +272,25 @@ fn normalize_geo_action(action: &str) -> &'static str {
     }
 }
 
+fn normalize_not_a_bot_outcome(outcome: &str) -> &'static str {
+    match outcome {
+        "pass" => "pass",
+        "escalate" => "escalate",
+        "replay" => "replay",
+        "fail" => "fail",
+        _ => "fail",
+    }
+}
+
+fn not_a_bot_solve_ms_bucket(solve_ms: u64) -> &'static str {
+    match solve_ms {
+        0..=999 => "lt_1s",
+        1000..=2999 => "1_3s",
+        3000..=9999 => "3_10s",
+        _ => "10s_plus",
+    }
+}
+
 fn normalize_country(country: Option<&str>) -> String {
     country
         .map(str::trim)
@@ -374,6 +412,25 @@ fn parse_monitoring_key(key: &str) -> Option<(String, String, Option<String>, u6
     }
 }
 
+fn cleanup_monitoring_keys<S: crate::challenge::KeyValueStore>(store: &S, cutoff: u64) {
+    if let Ok(keys) = store.get_keys() {
+        for key in keys {
+            if !key.starts_with(MONITORING_PREFIX) {
+                continue;
+            }
+            let Some((_, _, _, hour)) = parse_monitoring_key(key.as_str()) else {
+                continue;
+            };
+            if hour < cutoff {
+                if let Err(err) = store.delete(key.as_str()) {
+                    eprintln!("[monitoring] failed deleting expired key {}: {:?}", key, err);
+                }
+            }
+        }
+    }
+}
+
+#[cfg(not(test))]
 fn maybe_cleanup_monitoring<S: crate::challenge::KeyValueStore>(store: &S, current_hour: u64) {
     let retention = event_log_retention_hours();
     if retention == 0 {
@@ -386,24 +443,17 @@ fn maybe_cleanup_monitoring<S: crate::challenge::KeyValueStore>(store: &S, curre
     *last = current_hour;
 
     let cutoff = current_hour.saturating_sub(retention);
-    if let Ok(keys) = store.get_keys() {
-        for key in keys {
-            if !key.starts_with(MONITORING_PREFIX) {
-                continue;
-            }
-            let Some((_, _, _, hour)) = parse_monitoring_key(key.as_str()) else {
-                continue;
-            };
-            if hour < cutoff {
-                if let Err(err) = store.delete(key.as_str()) {
-                    eprintln!(
-                        "[monitoring] failed deleting expired key {}: {:?}",
-                        key, err
-                    );
-                }
-            }
-        }
+    cleanup_monitoring_keys(store, cutoff);
+}
+
+#[cfg(test)]
+fn maybe_cleanup_monitoring<S: crate::challenge::KeyValueStore>(store: &S, current_hour: u64) {
+    let retention = event_log_retention_hours();
+    if retention == 0 {
+        return;
     }
+    let cutoff = current_hour.saturating_sub(retention);
+    cleanup_monitoring_keys(store, cutoff);
 }
 
 fn record_with_dimension<S: crate::challenge::KeyValueStore>(
@@ -493,6 +543,24 @@ pub(crate) fn record_geo_violation<S: crate::challenge::KeyValueStore>(
     record_with_dimension(store, "geo", "country", Some(normalized_country.as_str()));
 }
 
+pub(crate) fn record_not_a_bot_served<S: crate::challenge::KeyValueStore>(store: &S) {
+    record_with_dimension(store, "not_a_bot", "served", None);
+}
+
+pub(crate) fn record_not_a_bot_submit<S: crate::challenge::KeyValueStore>(
+    store: &S,
+    outcome: &str,
+    solve_ms: Option<u64>,
+) {
+    let normalized_outcome = normalize_not_a_bot_outcome(outcome);
+    record_with_dimension(store, "not_a_bot", "submitted", None);
+    record_with_dimension(store, "not_a_bot", "outcome", Some(normalized_outcome));
+    if let Some(ms) = solve_ms {
+        let bucket = not_a_bot_solve_ms_bucket(ms);
+        record_with_dimension(store, "not_a_bot", "solve_ms_bucket", Some(bucket));
+    }
+}
+
 fn build_seeded_map(keys: &[&str]) -> BTreeMap<String, u64> {
     let mut map = BTreeMap::new();
     for key in keys {
@@ -573,6 +641,11 @@ pub(crate) fn summarize_with_store<S: crate::challenge::KeyValueStore>(
     let mut challenge_reason_counts: HashMap<String, u64> = HashMap::new();
     let mut challenge_trend = TrendAccumulator::default();
 
+    let mut not_a_bot_served_total = 0u64;
+    let mut not_a_bot_submitted_total = 0u64;
+    let mut not_a_bot_outcomes: HashMap<String, u64> = HashMap::new();
+    let mut not_a_bot_latency_buckets: HashMap<String, u64> = HashMap::new();
+
     let mut pow_total = 0u64;
     let mut pow_success_total = 0u64;
     let mut pow_ip_counts: HashMap<String, u64> = HashMap::new();
@@ -642,6 +715,25 @@ pub(crate) fn summarize_with_store<S: crate::challenge::KeyValueStore>(
                             let row = challenge_trend.reasons.entry(hour).or_default();
                             let reason_entry = row.entry(dim).or_insert(0);
                             *reason_entry = reason_entry.saturating_add(count);
+                        }
+                    }
+                    _ => {}
+                },
+                "not_a_bot" => match metric.as_str() {
+                    "served" => not_a_bot_served_total = not_a_bot_served_total.saturating_add(count),
+                    "submitted" => {
+                        not_a_bot_submitted_total = not_a_bot_submitted_total.saturating_add(count)
+                    }
+                    "outcome" => {
+                        if let Some(dim) = dimension {
+                            let entry = not_a_bot_outcomes.entry(dim).or_insert(0);
+                            *entry = entry.saturating_add(count);
+                        }
+                    }
+                    "solve_ms_bucket" => {
+                        if let Some(dim) = dimension {
+                            let entry = not_a_bot_latency_buckets.entry(dim).or_insert(0);
+                            *entry = entry.saturating_add(count);
                         }
                     }
                     _ => {}
@@ -734,6 +826,25 @@ pub(crate) fn summarize_with_store<S: crate::challenge::KeyValueStore>(
         *entry = entry.saturating_add(value);
     }
 
+    let mut not_a_bot_outcome_map = build_seeded_map(&NOT_A_BOT_OUTCOME_KEYS);
+    for (key, value) in not_a_bot_outcomes {
+        let entry = not_a_bot_outcome_map.entry(key).or_insert(0);
+        *entry = entry.saturating_add(value);
+    }
+
+    let mut not_a_bot_latency_map = build_seeded_map(&NOT_A_BOT_SOLVE_MS_BUCKET_KEYS);
+    for (key, value) in not_a_bot_latency_buckets {
+        let entry = not_a_bot_latency_map.entry(key).or_insert(0);
+        *entry = entry.saturating_add(value);
+    }
+
+    let not_a_bot_abandonments = not_a_bot_served_total.saturating_sub(not_a_bot_submitted_total);
+    let not_a_bot_abandonment_ratio = if not_a_bot_served_total == 0 {
+        0.0
+    } else {
+        not_a_bot_abandonments as f64 / not_a_bot_served_total as f64
+    };
+
     let mut pow_outcome_map = build_seeded_map(&POW_OUTCOME_KEYS);
     for (key, value) in pow_outcomes {
         let entry = pow_outcome_map.entry(key).or_insert(0);
@@ -777,6 +888,18 @@ pub(crate) fn summarize_with_store<S: crate::challenge::KeyValueStore>(
             top_offenders: top_entries(&challenge_ip_counts, top_limit),
             reasons: challenge_reason_map,
             trend: build_trend(start_hour, end_hour, &CHALLENGE_REASON_KEYS, challenge_trend),
+        },
+        not_a_bot: NotABotSummary {
+            served: not_a_bot_served_total,
+            submitted: not_a_bot_submitted_total,
+            pass: *not_a_bot_outcome_map.get("pass").unwrap_or(&0),
+            escalate: *not_a_bot_outcome_map.get("escalate").unwrap_or(&0),
+            fail: *not_a_bot_outcome_map.get("fail").unwrap_or(&0),
+            replay: *not_a_bot_outcome_map.get("replay").unwrap_or(&0),
+            outcomes: not_a_bot_outcome_map,
+            solve_latency_buckets: not_a_bot_latency_map,
+            abandonments_estimated: not_a_bot_abandonments,
+            abandonment_ratio: not_a_bot_abandonment_ratio,
         },
         pow: PowSummary {
             total_failures: pow_total_failures,
@@ -864,8 +987,21 @@ mod tests {
         let summary = summarize_with_store(&store, 24, 10);
         assert_eq!(summary.honeypot.total_hits, 0);
         assert_eq!(summary.challenge.total_failures, 0);
+        assert_eq!(summary.not_a_bot.served, 0);
+        assert_eq!(summary.not_a_bot.submitted, 0);
+        assert_eq!(summary.not_a_bot.pass, 0);
+        assert_eq!(summary.not_a_bot.replay, 0);
         assert_eq!(
             summary.challenge.reasons.get("incorrect").copied().unwrap_or(99),
+            0
+        );
+        assert_eq!(
+            summary
+                .not_a_bot
+                .solve_latency_buckets
+                .get("lt_1s")
+                .copied()
+                .unwrap_or(99),
             0
         );
         assert_eq!(
@@ -979,6 +1115,102 @@ mod tests {
         assert_eq!(
             summary.rate.outcomes.get("limited").copied().unwrap_or(0),
             4
+        );
+    }
+
+    #[test]
+    fn summarize_aggregates_not_a_bot_outcomes_and_latency() {
+        let store = MockStore::default();
+        let now_hour = now_ts() / 3600;
+        let outcome_pass = encode_dim("pass");
+        let outcome_escalate = encode_dim("escalate");
+        let outcome_fail = encode_dim("fail");
+        let latency_fast = encode_dim("lt_1s");
+        let latency_mid = encode_dim("1_3s");
+        let latency_slow = encode_dim("10s_plus");
+
+        set_counter(
+            &store,
+            format!("{}:not_a_bot:served:{}", MONITORING_PREFIX, now_hour).as_str(),
+            5,
+        );
+        set_counter(
+            &store,
+            format!("{}:not_a_bot:submitted:{}", MONITORING_PREFIX, now_hour).as_str(),
+            4,
+        );
+        set_counter(
+            &store,
+            format!(
+                "{}:not_a_bot:outcome:{}:{}",
+                MONITORING_PREFIX, outcome_pass, now_hour
+            )
+            .as_str(),
+            2,
+        );
+        set_counter(
+            &store,
+            format!(
+                "{}:not_a_bot:outcome:{}:{}",
+                MONITORING_PREFIX, outcome_escalate, now_hour
+            )
+            .as_str(),
+            1,
+        );
+        set_counter(
+            &store,
+            format!(
+                "{}:not_a_bot:outcome:{}:{}",
+                MONITORING_PREFIX, outcome_fail, now_hour
+            )
+            .as_str(),
+            1,
+        );
+        set_counter(
+            &store,
+            format!(
+                "{}:not_a_bot:solve_ms_bucket:{}:{}",
+                MONITORING_PREFIX, latency_fast, now_hour
+            )
+            .as_str(),
+            1,
+        );
+        set_counter(
+            &store,
+            format!(
+                "{}:not_a_bot:solve_ms_bucket:{}:{}",
+                MONITORING_PREFIX, latency_mid, now_hour
+            )
+            .as_str(),
+            2,
+        );
+        set_counter(
+            &store,
+            format!(
+                "{}:not_a_bot:solve_ms_bucket:{}:{}",
+                MONITORING_PREFIX, latency_slow, now_hour
+            )
+            .as_str(),
+            1,
+        );
+
+        let summary = summarize_with_store(&store, 24, 10);
+        assert_eq!(summary.not_a_bot.served, 5);
+        assert_eq!(summary.not_a_bot.submitted, 4);
+        assert_eq!(summary.not_a_bot.pass, 2);
+        assert_eq!(summary.not_a_bot.escalate, 1);
+        assert_eq!(summary.not_a_bot.fail, 1);
+        assert_eq!(summary.not_a_bot.replay, 0);
+        assert_eq!(summary.not_a_bot.abandonments_estimated, 1);
+        assert!((summary.not_a_bot.abandonment_ratio - 0.2).abs() < 0.000_001);
+        assert_eq!(
+            summary
+                .not_a_bot
+                .solve_latency_buckets
+                .get("1_3s")
+                .copied()
+                .unwrap_or(0),
+            2
         );
     }
 
@@ -1100,7 +1332,6 @@ mod tests {
         let expired_hour = now_hour.saturating_sub(6);
         let expired_key = monitoring_key("pow", "total", None, expired_hour);
         set_counter(&store, expired_key.as_str(), 1);
-        *LAST_MONITORING_CLEANUP_HOUR.lock().unwrap() = 0;
 
         record_pow_failure(&store, "203.0.113.9", "invalid_proof");
         let _ = summarize_with_store(&store, 24, 10);

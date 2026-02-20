@@ -70,6 +70,7 @@ Do not treat test mode as a substitute for fail-open/closed behavior.
 Control log retention with `SHUMA_EVENT_LOG_RETENTION_HOURS`:
 - Default: 168 hours (7 days)
 - Set to `0` to disable cleanup
+- Reassess retention periodically as telemetry volume and deployment obligations evolve (cost, incident response needs, and privacy/data-protection expectations).
 
 ## 🐙 Privacy and Cookie Disclosure
 

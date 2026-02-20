@@ -6,6 +6,7 @@
 - Keep changes small, reviewable, and test-backed.
 - Prefer refactor-only slices unless behavior change is explicitly intended.
 - Avoid new dependencies unless clearly justified.
+- Keep verification lanes healthy (`make test` umbrella plus focused lanes); if a lane becomes defunct/flaky, prioritize fixing or removing it before expanding scope.
 
 ## Required for Every Change
 

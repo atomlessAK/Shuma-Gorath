@@ -126,6 +126,11 @@ pub enum MetricName {
     BansTotal,
     BlocksTotal,
     ChallengesTotal,
+    NotABotServedTotal,
+    NotABotPassTotal,
+    NotABotEscalateTotal,
+    NotABotFailTotal,
+    NotABotReplayTotal,
     ChallengeServedTotal,
     ChallengeSolvedTotal,
     ChallengeIncorrectTotal,
@@ -158,6 +163,11 @@ impl MetricName {
             MetricName::BansTotal => "bans_total",
             MetricName::BlocksTotal => "blocks_total",
             MetricName::ChallengesTotal => "challenges_total",
+            MetricName::NotABotServedTotal => "not_a_bot_served_total",
+            MetricName::NotABotPassTotal => "not_a_bot_pass_total",
+            MetricName::NotABotEscalateTotal => "not_a_bot_escalate_total",
+            MetricName::NotABotFailTotal => "not_a_bot_fail_total",
+            MetricName::NotABotReplayTotal => "not_a_bot_replay_total",
             MetricName::ChallengeServedTotal => "challenge_served_total",
             MetricName::ChallengeSolvedTotal => "challenge_solved_total",
             MetricName::ChallengeIncorrectTotal => "challenge_incorrect_total",
@@ -433,6 +443,47 @@ pub fn render_metrics(store: &Store) -> String {
     output.push_str("\n# TYPE bot_defence_challenges_total counter\n");
     let challenges = get_counter(store, &format!("{}challenges_total", METRICS_PREFIX));
     output.push_str(&format!("bot_defence_challenges_total {}\n", challenges));
+
+    output.push_str("\n# TYPE bot_defence_not_a_bot_served_total counter\n");
+    let not_a_bot_served = get_counter(store, &format!("{}not_a_bot_served_total", METRICS_PREFIX));
+    output.push_str(&format!(
+        "bot_defence_not_a_bot_served_total {}\n",
+        not_a_bot_served
+    ));
+
+    output.push_str("\n# TYPE bot_defence_not_a_bot_pass_total counter\n");
+    let not_a_bot_pass = get_counter(store, &format!("{}not_a_bot_pass_total", METRICS_PREFIX));
+    output.push_str(&format!(
+        "bot_defence_not_a_bot_pass_total {}\n",
+        not_a_bot_pass
+    ));
+
+    output.push_str("\n# TYPE bot_defence_not_a_bot_escalate_total counter\n");
+    let not_a_bot_escalate = get_counter(
+        store,
+        &format!("{}not_a_bot_escalate_total", METRICS_PREFIX),
+    );
+    output.push_str(&format!(
+        "bot_defence_not_a_bot_escalate_total {}\n",
+        not_a_bot_escalate
+    ));
+
+    output.push_str("\n# TYPE bot_defence_not_a_bot_fail_total counter\n");
+    let not_a_bot_fail = get_counter(store, &format!("{}not_a_bot_fail_total", METRICS_PREFIX));
+    output.push_str(&format!(
+        "bot_defence_not_a_bot_fail_total {}\n",
+        not_a_bot_fail
+    ));
+
+    output.push_str("\n# TYPE bot_defence_not_a_bot_replay_total counter\n");
+    let not_a_bot_replay = get_counter(
+        store,
+        &format!("{}not_a_bot_replay_total", METRICS_PREFIX),
+    );
+    output.push_str(&format!(
+        "bot_defence_not_a_bot_replay_total {}\n",
+        not_a_bot_replay
+    ));
 
     // Challenge outcomes
     output.push_str("\n# TYPE bot_defence_challenge_served_total counter\n");

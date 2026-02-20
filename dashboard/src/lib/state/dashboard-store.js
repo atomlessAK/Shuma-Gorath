@@ -17,6 +17,7 @@ export const TAB_REFRESH_INTERVAL_MS = Object.freeze({
   tuning: 60000
 });
 export const RUNTIME_TELEMETRY_ROLLING_WINDOW_SIZE = 20;
+const RUNTIME_TELEMETRY_TABS = Object.freeze(new Set(['monitoring', 'ip-bans']));
 
 const clampMetric = (value) => {
   const numeric = Number(value);
@@ -232,6 +233,10 @@ export function createDashboardStore(options = {}) {
 
   const recordRefreshMetrics = (metrics = {}) => {
     runtimeTelemetryStore.update((telemetry) => {
+      const tab = normalizeTab(metrics.tab);
+      if (!RUNTIME_TELEMETRY_TABS.has(tab)) {
+        return telemetry;
+      }
       const fetchLatencyMs = updateMetric(
         telemetry.refresh.fetchLatencyMs,
         metrics.fetchLatencyMs
@@ -244,7 +249,7 @@ export function createDashboardStore(options = {}) {
         ...telemetry,
         refresh: {
           ...telemetry.refresh,
-          lastTab: normalizeTab(metrics.tab),
+          lastTab: tab,
           lastReason: String(metrics.reason || 'manual'),
           updatedAt: new Date().toISOString(),
           fetchLatencyMs,

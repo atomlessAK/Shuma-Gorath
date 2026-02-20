@@ -28,6 +28,69 @@ Moved from active TODO files on 2026-02-14.
 - [x] MON-COST-10 Document retention, read throttling, and monitoring telemetry cost controls in operator docs.
 - [x] SEC-GDPR-1 Run a GDPR/privacy compliance review for telemetry/logging data collected by Shuma and determine whether deployment contexts require a cookie consent notice and/or other disclosure controls. (`docs/privacy-gdpr-review.md`)
 
+## Additional completions (2026-02-19, TODO cleanup sweep)
+
+### todos/todo.md
+
+#### P0 Priority Override (Highest Priority Queue)
+
+- [x] Complete the remaining SvelteKit migration work (`DSH-SVLT-NEXT1.*`, `DSH-SVLT-NEXT2.*`, `DSH-SVLT-NEXT3.*`, `DSH-SVLT-TEST1.*`, `DSH-SVLT-TEST2.*`) before non-critical roadmap work.
+- [x] Treat all non-blocking research/backlog items below as lower priority until the Svelte-native dashboard path replaces the bridge path.
+- [x] Complete the dashboard excellence remediation slice (`DSH-MON-EX1`..`DSH-MON-EX7`) before picking up additional roadmap/research backlog items.
+
+#### Fingerprinting, JS Verification, and CDP-Adjacent Detection
+
+- [x] Strengthen fingerprinting by hardening internal baseline signals first, then ingesting trusted upstream edge signals (JA3/JA4 and similar) with provenance checks and explicit internal fallback when edge headers are absent or untrusted.
+- [x] Normalize fingerprint signals with provenance/confidence metadata for rule evaluation.
+- [x] FP-R11 Add feature-family entropy budgeting and per-family confidence caps (avoid over-weighting high-cardinality unstable attributes).
+- [x] FP-R20 Add fingerprint data-minimization and retention controls (TTL/pseudonymization/export visibility) plus operator documentation.
+- [x] FP-R15 Expand cross-layer inconsistency rules: UA, client hints, runtime/browser APIs, and transport-level fingerprints.
+- [x] Add mismatch heuristics (for example UA/client-hint versus transport fingerprint anomalies).
+- [x] FP-R12 Add temporal coherence modeling with per-attribute churn classes and impossible-transition detection IDs.
+- [x] FP-R16 Add flow-centric fingerprint telemetry extraction and bounded per-flow aggregation windows.
+- [x] FP-R13 Add JS/CDP detector-surface rotation support (versioned probe families + staged rollout + rollback controls).
+- [x] Add trusted-header ingestion for transport fingerprints supplied by CDN/proxy.
+- [x] FP-R14 Add multi-store persistence-abuse signals (cookie/localStorage/sessionStorage/IndexedDB recovery patterns) as suspicious automation features.
+- [x] FP-R17 Add optional challenge-bound, short-lived device-class marker path (Picasso-inspired) for replay-resistant continuity checks.
+- [x] FP-R18 Add optional low-friction behavioral micro-signals in challenge contexts (mouse/timing), with privacy guardrails and conservative weighting.
+- [x] Add fingerprint-centric admin visibility for investigations and tuning.
+- [x] FP-R19 Add evasive-regression coverage for detector fingerprinting, temporal drift, and inconsistency-bypass attempts.
+
+#### P3 Platform and Configuration Clarity
+
+- [x] Initialize Ban IP pane duration controls from the current Admin Manual Ban default duration so Ban IP and Ban Durations panes stay consistent.
+- [x] Dashboard modernization now follows SvelteKit full cutover (`DSH-SVLT-*`) with static adapter output served via Spin (`dist/dashboard`), superseding the prior framework migration direction.
+
+#### P3 Monitoring Signal Expansion (Dashboard + Telemetry)
+
+- [x] DSH-MON-1 Add a `Honeypot Hits` monitoring section (mirroring maze summary style) with: total hits, unique crawler buckets, top crawler buckets, and top honeypot paths hit.
+- [x] DSH-MON-2 Add a `Challenge Failures` monitoring section with time-windowed totals and reason breakdown (`incorrect`, `expired/replay`, `sequence_violation`, `invalid_output`, `forbidden`), plus trend chart.
+- [x] DSH-MON-3 Add a `PoW Failures` monitoring section with time-windowed totals and reason breakdown (`invalid_proof`, `missing_seed/nonce`, `sequence_violation`, `expired/replay`, `binding/timing mismatch`), plus trend chart.
+- [x] DSH-MON-4 Add a `Rate Limiting Violations` monitoring section with totals, unique offender buckets, top offender buckets, and enforcement outcomes (`limited`, `banned`, `fallback_allow`, `fallback_deny`).
+- [x] DSH-MON-5 Add a `GEO Violations` monitoring section with totals by route/action (`block`, `challenge`, `maze`) and top country codes causing policy actions.
+- [x] DSH-MON-6 Add a Monitoring-page helper panel that explains how to export/scrape the same signals in Prometheus format (`/metrics`) for external visualization platforms (for example Prometheus/Grafana), including copyable scrape examples.
+- [x] DSH-MON-7 Deliberate Prometheus parity scope for Monitoring: audit each Monitoring widget/signal as `already_exported`, `derivable_from_existing_series`, or `missing_export`; then define a prioritized add-list with cardinality/cost guardrails before implementing new metric series. (`docs/monitoring-prometheus-parity-audit.md`)
+- [x] MON-TEL-1 Add structured honeypot hit telemetry (KV/metric counters by IP bucket and path key) so dashboard can report path-level honeypot activity without relying on free-form event text parsing.
+- [x] MON-TEL-2 Add challenge-submit failure telemetry with explicit counters and optional event records for failure classes that currently only increment coarse counters (enable top-offender and reason panels).
+- [x] MON-TEL-3 Add explicit PoW verify outcome telemetry (success + failure classes) since invalid-proof and malformed-request paths are not currently surfaced as dashboard-ready counters/events.
+- [x] MON-TEL-3.a Add PoW verify success-class telemetry and decide whether Monitoring should expose success/fail ratio or keep failures-only.
+- [x] MON-TEL-5 Add GEO enforcement telemetry keyed by action + country (bounded cardinality, ISO country normalization) so GEO monitoring panels are robust and not dependent on outcome-string parsing.
+- [x] MON-TEL-6 Add admin API surface for these monitoring summaries (`/admin/honeypot`, `/admin/challenge`, `/admin/pow`, `/admin/rate`, `/admin/geo` or consolidated endpoint) with strict response schema + docs.
+- [x] MON-TEL-7 Add tests for telemetry correctness and dashboard rendering states (empty/loading/error/data) for each new monitoring section, including cardinality guardrails and retention-window behavior.
+- [x] MON-TEL-7.a Extend dashboard automated tests to assert new monitoring cards/tables/charts across empty/loading/error/data states, not just adapter contracts.
+
+#### P2 Modularization and Future Repository Boundaries
+
+- [x] Restructure source into clearer domain modules (policy engine, maze/tarpit, challenges, fingerprint signals, admin adapters).
+- [x] Extract policy decision flow from HTTP plumbing to enable isolated testing and future reuse.
+- [x] Define module interface contracts and dependency direction (core domain first, adapters second).
+
+#### Policy/Guideline Backlog Hygiene
+
+- [x] Moved internal-first delivery policy from active TODO guidance into `docs/project-principles.md` (`P7 Platform-Agnostic Core`) so it is governed as principle, not tracked as open feature work.
+- [x] Removed duplicated policy-only sections from active TODO (`H4`, `H5`, and `Recurring Quality Gates`) because those rules are already governed by `CONTRIBUTING.md` and `docs/project-principles.md`.
+- [x] Captured recurring quality-gate operations guidance in canonical docs: verification-lane health in `CONTRIBUTING.md` and periodic retention reassessment in `docs/security-hardening.md`.
+
 ## todos/todo.md
 
 - [x] Define sprint guardrails: refactor-only, no behavior changes, no new dependencies, tests must pass before each checkoff.

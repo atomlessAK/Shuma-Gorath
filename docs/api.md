@@ -308,8 +308,18 @@ Core enforcement fields:
 - `defence_modes.rate` / `defence_modes.geo` / `defence_modes.js` - per-module composability mode (`off`, `signal`, `enforce`, `both`)
 
 Scored thresholds:
+- `not_a_bot_risk_threshold` - score at/above which not-a-bot is served (when enabled)
 - `challenge_puzzle_risk_threshold` - score at/above which challenge is served
 - `botness_maze_threshold` - score at/above which requests are routed to maze
+
+Not-a-Bot controls:
+- `not_a_bot_enabled`
+- `not_a_bot_score_pass_min`
+- `not_a_bot_score_escalate_min`
+- `not_a_bot_nonce_ttl_seconds`
+- `not_a_bot_marker_ttl_seconds`
+- `not_a_bot_attempt_limit_per_window`
+- `not_a_bot_attempt_window_seconds`
 
 Scored weights:
 - `botness_weights.js_required`

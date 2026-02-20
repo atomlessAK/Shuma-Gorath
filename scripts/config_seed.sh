@@ -141,6 +141,14 @@ cat > "${tmp_json}" <<EOF
   "challenge_puzzle_enabled": $(bool_norm "${SHUMA_CHALLENGE_PUZZLE_ENABLED}"),
   "challenge_puzzle_transform_count": ${SHUMA_CHALLENGE_PUZZLE_TRANSFORM_COUNT},
   "challenge_puzzle_risk_threshold": ${SHUMA_CHALLENGE_PUZZLE_RISK_THRESHOLD},
+  "not_a_bot_enabled": $(bool_norm "${SHUMA_NOT_A_BOT_ENABLED}"),
+  "not_a_bot_risk_threshold": ${SHUMA_NOT_A_BOT_RISK_THRESHOLD},
+  "not_a_bot_score_pass_min": ${SHUMA_NOT_A_BOT_SCORE_PASS_MIN},
+  "not_a_bot_score_escalate_min": ${SHUMA_NOT_A_BOT_SCORE_ESCALATE_MIN},
+  "not_a_bot_nonce_ttl_seconds": ${SHUMA_NOT_A_BOT_NONCE_TTL_SECONDS},
+  "not_a_bot_marker_ttl_seconds": ${SHUMA_NOT_A_BOT_MARKER_TTL_SECONDS},
+  "not_a_bot_attempt_limit_per_window": ${SHUMA_NOT_A_BOT_ATTEMPT_LIMIT_PER_WINDOW},
+  "not_a_bot_attempt_window_seconds": ${SHUMA_NOT_A_BOT_ATTEMPT_WINDOW_SECONDS},
   "botness_maze_threshold": ${SHUMA_BOTNESS_MAZE_THRESHOLD},
   "botness_weights": {
     "js_required": ${SHUMA_BOTNESS_WEIGHT_JS_REQUIRED},
@@ -210,6 +218,14 @@ else:
         return existing_value, False
 
     merged, changed = merge_missing(existing, defaults)
+
+    # Security-first dev default: always reset test_mode to defaults.env value
+    # so local restarts begin with blocking active unless explicitly re-enabled.
+    if isinstance(merged, dict):
+        default_test_mode = bool(defaults.get("test_mode", False))
+        if merged.get("test_mode") != default_test_mode:
+            merged["test_mode"] = default_test_mode
+            changed = True
 
 with open(merged_path, "w", encoding="utf-8") as handle:
     json.dump(merged, handle, separators=(",", ":"))

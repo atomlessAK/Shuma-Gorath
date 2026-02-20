@@ -48,7 +48,7 @@ JS verification currently issues an IP-bound cookie (`js_verified`) after client
 
 - Low risk: lightweight JS check only.
 - Medium risk: JS integrity + interaction sanity checks.
-- High risk: JS + challenge-lite/puzzle/PoW escalation.
+- High risk: JS + not-a-bot/puzzle/PoW escalation.
 
 ### C. Integrity and anti-bypass controls
 

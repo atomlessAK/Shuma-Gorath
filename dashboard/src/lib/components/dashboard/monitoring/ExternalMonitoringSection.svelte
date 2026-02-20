@@ -28,7 +28,7 @@
   };
 </script>
 
-<div class="section panel panel-border pad-md">
+<div class="section panel panel-border">
   <h2>External Monitoring</h2>
   <ul id="monitoring-prometheus-facts" class="prometheus-facts text-muted">
     {#each prometheusHelper.facts as fact}

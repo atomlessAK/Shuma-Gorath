@@ -7,10 +7,24 @@ export const escapeHtml = (value) => String(value ?? '')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
 
+const numberFormatter = new Intl.NumberFormat();
+const compactNumberFormatter = new Intl.NumberFormat(undefined, {
+  notation: 'compact',
+  compactDisplay: 'short',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 1
+});
+
 export const formatNumber = (value, fallback = '0') => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return String(fallback);
-  return parsed.toLocaleString();
+  return numberFormatter.format(parsed);
+};
+
+export const formatCompactNumber = (value, fallback = '0') => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return String(fallback);
+  return compactNumberFormatter.format(parsed);
 };
 
 export const formatDateTimeSeconds = (epochSeconds, fallback = '-') => {

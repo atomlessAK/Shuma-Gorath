@@ -86,7 +86,8 @@
   $: snapshots = dashboardState?.snapshots || {};
   $: snapshotVersions = dashboardState?.snapshotVersions || {};
   $: analyticsSnapshot = snapshots.analytics || {};
-  $: testModeEnabled = analyticsSnapshot.test_mode === true;
+  $: configSnapshot = snapshots.config || {};
+  $: testModeEnabled = configSnapshot.test_mode === true || analyticsSnapshot.test_mode === true;
 
   function registerTabLink(node, tab) {
     let key = normalizeTab(tab);
@@ -250,6 +251,9 @@
     autoRefreshEnabled = checked;
     writeAutoRefreshPreference(checked);
     routeController.schedulePolling('auto-refresh-toggle');
+    if (checked && autoRefreshSupported && runtimeReady) {
+      void routeController.refreshTab(activeTabKey, 'manual-refresh');
+    }
   }
 
   async function onRefreshNow(event) {
@@ -345,19 +349,22 @@
 <svelte:window on:hashchange={onWindowHashChange} />
 <svelte:document on:visibilitychange={onDocumentVisibilityChange} />
 <div class="container panel panel-border" data-dashboard-runtime-mode="native">
+  <div id="test-mode-banner" class="test-mode-banner" class:hidden={!testModeEnabled}>
+    TEST MODE ACTIVE - Logging only, no blocking
+  </div>
+  <button
+    id="logout-btn"
+    class="btn btn-subtle dashboard-logout"
+    aria-label="Log out of admin session"
+    disabled={loggingOut || dashboardState.session.authenticated !== true}
+    on:click={onLogoutClick}
+  >Logout</button>
   <header>
     <div class="shuma-image-wrapper">
       <img src={shumaImageSrc} alt="Shuma-Gorath" class="shuma-gorath-img">
     </div>
     <h1>Shuma-Gorath</h1>
     <p class="subtitle text-muted">Multi-Dimensional Bot Defence</p>
-    <button
-      id="logout-btn"
-      class="btn btn-subtle dashboard-logout"
-      aria-label="Log out of admin session"
-      disabled={loggingOut || dashboardState.session.authenticated !== true}
-      on:click={onLogoutClick}
-    >Logout</button>
     <nav class="dashboard-tabs" aria-label="Dashboard sections">
       {#each DASHBOARD_TABS as tab}
         {@const tabKey = normalizeTab(tab)}
@@ -380,35 +387,39 @@
         </a>
       {/each}
     </nav>
-    <div id="dashboard-refresh-controls" class="dashboard-refresh-controls">
-      <span id="refresh-mode" class="text-muted">{refreshModeText}</span>
-      {#if autoRefreshSupported}
-        <div class="toggle-row dashboard-refresh-toggle">
-          <span class="control-label control-label--wide">Enable Auto Refresh</span>
-          <label class="toggle-switch" for="auto-refresh-toggle">
-            <input
-              id="auto-refresh-toggle"
-              type="checkbox"
-              aria-label="Enable automatic refresh for current tab"
-              checked={autoRefreshEnabled}
-              on:change={onAutoRefreshToggle}
-            >
-            <span class="toggle-slider"></span>
-          </label>
+    {#if autoRefreshSupported}
+      <div id="dashboard-refresh-controls" class="dashboard-refresh-controls">
+        <div class="dashboard-refresh-meta">
+          <span id="last-updated" class="text-muted">{lastUpdatedText}</span>
+          {#if !autoRefreshEnabled}
+            <button
+              id="refresh-now-btn"
+              class="btn btn-subtle"
+              aria-label="Refresh now"
+              title="Refresh now"
+              disabled={refreshNowDisabled}
+              on:click={onRefreshNow}
+            >↻</button>
+          {/if}
         </div>
-        <button
-          id="refresh-now-btn"
-          class="btn btn-subtle"
-          disabled={refreshNowDisabled}
-          on:click={onRefreshNow}
-        >{activeTabStatus.loading === true ? 'Refreshing...' : 'Refresh now'}</button>
-      {/if}
-      <span id="last-updated" class="text-muted">{lastUpdatedText}</span>
-    </div>
+        <div class="dashboard-refresh-auto">
+          <span id="refresh-mode" class="text-muted">{refreshModeText}</span>
+          <div class="toggle-row dashboard-refresh-toggle">
+            <label class="toggle-switch" for="auto-refresh-toggle">
+              <input
+                id="auto-refresh-toggle"
+                type="checkbox"
+                aria-label="Enable automatic refresh for current tab"
+                checked={autoRefreshEnabled}
+                on:change={onAutoRefreshToggle}
+              >
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+    {/if}
   </header>
-  <div id="test-mode-banner" class="test-mode-banner" class:hidden={!testModeEnabled}>
-    TEST MODE ACTIVE - Logging only, no blocking
-  </div>
 
   <MonitoringTab
     managed={true}
@@ -454,7 +465,6 @@
           managed={true}
           isActive={activeTabKey === 'config'}
           tabStatus={tabStatus.config || {}}
-          analyticsSnapshot={snapshots.analytics}
           configSnapshot={snapshots.config}
           configVersion={snapshotVersions.config || 0}
           onSaveConfig={onSaveConfig}

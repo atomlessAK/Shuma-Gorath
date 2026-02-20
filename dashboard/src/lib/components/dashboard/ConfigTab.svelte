@@ -20,7 +20,6 @@
   export let managed = false;
   export let isActive = false;
   export let tabStatus = null;
-  export let analyticsSnapshot = null;
   export let configSnapshot = null;
   export let configVersion = 0;
   export let onSaveConfig = null;
@@ -36,9 +35,11 @@
   let lastAppliedConfigVersion = -1;
 
   let saving = {
+    testMode: false,
     jsRequired: false,
     pow: false,
     challenge: false,
+    notABot: false,
     rateLimit: false,
     honeypot: false,
     browserPolicy: false,
@@ -58,6 +59,8 @@
   let robotsPreviewLoading = false;
   let robotsPreviewContent = '';
 
+  let testMode = false;
+
   let jsRequiredEnforced = true;
 
   let powEnabled = true;
@@ -66,6 +69,13 @@
 
   let challengePuzzleEnabled = true;
   let challengePuzzleTransformCount = 6;
+  let notABotEnabled = true;
+  let notABotScorePassMin = 7;
+  let notABotScoreEscalateMin = 4;
+  let notABotNonceTtl = 120;
+  let notABotMarkerTtl = 600;
+  let notABotAttemptLimit = 6;
+  let notABotAttemptWindow = 300;
 
   let rateLimitThreshold = 80;
 
@@ -119,9 +129,19 @@
   let advancedConfigJson = '{}';
 
   let baseline = {
+    testMode: { enabled: false },
     jsRequired: { enforced: true },
     pow: { enabled: true, difficulty: 15, ttl: 90 },
     challenge: { enabled: true, count: 6 },
+    notABot: {
+      enabled: true,
+      scorePassMin: 7,
+      scoreEscalateMin: 4,
+      nonceTtl: 120,
+      markerTtl: 600,
+      attemptLimit: 6,
+      attemptWindow: 300
+    },
     rateLimit: { value: 80 },
     honeypot: { enabled: true, values: '' },
     browserPolicy: { block: '', whitelist: '' },
@@ -228,6 +248,7 @@
     hasConfigSnapshot = config && typeof config === 'object' && Object.keys(config).length > 0;
     writable = config.admin_config_write_enabled === true;
 
+    testMode = config.test_mode === true;
     jsRequiredEnforced = config.js_required_enforced !== false;
 
     powEnabled = config.pow_enabled !== false;
@@ -236,6 +257,13 @@
 
     challengePuzzleEnabled = config.challenge_puzzle_enabled !== false;
     challengePuzzleTransformCount = parseInteger(config.challenge_puzzle_transform_count, 6);
+    notABotEnabled = config.not_a_bot_enabled !== false;
+    notABotScorePassMin = parseInteger(config.not_a_bot_score_pass_min, 7);
+    notABotScoreEscalateMin = parseInteger(config.not_a_bot_score_escalate_min, 4);
+    notABotNonceTtl = parseInteger(config.not_a_bot_nonce_ttl_seconds, 120);
+    notABotMarkerTtl = parseInteger(config.not_a_bot_marker_ttl_seconds, 600);
+    notABotAttemptLimit = parseInteger(config.not_a_bot_attempt_limit_per_window, 6);
+    notABotAttemptWindow = parseInteger(config.not_a_bot_attempt_window_seconds, 300);
 
     rateLimitThreshold = parseInteger(config.rate_limit, 80);
 
@@ -306,6 +334,7 @@
     advancedConfigJson = advancedText;
 
     baseline = {
+      testMode: { enabled: testMode },
       jsRequired: { enforced: jsRequiredEnforced },
       pow: {
         enabled: powEnabled,
@@ -315,6 +344,15 @@
       challenge: {
         enabled: challengePuzzleEnabled,
         count: Number(challengePuzzleTransformCount)
+      },
+      notABot: {
+        enabled: notABotEnabled,
+        scorePassMin: Number(notABotScorePassMin),
+        scoreEscalateMin: Number(notABotScoreEscalateMin),
+        nonceTtl: Number(notABotNonceTtl),
+        markerTtl: Number(notABotMarkerTtl),
+        attemptLimit: Number(notABotAttemptLimit),
+        attemptWindow: Number(notABotAttemptWindow)
       },
       rateLimit: { value: Number(rateLimitThreshold) },
       honeypot: {
@@ -390,6 +428,23 @@
     }, 'JS required policy saved');
   }
 
+  async function onTestModeToggleChange(event) {
+    const target = event && event.currentTarget ? event.currentTarget : null;
+    const nextValue = target && target.checked === true;
+    if (testModeToggleDisabled) {
+      if (target) target.checked = testMode === true;
+      return;
+    }
+    try {
+      await submitConfigPatch('testMode', {
+        test_mode: nextValue
+      }, `Test mode ${nextValue ? 'enabled (logging only)' : 'disabled (blocking active)'}`);
+    } catch (_error) {
+      testMode = !nextValue;
+      if (target) target.checked = testMode === true;
+    }
+  }
+
   async function savePowConfig() {
     if (savePowDisabled) return;
     await submitConfigPatch('pow', {
@@ -405,6 +460,19 @@
       challenge_puzzle_enabled: challengePuzzleEnabled,
       challenge_puzzle_transform_count: Number(challengePuzzleTransformCount)
     }, 'Challenge puzzle settings saved');
+  }
+
+  async function saveNotABotConfig() {
+    if (saveNotABotDisabled) return;
+    await submitConfigPatch('notABot', {
+      not_a_bot_enabled: notABotEnabled,
+      not_a_bot_score_pass_min: Number(notABotScorePassMin),
+      not_a_bot_score_escalate_min: Number(notABotScoreEscalateMin),
+      not_a_bot_nonce_ttl_seconds: Number(notABotNonceTtl),
+      not_a_bot_marker_ttl_seconds: Number(notABotMarkerTtl),
+      not_a_bot_attempt_limit_per_window: Number(notABotAttemptLimit),
+      not_a_bot_attempt_window_seconds: Number(notABotAttemptWindow)
+    }, 'Not-a-Bot settings saved');
   }
 
   async function saveRateLimitConfig() {
@@ -549,24 +617,17 @@
 
   const readBool = (value) => value === true;
 
-  $: hasAnalyticsSnapshot = analyticsSnapshot && typeof analyticsSnapshot === 'object';
-  $: testModeEnabled = hasAnalyticsSnapshot ? analyticsSnapshot.test_mode === true : null;
-  $: testModeStatusText = testModeEnabled === null
+  $: testModeToggleText = testMode ? 'Test Mode On' : 'Test Mode Off';
+  $: testModeStatusText = !hasConfigSnapshot
     ? 'LOADING...'
-    : (testModeEnabled ? 'ENABLED (LOGGING ONLY)' : 'DISABLED (BLOCKING ACTIVE)');
+    : (testMode ? '(LOGGING ONLY)' : '(BLOCKING ACTIVE)');
   $: testModeStatusClass = `text-muted status-value ${
-    testModeEnabled === null
+    !hasConfigSnapshot
       ? ''
-      : (testModeEnabled ? 'test-mode-status--enabled' : 'test-mode-status--disabled')
+      : (testMode ? 'test-mode-status--enabled' : 'test-mode-status--disabled')
   }`.trim();
 
-  $: configModeText = !configLoaded
-    ? 'Admin page configuration state is LOADING.'
-    : (hasConfigSnapshot
-      ? (writable
-      ? 'Admin page configuration enabled. Saved changes persist across builds. Set SHUMA_ADMIN_CONFIG_WRITE_ENABLED to false in deployment env to disable.'
-      : 'Admin page configuration disabled. Set SHUMA_ADMIN_CONFIG_WRITE_ENABLED to true to enable.')
-      : 'Admin page configuration loaded, but the snapshot is empty.');
+  $: testModeToggleDisabled = !writable || saving.testMode;
 
   $: jsRequiredDirty = readBool(jsRequiredEnforced) !== baseline.jsRequired.enforced;
   $: saveJsRequiredDisabled = !writable || !jsRequiredDirty || saving.jsRequired;
@@ -585,6 +646,26 @@
     Number(challengePuzzleTransformCount) !== baseline.challenge.count
   );
   $: saveChallengePuzzleDisabled = !writable || !challengePuzzleDirty || !challengePuzzleValid || saving.challenge;
+
+  $: notABotValid = (
+    inRange(notABotScorePassMin, 1, 10) &&
+    inRange(notABotScoreEscalateMin, 1, 10) &&
+    Number(notABotScoreEscalateMin) <= Number(notABotScorePassMin) &&
+    inRange(notABotNonceTtl, 30, 300) &&
+    inRange(notABotMarkerTtl, 60, 3600) &&
+    inRange(notABotAttemptLimit, 1, 100) &&
+    inRange(notABotAttemptWindow, 30, 3600)
+  );
+  $: notABotDirty = (
+    readBool(notABotEnabled) !== baseline.notABot.enabled ||
+    Number(notABotScorePassMin) !== baseline.notABot.scorePassMin ||
+    Number(notABotScoreEscalateMin) !== baseline.notABot.scoreEscalateMin ||
+    Number(notABotNonceTtl) !== baseline.notABot.nonceTtl ||
+    Number(notABotMarkerTtl) !== baseline.notABot.markerTtl ||
+    Number(notABotAttemptLimit) !== baseline.notABot.attemptLimit ||
+    Number(notABotAttemptWindow) !== baseline.notABot.attemptWindow
+  );
+  $: saveNotABotDisabled = !writable || !notABotDirty || !notABotValid || saving.notABot;
 
   $: rateLimitValid = inRange(rateLimitThreshold, 1, 1000000);
   $: rateLimitDirty = Number(rateLimitThreshold) !== baseline.rateLimit.value;
@@ -740,16 +821,37 @@
   aria-hidden={managed ? (isActive ? 'false' : 'true') : 'true'}
 >
   <TabStateMessage tab="config" status={tabStatus} />
-  <p id="config-mode-subtitle" class="admin-group-subtitle text-muted">{configModeText}</p>
+  <p id="config-mode-subtitle" class="admin-group-subtitle text-muted">
+    {#if !configLoaded}
+      Admin page configuration state is LOADING.
+    {:else if hasConfigSnapshot}
+      {#if writable}
+        Admin page configuration enabled. Saved changes persist across builds.
+        Set <code class="env-var">SHUMA_ADMIN_CONFIG_WRITE_ENABLED</code> to false in deployment env to disable.
+      {:else}
+        Admin page configuration disabled.
+        Set <code class="env-var">SHUMA_ADMIN_CONFIG_WRITE_ENABLED</code> to true to enable.
+      {/if}
+    {:else}
+      Admin page configuration loaded, but the snapshot is empty.
+    {/if}
+  </p>
   <div class="controls-grid controls-grid--config">
     <div class="control-group panel-soft pad-md config-edit-pane" class:hidden={!writable}>
       <h3>Test Mode</h3>
       <p class="control-desc text-muted">Use for safe tuning. Enabled logs detections without blocking; disable to enforce defenses.</p>
       <div class="admin-controls">
         <div class="toggle-row">
-          <label class="control-label control-label--wide" for="test-mode-toggle">Enable Test Mode</label>
+          <label class="control-label control-label--wide" for="test-mode-toggle">{testModeToggleText}</label>
           <label class="toggle-switch" for="test-mode-toggle">
-            <input type="checkbox" id="test-mode-toggle" aria-label="Enable Test Mode" checked={testModeEnabled === true} disabled>
+            <input
+              type="checkbox"
+              id="test-mode-toggle"
+              aria-label="Test mode active"
+              bind:checked={testMode}
+              disabled={testModeToggleDisabled}
+              on:change={onTestModeToggleChange}
+            >
             <span class="toggle-slider"></span>
           </label>
         </div>
@@ -796,8 +898,12 @@
     </div>
 
     <div class="control-group panel-soft pad-md config-edit-pane" class:hidden={!writable}>
-      <h3>Challenge Puzzle</h3>
-      <p class="control-desc text-muted">Set how many transform options are shown in puzzle challenges (higher values can increase solve time).</p>
+      <h3>Challenge: Puzzle</h3>
+      <p class="control-desc text-muted">
+        Set how many transform options are shown in puzzle challenges (higher values can increase solve time).
+        <a id="preview-challenge-puzzle-link" href="/challenge/puzzle" target="_blank" rel="noopener noreferrer">Preview Puzzle</a>
+        (test mode must be enabled).
+      </p>
       <div class="admin-controls">
         <div class="toggle-row">
           <label class="control-label control-label--wide" for="challenge-puzzle-enabled-toggle">Enable Challenge Puzzle</label>
@@ -812,6 +918,49 @@
         </div>
       </div>
       <button id="save-challenge-puzzle-config" class="btn btn-submit" disabled={saveChallengePuzzleDisabled} on:click={saveChallengePuzzleConfig}>Save Challenge Puzzle</button>
+    </div>
+
+    <div class="control-group panel-soft pad-md config-edit-pane" class:hidden={!writable}>
+      <h3>Challenge: Not-a-Bot</h3>
+      <p class="control-desc text-muted">
+        Configure lightweight verification controls (thresholds, seed/marker TTLs, and replay-attempt window caps).
+        <a id="preview-not-a-bot-link" href="/challenge/not-a-bot-checkbox" target="_blank" rel="noopener noreferrer">Preview Not-a-Bot</a>
+        (test mode must be enabled).
+      </p>
+      <div class="admin-controls">
+        <div class="toggle-row">
+          <label class="control-label control-label--wide" for="not-a-bot-enabled-toggle">Enable Not-a-Bot</label>
+          <label class="toggle-switch" for="not-a-bot-enabled-toggle">
+            <input type="checkbox" id="not-a-bot-enabled-toggle" aria-label="Enable not-a-bot challenge routing" bind:checked={notABotEnabled}>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="input-row">
+          <label class="control-label" for="not-a-bot-score-pass-min">Pass Score (1-10)</label>
+          <input class="input-field" type="number" id="not-a-bot-score-pass-min" min="1" max="10" step="1" inputmode="numeric" aria-label="Not-a-Bot pass score threshold" bind:value={notABotScorePassMin}>
+        </div>
+        <div class="input-row">
+          <label class="control-label" for="not-a-bot-score-escalate-min">Escalate Score (1-10)</label>
+          <input class="input-field" type="number" id="not-a-bot-score-escalate-min" min="1" max="10" step="1" inputmode="numeric" aria-label="Not-a-Bot escalation score threshold" bind:value={notABotScoreEscalateMin}>
+        </div>
+        <div class="input-row">
+          <label class="control-label" for="not-a-bot-nonce-ttl">Nonce TTL (seconds)</label>
+          <input class="input-field" type="number" id="not-a-bot-nonce-ttl" min="30" max="300" step="1" inputmode="numeric" aria-label="Not-a-Bot seed nonce TTL in seconds" bind:value={notABotNonceTtl}>
+        </div>
+        <div class="input-row">
+          <label class="control-label" for="not-a-bot-marker-ttl">Marker TTL (seconds)</label>
+          <input class="input-field" type="number" id="not-a-bot-marker-ttl" min="60" max="3600" step="1" inputmode="numeric" aria-label="Not-a-Bot marker TTL in seconds" bind:value={notABotMarkerTtl}>
+        </div>
+        <div class="input-row">
+          <label class="control-label" for="not-a-bot-attempt-limit">Attempt Limit / Window</label>
+          <input class="input-field" type="number" id="not-a-bot-attempt-limit" min="1" max="100" step="1" inputmode="numeric" aria-label="Not-a-Bot attempt limit per window" bind:value={notABotAttemptLimit}>
+        </div>
+        <div class="input-row">
+          <label class="control-label" for="not-a-bot-attempt-window">Attempt Window (seconds)</label>
+          <input class="input-field" type="number" id="not-a-bot-attempt-window" min="30" max="3600" step="1" inputmode="numeric" aria-label="Not-a-Bot attempt window in seconds" bind:value={notABotAttemptWindow}>
+        </div>
+      </div>
+      <button id="save-not-a-bot-config" class="btn btn-submit" disabled={saveNotABotDisabled} on:click={saveNotABotConfig}>Save Not-a-Bot</button>
     </div>
 
     <div class="control-group panel-soft pad-md config-edit-pane" class:hidden={!writable}>

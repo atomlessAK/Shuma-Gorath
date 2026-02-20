@@ -88,6 +88,14 @@ These keys are seeded into KV and loaded from KV at runtime.
 | `SHUMA_CHALLENGE_PUZZLE_ENABLED` | `true` | Enables challenge puzzle routing at the challenge escalation step. |
 | `SHUMA_CHALLENGE_PUZZLE_TRANSFORM_COUNT` | `6` | Number of transform options shown in the puzzle challenge (4-8). |
 | `SHUMA_CHALLENGE_PUZZLE_RISK_THRESHOLD` | `3` | Botness score threshold for serving challenge step-up. |
+| `SHUMA_NOT_A_BOT_ENABLED` | `true` | Enables not-a-bot checkbox routing at medium botness certainty. |
+| `SHUMA_NOT_A_BOT_RISK_THRESHOLD` | `2` | Botness score threshold for serving not-a-bot (must remain below challenge threshold when challenge threshold > 1). |
+| `SHUMA_NOT_A_BOT_SCORE_PASS_MIN` | `7` | Minimum not-a-bot score for pass outcome. |
+| `SHUMA_NOT_A_BOT_SCORE_ESCALATE_MIN` | `4` | Minimum not-a-bot score for puzzle escalation (must be <= pass threshold). |
+| `SHUMA_NOT_A_BOT_NONCE_TTL_SECONDS` | `120` | Not-a-bot signed seed lifetime in seconds (30-300). |
+| `SHUMA_NOT_A_BOT_MARKER_TTL_SECONDS` | `600` | Not-a-bot post-pass marker lifetime in seconds (60-3600). |
+| `SHUMA_NOT_A_BOT_ATTEMPT_LIMIT_PER_WINDOW` | `6` | Not-a-bot per-bucket submit cap in each attempt window (1-100). |
+| `SHUMA_NOT_A_BOT_ATTEMPT_WINDOW_SECONDS` | `300` | Not-a-bot attempt window duration in seconds (30-3600). |
 | `SHUMA_BOTNESS_MAZE_THRESHOLD` | `6` | Botness score threshold for routing to maze. |
 | `SHUMA_BOTNESS_WEIGHT_JS_REQUIRED` | `1` | Score weight for missing JS verification signal. |
 | `SHUMA_BOTNESS_WEIGHT_GEO_RISK` | `2` | Score weight for GEO risk-country signal. |
@@ -189,7 +197,7 @@ The following KV-backed fields are currently writable via admin API:
 - Robots/AI policy: `robots_enabled`, `robots_crawl_delay`, `ai_policy_block_training`, `ai_policy_block_search`, `ai_policy_allow_search_engines` (legacy aliases `robots_block_ai_training`, `robots_block_ai_search`, `robots_allow_search_engines` are also accepted).
 - CDP/fingerprint: `cdp_detection_enabled`, `cdp_auto_ban`, `cdp_detection_threshold`, `cdp_probe_family`, `cdp_probe_rollout_percent`, `fingerprint_signal_enabled`, `fingerprint_state_ttl_seconds`, `fingerprint_flow_window_seconds`, `fingerprint_flow_violation_threshold`, `fingerprint_pseudonymize`, `fingerprint_entropy_budget`, `fingerprint_family_cap_header_runtime`, `fingerprint_family_cap_transport`, `fingerprint_family_cap_temporal`, `fingerprint_family_cap_persistence`, `fingerprint_family_cap_behavior`.
 - Provider/edge: `provider_backends.{rate_limiter,ban_store,challenge_engine,maze_tarpit,fingerprint_signal}`, `edge_integration_mode`.
-- Botness/challenge tuning: `pow_enabled`, `pow_difficulty`, `pow_ttl_seconds`, `challenge_puzzle_enabled`, `challenge_puzzle_transform_count`, `challenge_puzzle_risk_threshold`, `botness_maze_threshold`, `botness_weights.{js_required,geo_risk,rate_medium,rate_high,maze_behavior}`, `defence_modes.{rate,geo,js}`.
+- Botness/challenge tuning: `pow_enabled`, `pow_difficulty`, `pow_ttl_seconds`, `challenge_puzzle_enabled`, `challenge_puzzle_transform_count`, `challenge_puzzle_risk_threshold`, `not_a_bot_enabled`, `not_a_bot_risk_threshold`, `not_a_bot_score_pass_min`, `not_a_bot_score_escalate_min`, `not_a_bot_nonce_ttl_seconds`, `not_a_bot_marker_ttl_seconds`, `not_a_bot_attempt_limit_per_window`, `not_a_bot_attempt_window_seconds`, `botness_maze_threshold`, `botness_weights.{js_required,geo_risk,rate_medium,rate_high,maze_behavior}`, `defence_modes.{rate,geo,js}`.
 
 Shuma follows a 2-class model only:
 - Env-only runtime keys in the Env-Only table above.

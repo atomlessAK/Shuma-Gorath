@@ -1,4 +1,6 @@
 <script>
+  import { formatCompactNumber } from '../../../domain/core/format.js';
+
   export let loading = false;
   export let powSummary = {
     totalAttempts: '0',
@@ -15,37 +17,29 @@
 
 <div class="section events">
   <h2>PoW Verification</h2>
-  <p class="section-desc text-muted">PoW verify outcomes with success ratio, failure reasons, trend, and top offender.</p>
+  <p class="section-desc text-muted">PoW verify outcomes with failure reasons, trend, and top offender.</p>
   <div class="stats-cards stats-cards--compact">
-    <div class="card panel panel-border pad-md">
+    <div class="card panel panel-border pad-md-b">
       <h3 class="caps-label">Total Verifies</h3>
       <div class="stat-value" id="pow-total-attempts">{loading ? '...' : powSummary.totalAttempts}</div>
     </div>
-    <div class="card panel panel-border pad-md">
-      <h3 class="caps-label">Successful Verifies</h3>
-      <div class="stat-value" id="pow-success-total">{loading ? '...' : powSummary.totalSuccesses}</div>
-    </div>
-    <div class="card panel panel-border pad-md">
+    <div class="card panel panel-border pad-md-b">
       <h3 class="caps-label">Total Failures</h3>
       <div class="stat-value" id="pow-failures-total">{loading ? '...' : powSummary.totalFailures}</div>
     </div>
-    <div class="card panel panel-border pad-md">
+    <div class="card panel panel-border pad-md-b">
       <h3 class="caps-label">Unique Offenders</h3>
       <div class="stat-value" id="pow-failures-unique">{loading ? '...' : powSummary.uniqueOffenders}</div>
     </div>
-    <div class="card panel panel-border pad-md">
-      <h3 class="caps-label">Success Ratio</h3>
-      <div class="stat-value" id="pow-success-ratio">{loading ? '...' : powSummary.successRate}</div>
-    </div>
-    <div class="card panel panel-border pad-md">
+    <div class="card panel panel-border pad-md-b">
       <h3 class="caps-label" id="pow-top-offender-label">{loading ? 'Top Offender' : powSummary.topOffender.label}</h3>
       <div class="stat-value" id="pow-top-offender">{loading ? '...' : powSummary.topOffender.value}</div>
     </div>
   </div>
-  <div class="chart-container panel-soft panel-border pad-md">
+  <div class="chart-container panel-soft panel-border pad-md-trb">
     <canvas id="powFailuresTrendChart" bind:this={powTrendCanvas}></canvas>
   </div>
-  <div class="panel panel-border pad-md">
+  <div class="panel panel-border">
     <div class="table-wrapper">
       <table class="panel panel-border">
         <thead>
@@ -61,7 +55,7 @@
             {#each powReasonRows as row}
               <tr>
                 <td>{row.label}</td>
-                <td>{row.count.toLocaleString()}</td>
+                <td>{formatCompactNumber(row.count, '0')}</td>
               </tr>
             {/each}
           {/if}
@@ -69,14 +63,14 @@
       </table>
     </div>
   </div>
-  <div class="panel panel-border pad-md">
+  <div class="panel panel-border pad-md-b">
     <h3>Verify Outcomes</h3>
     <ul id="pow-outcomes-list" class="metric-list">
       {#if powOutcomeRows.length === 0}
         <li class="text-muted">No verify outcomes yet</li>
       {:else}
         {#each powOutcomeRows as row}
-          <li><strong>{row.label}:</strong> {row.count.toLocaleString()}</li>
+          <li><strong>{row.label}:</strong> {formatCompactNumber(row.count, '0')}</li>
         {/each}
       {/if}
     </ul>

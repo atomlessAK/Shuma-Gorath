@@ -1,8 +1,10 @@
 <script>
   import { browser } from '$app/environment';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import {
     CHALLENGE_REASON_LABELS,
+    NOT_A_BOT_OUTCOME_LABELS,
+    NOT_A_BOT_LATENCY_LABELS,
     POW_REASON_LABELS,
     RATE_OUTCOME_LABELS,
     deriveMazeStatsViewModel,
@@ -31,6 +33,7 @@
   const RANGE_EVENTS_FETCH_LIMIT = 5000;
   const RANGE_EVENTS_REQUEST_TIMEOUT_MS = 10000;
   const RANGE_EVENTS_AUTO_REFRESH_INTERVAL_MS = 180000;
+  const CHART_RESIZE_REDRAW_DEBOUNCE_MS = 180;
   const MAX_SAFE_COUNT = 1_000_000_000;
   const CHALLENGE_TREND_COLOR = 'rgba(122, 114, 255, 0.35)';
   const POW_TREND_COLOR = 'rgba(255, 130, 92, 0.35)';
@@ -85,6 +88,10 @@
   let copyCurlButtonLabel = 'Copy Curl Example';
   let copyButtonTimer = null;
   let copyCurlButtonTimer = null;
+  let resizeRedrawTimer = null;
+  let chartRefreshNonce = 0;
+  let wasActive = false;
+  let detachColorSchemeListener = () => {};
 
   const defaultMonitoringSummary = deriveMonitoringSummaryViewModel({});
   const defaultMazeStats = deriveMazeStatsViewModel({});
@@ -249,14 +256,61 @@
     return window.Chart;
   };
 
-  const updateTrendChart = (chart, canvas, title, color, trendSeries) => {
+  const chartNeedsRefresh = (chart, refreshNonce) =>
+    Number(chart?.__shumaRefreshNonce || 0) !== Number(refreshNonce || 0);
+
+  const stampChartRefresh = (chart, refreshNonce) => {
+    if (chart && typeof chart === 'object') {
+      chart.__shumaRefreshNonce = Number(refreshNonce || 0);
+    }
+    return chart;
+  };
+
+  const requestChartRefresh = () => {
+    chartRefreshNonce += 1;
+  };
+
+  const scheduleChartRefreshAfterResize = () => {
+    resizeRedrawTimer = clearTimer(resizeRedrawTimer);
+    resizeRedrawTimer = setTimeout(() => {
+      resizeRedrawTimer = null;
+      if (!isActive) return;
+      requestChartRefresh();
+    }, CHART_RESIZE_REDRAW_DEBOUNCE_MS);
+  };
+
+  const attachColorSchemeChangeListener = () => {
+    if (!browser || !window || typeof window.matchMedia !== 'function') {
+      return () => {};
+    }
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = () => {
+      if (!isActive) return;
+      requestChartRefresh();
+    };
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', onChange);
+      return () => {
+        mediaQuery.removeEventListener('change', onChange);
+      };
+    }
+    if (typeof mediaQuery.addListener === 'function') {
+      mediaQuery.addListener(onChange);
+      return () => {
+        mediaQuery.removeListener(onChange);
+      };
+    }
+    return () => {};
+  };
+
+  const updateTrendChart = (chart, canvas, title, color, trendSeries, refreshNonce = 0) => {
     const chartCtor = getChartConstructor();
     if (!canvas || !chartCtor) return chart;
     const ctx = canvas.getContext('2d');
     if (!ctx) return chart;
 
     if (!chart) {
-      return new chartCtor(ctx, {
+      return stampChartRefresh(new chartCtor(ctx, {
         type: 'line',
         data: {
           labels: trendSeries.labels,
@@ -282,17 +336,19 @@
             }
           }
         }
-      });
+      }), refreshNonce);
     }
 
-    if (sameSeries(chart, trendSeries.labels, trendSeries.data)) return chart;
+    if (!chartNeedsRefresh(chart, refreshNonce) && sameSeries(chart, trendSeries.labels, trendSeries.data)) {
+      return chart;
+    }
     chart.data.labels = trendSeries.labels;
     chart.data.datasets[0].data = trendSeries.data;
     chart.update();
-    return chart;
+    return stampChartRefresh(chart, refreshNonce);
   };
 
-  const updateDoughnutChart = (chart, canvas, counts) => {
+  const updateDoughnutChart = (chart, canvas, counts, refreshNonce = 0) => {
     const chartCtor = getChartConstructor();
     if (!canvas || !chartCtor) return chart;
     const ctx = canvas.getContext('2d');
@@ -302,7 +358,7 @@
     const colors = data.map((_, index) => CHART_PALETTE[index % CHART_PALETTE.length]);
 
     if (!chart) {
-      return new chartCtor(ctx, {
+      return stampChartRefresh(new chartCtor(ctx, {
         type: 'doughnut',
         data: {
           labels,
@@ -313,19 +369,21 @@
           maintainAspectRatio: true,
           plugins: { legend: { position: 'bottom' } }
         }
-      });
+      }), refreshNonce);
     }
 
-    if (sameSeries(chart, labels, data)) return chart;
+    if (!chartNeedsRefresh(chart, refreshNonce) && sameSeries(chart, labels, data)) {
+      return chart;
+    }
     chart.data.labels = labels;
     chart.data.datasets[0].data = data;
     chart.data.datasets[0].backgroundColor = colors;
     chart.data.datasets[0].borderColor = colors;
     chart.update();
-    return chart;
+    return stampChartRefresh(chart, refreshNonce);
   };
 
-  const updateTopIpsChart = (chart, canvas, topIps) => {
+  const updateTopIpsChart = (chart, canvas, topIps, refreshNonce = 0) => {
     const chartCtor = getChartConstructor();
     if (!canvas || !chartCtor) return chart;
     const ctx = canvas.getContext('2d');
@@ -336,7 +394,7 @@
     const colors = data.map((_, index) => CHART_PALETTE[index % CHART_PALETTE.length]);
 
     if (!chart) {
-      return new chartCtor(ctx, {
+      return stampChartRefresh(new chartCtor(ctx, {
         type: 'bar',
         data: {
           labels,
@@ -353,16 +411,18 @@
           },
           plugins: { legend: { display: false } }
         }
-      });
+      }), refreshNonce);
     }
 
-    if (sameSeries(chart, labels, data)) return chart;
+    if (!chartNeedsRefresh(chart, refreshNonce) && sameSeries(chart, labels, data)) {
+      return chart;
+    }
     chart.data.labels = labels;
     chart.data.datasets[0].data = data;
     chart.data.datasets[0].backgroundColor = colors;
     chart.data.datasets[0].borderColor = colors;
     chart.update();
-    return chart;
+    return stampChartRefresh(chart, refreshNonce);
   };
 
   const buildTimeSeries = (events, range) => {
@@ -394,14 +454,14 @@
     };
   };
 
-  const updateTimeSeriesChart = (chart, canvas, series) => {
+  const updateTimeSeriesChart = (chart, canvas, series, refreshNonce = 0) => {
     const chartCtor = getChartConstructor();
     if (!canvas || !chartCtor) return chart;
     const ctx = canvas.getContext('2d');
     if (!ctx) return chart;
 
     if (!chart) {
-      return new chartCtor(ctx, {
+      return stampChartRefresh(new chartCtor(ctx, {
         type: 'line',
         data: {
           labels: series.labels,
@@ -428,14 +488,16 @@
           },
           plugins: { legend: { display: false } }
         }
-      });
+      }), refreshNonce);
     }
 
-    if (sameSeries(chart, series.labels, series.data)) return chart;
+    if (!chartNeedsRefresh(chart, refreshNonce) && sameSeries(chart, series.labels, series.data)) {
+      return chart;
+    }
     chart.data.labels = series.labels;
     chart.data.datasets[0].data = series.data;
     chart.update();
-    return chart;
+    return stampChartRefresh(chart, refreshNonce);
   };
 
   function selectTimeRange(range) {
@@ -541,6 +603,14 @@
     monitoringSummary.challenge.reasons,
     CHALLENGE_REASON_LABELS
   );
+  $: notABotOutcomeRows = normalizeReasonRows(
+    monitoringSummary.notABot.outcomes,
+    NOT_A_BOT_OUTCOME_LABELS
+  );
+  $: notABotLatencyRows = normalizeReasonRows(
+    monitoringSummary.notABot.latencyBuckets,
+    NOT_A_BOT_LATENCY_LABELS
+  );
   $: powReasonRows = normalizeReasonRows(monitoringSummary.pow.reasons, POW_REASON_LABELS);
   $: powOutcomeRows = normalizePairRows(monitoringSummary.pow.outcomes, POW_OUTCOME_LABELS);
   $: rateOutcomeRows = normalizePairRows(monitoringSummary.rate.outcomes, RATE_OUTCOME_LABELS);
@@ -580,16 +650,29 @@
     void fetchRangeEvents(selectedTimeRange);
   }
 
+  $: if (browser) {
+    const nextActive = isActive === true;
+    if (nextActive && !wasActive) {
+      requestChartRefresh();
+    }
+    wasActive = nextActive;
+  }
+
   $: if (browser && eventTypesCanvas) {
-    eventTypesChart = updateDoughnutChart(eventTypesChart, eventTypesCanvas, events.event_counts || {});
+    eventTypesChart = updateDoughnutChart(
+      eventTypesChart,
+      eventTypesCanvas,
+      events.event_counts || {},
+      chartRefreshNonce
+    );
   }
 
   $: if (browser && topIpsCanvas) {
-    topIpsChart = updateTopIpsChart(topIpsChart, topIpsCanvas, events.top_ips || []);
+    topIpsChart = updateTopIpsChart(topIpsChart, topIpsCanvas, events.top_ips || [], chartRefreshNonce);
   }
 
   $: if (browser && timeSeriesCanvas) {
-    timeSeriesChart = updateTimeSeriesChart(timeSeriesChart, timeSeriesCanvas, timeSeries);
+    timeSeriesChart = updateTimeSeriesChart(timeSeriesChart, timeSeriesCanvas, timeSeries, chartRefreshNonce);
   }
 
   $: if (browser && challengeTrendCanvas) {
@@ -598,7 +681,8 @@
       challengeTrendCanvas,
       'Challenge Failures',
       CHALLENGE_TREND_COLOR,
-      challengeTrendSeries
+      challengeTrendSeries,
+      chartRefreshNonce
     );
   }
 
@@ -608,13 +692,36 @@
       powTrendCanvas,
       'PoW Failures',
       POW_TREND_COLOR,
-      powTrendSeries
+      powTrendSeries,
+      chartRefreshNonce
     );
   }
+
+  onMount(() => {
+    if (!browser || !window) return undefined;
+    const onResize = () => {
+      scheduleChartRefreshAfterResize();
+    };
+    window.addEventListener('resize', onResize, { passive: true });
+    detachColorSchemeListener = attachColorSchemeChangeListener();
+    return () => {
+      window.removeEventListener('resize', onResize);
+      if (typeof detachColorSchemeListener === 'function') {
+        detachColorSchemeListener();
+        detachColorSchemeListener = () => {};
+      }
+      resizeRedrawTimer = clearTimer(resizeRedrawTimer);
+    };
+  });
 
   onDestroy(() => {
     copyButtonTimer = clearTimer(copyButtonTimer);
     copyCurlButtonTimer = clearTimer(copyCurlButtonTimer);
+    resizeRedrawTimer = clearTimer(resizeRedrawTimer);
+    if (typeof detachColorSchemeListener === 'function') {
+      detachColorSchemeListener();
+      detachColorSchemeListener = () => {};
+    }
     abortRangeEventsFetch();
     if (eventTypesChart && typeof eventTypesChart.destroy === 'function') {
       eventTypesChart.destroy();
@@ -697,7 +804,10 @@
   <ChallengeSection
     loading={tabStatus?.loading === true}
     challengeSummary={monitoringSummary.challenge}
+    notABotSummary={monitoringSummary.notABot}
     {challengeReasonRows}
+    {notABotOutcomeRows}
+    {notABotLatencyRows}
     bind:challengeTrendCanvas
   />
 

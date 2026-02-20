@@ -13,6 +13,19 @@ pub(crate) const TIMING_REGULARITY_SPREAD_SECONDS_CHALLENGE_PUZZLE: u64 = 1;
 pub(crate) const TIMING_HISTORY_TTL_SECONDS_CHALLENGE_PUZZLE: u64 = 1800;
 pub(crate) const MAX_OPERATION_REPLAY_TTL_SECONDS_CHALLENGE_PUZZLE: u64 = 900;
 
+pub(crate) const FLOW_NOT_A_BOT: &str = "not_a_bot_checkbox";
+pub(crate) const STEP_NOT_A_BOT_SUBMIT: &str = "not_a_bot_submit";
+pub(crate) const PATH_CLASS_NOT_A_BOT_SUBMIT: &str = "not_a_bot_submit";
+pub(crate) const STEP_INDEX_NOT_A_BOT_SUBMIT: u8 = 2;
+pub(crate) const MAX_STEP_WINDOW_SECONDS_NOT_A_BOT: u64 = 180;
+pub(crate) const MIN_STEP_LATENCY_SECONDS_NOT_A_BOT: u64 = 1;
+pub(crate) const MAX_STEP_LATENCY_SECONDS_NOT_A_BOT: u64 = 600;
+pub(crate) const MAX_FLOW_AGE_SECONDS_NOT_A_BOT: u64 = 600;
+pub(crate) const TIMING_REGULARITY_WINDOW_NOT_A_BOT: usize = 4;
+pub(crate) const TIMING_REGULARITY_SPREAD_SECONDS_NOT_A_BOT: u64 = 1;
+pub(crate) const TIMING_HISTORY_TTL_SECONDS_NOT_A_BOT: u64 = 1200;
+pub(crate) const MAX_OPERATION_REPLAY_TTL_SECONDS_NOT_A_BOT: u64 = 600;
+
 pub(crate) const FLOW_JS_VERIFICATION: &str = "js_verification";
 pub(crate) const STEP_JS_POW_VERIFY: &str = "pow_verify";
 pub(crate) const PATH_CLASS_JS_POW_VERIFY: &str = "pow_verify";
