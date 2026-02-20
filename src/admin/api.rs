@@ -46,6 +46,13 @@ const NOT_A_BOT_ATTEMPT_LIMIT_MIN: u64 = 1;
 const NOT_A_BOT_ATTEMPT_LIMIT_MAX: u64 = 100;
 const NOT_A_BOT_ATTEMPT_WINDOW_MIN: u64 = 30;
 const NOT_A_BOT_ATTEMPT_WINDOW_MAX: u64 = 3600;
+const IP_RANGE_MAX_RULES: usize = 64;
+const IP_RANGE_MAX_CIDRS_PER_RULE: usize = 512;
+const IP_RANGE_MAX_EMERGENCY_ALLOWLIST: usize = 1024;
+const IP_RANGE_CUSTOM_MESSAGE_MAX_CHARS: usize = 280;
+const IP_RANGE_REDIRECT_URL_MAX_CHARS: usize = 512;
+const IP_RANGE_MANAGED_MAX_STALENESS_HOURS_MIN: u64 = 1;
+const IP_RANGE_MANAGED_MAX_STALENESS_HOURS_MAX: u64 = 24 * 90;
 const CONFIG_EXPORT_SECRET_KEYS: [&str; 10] = [
     "SHUMA_API_KEY",
     "SHUMA_ADMIN_READONLY_API_KEY",
@@ -1469,6 +1476,202 @@ mod admin_config_tests {
     }
 
     #[test]
+    fn admin_config_updates_ip_range_policy_fields() {
+        let _lock = crate::test_support::lock_env();
+        std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
+        let store = TestStore::default();
+
+        let post_req = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{
+                "ip_range_policy_mode":"enforce",
+                "ip_range_emergency_allowlist":["203.0.113.0/24"],
+                "ip_range_custom_rules":[
+                    {
+                        "id":"dc_block",
+                        "enabled":true,
+                        "cidrs":["198.51.100.0/24"],
+                        "action":"forbidden_403"
+                    },
+                    {
+                        "id":"redirect_known",
+                        "enabled":true,
+                        "cidrs":["192.0.2.0/24"],
+                        "action":"redirect_308",
+                        "redirect_url":"https://example.com/security-check"
+                    }
+                ],
+                "ip_range_managed_max_staleness_hours": 72,
+                "ip_range_allow_stale_managed_enforce": false,
+                "ip_range_managed_policies":[
+                    {
+                        "set_id":"openai_gptbot",
+                        "enabled":true,
+                        "action":"challenge"
+                    }
+                ]
+            }"#
+            .to_vec(),
+        );
+        let post_resp = handle_admin_config(&post_req, &store, "default");
+        assert_eq!(*post_resp.status(), 400u16);
+
+        let fixed_post_req = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{
+                "ip_range_policy_mode":"enforce",
+                "ip_range_emergency_allowlist":["203.0.113.0/24"],
+                "ip_range_custom_rules":[
+                    {
+                        "id":"dc_block",
+                        "enabled":true,
+                        "cidrs":["198.51.100.0/24"],
+                        "action":"forbidden_403"
+                    },
+                    {
+                        "id":"redirect_known",
+                        "enabled":true,
+                        "cidrs":["192.0.2.0/24"],
+                        "action":"redirect_308",
+                        "redirect_url":"https://example.com/security-check"
+                    }
+                ],
+                "ip_range_managed_max_staleness_hours": 72,
+                "ip_range_allow_stale_managed_enforce": false,
+                "ip_range_managed_policies":[
+                    {
+                        "set_id":"openai_gptbot",
+                        "enabled":true,
+                        "action":"maze"
+                    }
+                ]
+            }"#
+            .to_vec(),
+        );
+        let fixed_resp = handle_admin_config(&fixed_post_req, &store, "default");
+        assert_eq!(*fixed_resp.status(), 200u16);
+        let body: serde_json::Value = serde_json::from_slice(fixed_resp.body()).unwrap();
+        let cfg = body.get("config").unwrap();
+        assert_eq!(
+            cfg.get("ip_range_policy_mode"),
+            Some(&serde_json::json!("enforce"))
+        );
+        assert_eq!(
+            cfg.get("ip_range_emergency_allowlist"),
+            Some(&serde_json::json!(["203.0.113.0/24"]))
+        );
+        assert_eq!(
+            cfg.get("ip_range_managed_max_staleness_hours"),
+            Some(&serde_json::json!(72))
+        );
+        assert_eq!(
+            cfg.get("ip_range_allow_stale_managed_enforce"),
+            Some(&serde_json::json!(false))
+        );
+        assert_eq!(
+            cfg.get("ip_range_custom_rules")
+                .and_then(|value| value.as_array())
+                .map(|entries| entries.len()),
+            Some(2)
+        );
+        assert_eq!(
+            cfg.get("ip_range_managed_policies")
+                .and_then(|value| value.as_array())
+                .map(|entries| entries.len()),
+            Some(1)
+        );
+
+        let saved_bytes = store.get("config:default").unwrap().unwrap();
+        let saved_cfg: crate::config::Config = serde_json::from_slice(&saved_bytes).unwrap();
+        assert_eq!(
+            saved_cfg.ip_range_policy_mode,
+            crate::config::IpRangePolicyMode::Enforce
+        );
+        assert_eq!(
+            saved_cfg.ip_range_emergency_allowlist,
+            vec!["203.0.113.0/24".to_string()]
+        );
+        assert_eq!(saved_cfg.ip_range_custom_rules.len(), 2);
+        assert_eq!(saved_cfg.ip_range_managed_policies.len(), 1);
+        assert_eq!(saved_cfg.ip_range_managed_max_staleness_hours, 72);
+        assert!(!saved_cfg.ip_range_allow_stale_managed_enforce);
+        assert_eq!(
+            saved_cfg.ip_range_managed_policies[0].set_id,
+            "openai_gptbot"
+        );
+
+        std::env::remove_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED");
+    }
+
+    #[test]
+    fn admin_config_rejects_invalid_ip_range_payloads() {
+        let _lock = crate::test_support::lock_env();
+        std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
+        let store = TestStore::default();
+
+        let invalid_cidr = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{"ip_range_custom_rules":[{"id":"bad","enabled":true,"cidrs":["invalid"],"action":"forbidden_403"}]}"#
+                .to_vec(),
+        );
+        let invalid_cidr_resp = handle_admin_config(&invalid_cidr, &store, "default");
+        assert_eq!(*invalid_cidr_resp.status(), 400u16);
+        assert!(String::from_utf8_lossy(invalid_cidr_resp.body()).contains("invalid"));
+
+        let missing_redirect = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{"ip_range_custom_rules":[{"id":"redir","enabled":true,"cidrs":["203.0.113.0/24"],"action":"redirect_308"}]}"#
+                .to_vec(),
+        );
+        let missing_redirect_resp = handle_admin_config(&missing_redirect, &store, "default");
+        assert_eq!(*missing_redirect_resp.status(), 400u16);
+        assert!(String::from_utf8_lossy(missing_redirect_resp.body()).contains("redirect_url"));
+
+        let unknown_managed = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{"ip_range_managed_policies":[{"set_id":"deepseek","enabled":true,"action":"forbidden_403"}]}"#
+                .to_vec(),
+        );
+        let unknown_managed_resp = handle_admin_config(&unknown_managed, &store, "default");
+        assert_eq!(*unknown_managed_resp.status(), 400u16);
+        assert!(
+            String::from_utf8_lossy(unknown_managed_resp.body())
+                .contains("official source unavailable")
+        );
+
+        let invalid_staleness = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{"ip_range_managed_max_staleness_hours":0}"#.to_vec(),
+        );
+        let invalid_staleness_resp = handle_admin_config(&invalid_staleness, &store, "default");
+        assert_eq!(*invalid_staleness_resp.status(), 400u16);
+        assert!(
+            String::from_utf8_lossy(invalid_staleness_resp.body())
+                .contains("ip_range_managed_max_staleness_hours out of range")
+        );
+
+        let invalid_allow_flag = make_request(
+            Method::Post,
+            "/admin/config",
+            br#"{"ip_range_allow_stale_managed_enforce":"sometimes"}"#.to_vec(),
+        );
+        let invalid_allow_flag_resp = handle_admin_config(&invalid_allow_flag, &store, "default");
+        assert_eq!(*invalid_allow_flag_resp.status(), 400u16);
+        assert!(
+            String::from_utf8_lossy(invalid_allow_flag_resp.body())
+                .contains("ip_range_allow_stale_managed_enforce must be true or false")
+        );
+
+        std::env::remove_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED");
+    }
+
+    #[test]
     fn admin_config_rejects_invalid_defence_mode_value() {
         let _lock = crate::test_support::lock_env();
         std::env::set_var("SHUMA_ADMIN_CONFIG_WRITE_ENABLED", "true");
@@ -2542,6 +2745,30 @@ fn config_export_env_entries(cfg: &crate::config::Config) -> Vec<(String, String
             json_env(&cfg.path_whitelist),
         ),
         (
+            "SHUMA_IP_RANGE_POLICY_MODE".to_string(),
+            cfg.ip_range_policy_mode.as_str().to_string(),
+        ),
+        (
+            "SHUMA_IP_RANGE_EMERGENCY_ALLOWLIST".to_string(),
+            json_env(&cfg.ip_range_emergency_allowlist),
+        ),
+        (
+            "SHUMA_IP_RANGE_CUSTOM_RULES".to_string(),
+            json_env(&cfg.ip_range_custom_rules),
+        ),
+        (
+            "SHUMA_IP_RANGE_MANAGED_POLICIES".to_string(),
+            json_env(&cfg.ip_range_managed_policies),
+        ),
+        (
+            "SHUMA_IP_RANGE_MANAGED_MAX_STALENESS_HOURS".to_string(),
+            cfg.ip_range_managed_max_staleness_hours.to_string(),
+        ),
+        (
+            "SHUMA_IP_RANGE_ALLOW_STALE_MANAGED_ENFORCE".to_string(),
+            bool_env(cfg.ip_range_allow_stale_managed_enforce).to_string(),
+        ),
+        (
             "SHUMA_MAZE_ENABLED".to_string(),
             bool_env(cfg.maze_enabled).to_string(),
         ),
@@ -2793,6 +3020,297 @@ fn parse_string_list_json(field: &str, value: &serde_json::Value) -> Result<Vec<
     Ok(parsed)
 }
 
+fn sanitize_redirect_url(
+    field: &str,
+    value: Option<&serde_json::Value>,
+) -> Result<Option<String>, String> {
+    let Some(raw) = value else {
+        return Ok(None);
+    };
+    let url = raw
+        .as_str()
+        .ok_or_else(|| format!("{}.redirect_url must be a string", field))?
+        .trim();
+    if url.is_empty() {
+        return Ok(None);
+    }
+    if url.len() > IP_RANGE_REDIRECT_URL_MAX_CHARS {
+        return Err(format!(
+            "{}.redirect_url exceeds {} characters",
+            field, IP_RANGE_REDIRECT_URL_MAX_CHARS
+        ));
+    }
+    let lower = url.to_ascii_lowercase();
+    if !lower.starts_with("https://") && !lower.starts_with("http://") {
+        return Err(format!(
+            "{}.redirect_url must start with http:// or https://",
+            field
+        ));
+    }
+    Ok(Some(url.to_string()))
+}
+
+fn sanitize_custom_message(
+    field: &str,
+    value: Option<&serde_json::Value>,
+) -> Result<Option<String>, String> {
+    let Some(raw) = value else {
+        return Ok(None);
+    };
+    let message = raw
+        .as_str()
+        .ok_or_else(|| format!("{}.custom_message must be a string", field))?
+        .trim();
+    if message.is_empty() {
+        return Ok(None);
+    }
+    if message.chars().any(|ch| ch.is_control() && ch != '\n' && ch != '\r' && ch != '\t') {
+        return Err(format!(
+            "{}.custom_message contains unsupported control characters",
+            field
+        ));
+    }
+    if message.chars().count() > IP_RANGE_CUSTOM_MESSAGE_MAX_CHARS {
+        return Err(format!(
+            "{}.custom_message exceeds {} characters",
+            field, IP_RANGE_CUSTOM_MESSAGE_MAX_CHARS
+        ));
+    }
+    Ok(Some(message.to_string()))
+}
+
+fn parse_cidr_list_json(
+    field: &str,
+    value: &serde_json::Value,
+    max_len: usize,
+) -> Result<Vec<String>, String> {
+    let items = value
+        .as_array()
+        .ok_or_else(|| format!("{} must be an array of CIDR strings", field))?;
+    if items.len() > max_len {
+        return Err(format!(
+            "{} exceeds max length {}",
+            field, max_len
+        ));
+    }
+
+    let mut parsed = Vec::with_capacity(items.len());
+    let mut seen = HashSet::new();
+    for item in items {
+        let raw = item
+            .as_str()
+            .ok_or_else(|| format!("{} must contain only strings", field))?;
+        let Some(net) = crate::signals::ip_range_policy::parse_acceptable_cidr(raw) else {
+            return Err(format!(
+                "{} contains invalid or unsupported CIDR '{}'",
+                field, raw
+            ));
+        };
+        let canonical = net.to_string();
+        if seen.insert(canonical.clone()) {
+            parsed.push(canonical);
+        }
+    }
+    Ok(parsed)
+}
+
+fn parse_ip_range_policy_mode_json(
+    field: &str,
+    value: &serde_json::Value,
+) -> Result<crate::config::IpRangePolicyMode, String> {
+    let raw = value
+        .as_str()
+        .ok_or_else(|| format!("{} must be one of: off, advisory, enforce", field))?;
+    crate::config::parse_ip_range_policy_mode(raw)
+        .ok_or_else(|| format!("{} must be one of: off, advisory, enforce", field))
+}
+
+fn parse_ip_range_policy_action_json(
+    field: &str,
+    value: Option<&serde_json::Value>,
+) -> Result<crate::config::IpRangePolicyAction, String> {
+    let Some(raw_value) = value else {
+        return Ok(crate::config::IpRangePolicyAction::Forbidden403);
+    };
+    let raw = raw_value
+        .as_str()
+        .ok_or_else(|| format!("{} action must be a string", field))?;
+    crate::config::parse_ip_range_policy_action(raw).ok_or_else(|| {
+        format!(
+            "{} action must be one of: forbidden_403, custom_message, drop_connection, redirect_308, rate_limit, honeypot, maze, tarpit",
+            field
+        )
+    })
+}
+
+fn validate_ip_range_action_params(
+    field: &str,
+    action: crate::config::IpRangePolicyAction,
+    redirect_url: Option<&str>,
+    custom_message: Option<&str>,
+) -> Result<(), String> {
+    if action == crate::config::IpRangePolicyAction::Redirect308 && redirect_url.is_none() {
+        return Err(format!("{} action redirect_308 requires redirect_url", field));
+    }
+    if action == crate::config::IpRangePolicyAction::CustomMessage && custom_message.is_none() {
+        return Err(format!("{} action custom_message requires custom_message", field));
+    }
+    Ok(())
+}
+
+fn parse_ip_range_custom_rules_json(
+    field: &str,
+    value: &serde_json::Value,
+) -> Result<Vec<crate::config::IpRangePolicyRule>, String> {
+    let items = value
+        .as_array()
+        .ok_or_else(|| format!("{} must be an array of objects", field))?;
+    if items.len() > IP_RANGE_MAX_RULES {
+        return Err(format!("{} exceeds max rules {}", field, IP_RANGE_MAX_RULES));
+    }
+
+    let mut parsed = Vec::with_capacity(items.len());
+    let mut seen_ids = HashSet::new();
+    for (index, item) in items.iter().enumerate() {
+        let obj = item
+            .as_object()
+            .ok_or_else(|| format!("{}[{}] must be an object", field, index))?;
+        let enabled = obj.get("enabled").and_then(|value| value.as_bool()).unwrap_or(true);
+        let id = obj
+            .get("id")
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string)
+            .unwrap_or_else(|| format!("custom_rule_{}", index + 1));
+        if !id
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
+        {
+            return Err(format!(
+                "{}[{}].id must contain only [a-zA-Z0-9_-]",
+                field, index
+            ));
+        }
+        if !seen_ids.insert(id.clone()) {
+            return Err(format!("{} contains duplicate id '{}'", field, id));
+        }
+        let cidrs = parse_cidr_list_json(
+            format!("{}[{}].cidrs", field, index).as_str(),
+            obj.get("cidrs")
+                .ok_or_else(|| format!("{}[{}].cidrs is required", field, index))?,
+            IP_RANGE_MAX_CIDRS_PER_RULE,
+        )?;
+        if enabled && cidrs.is_empty() {
+            return Err(format!(
+                "{}[{}].cidrs must not be empty when enabled=true",
+                field, index
+            ));
+        }
+        let action = parse_ip_range_policy_action_json(
+            format!("{}[{}]", field, index).as_str(),
+            obj.get("action"),
+        )?;
+        let redirect_url = sanitize_redirect_url(
+            format!("{}[{}]", field, index).as_str(),
+            obj.get("redirect_url"),
+        )?;
+        let custom_message = sanitize_custom_message(
+            format!("{}[{}]", field, index).as_str(),
+            obj.get("custom_message"),
+        )?;
+        validate_ip_range_action_params(
+            format!("{}[{}]", field, index).as_str(),
+            action,
+            redirect_url.as_deref(),
+            custom_message.as_deref(),
+        )?;
+
+        parsed.push(crate::config::IpRangePolicyRule {
+            id,
+            enabled,
+            cidrs,
+            action,
+            redirect_url,
+            custom_message,
+        });
+    }
+    Ok(parsed)
+}
+
+fn parse_ip_range_managed_policies_json(
+    field: &str,
+    value: &serde_json::Value,
+) -> Result<Vec<crate::config::IpRangeManagedPolicy>, String> {
+    let items = value
+        .as_array()
+        .ok_or_else(|| format!("{} must be an array of objects", field))?;
+    if items.len() > IP_RANGE_MAX_RULES {
+        return Err(format!("{} exceeds max rules {}", field, IP_RANGE_MAX_RULES));
+    }
+
+    let mut parsed = Vec::with_capacity(items.len());
+    let mut seen_set_ids = HashSet::new();
+    for (index, item) in items.iter().enumerate() {
+        let obj = item
+            .as_object()
+            .ok_or_else(|| format!("{}[{}] must be an object", field, index))?;
+        let set_id = obj
+            .get("set_id")
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| format!("{}[{}].set_id is required", field, index))?
+            .to_ascii_lowercase();
+        if set_id == "deepseek" || set_id == "deepseek_bot" || set_id == "deepseek_crawler" {
+            return Err(format!(
+                "{}[{}].set_id '{}' is unavailable: official source unavailable",
+                field, index, set_id
+            ));
+        }
+        if !crate::signals::ip_range_policy::has_managed_set(set_id.as_str()) {
+            return Err(format!(
+                "{}[{}].set_id '{}' is unknown",
+                field, index, set_id
+            ));
+        }
+        if !seen_set_ids.insert(set_id.clone()) {
+            return Err(format!(
+                "{} contains duplicate set_id '{}'",
+                field, set_id
+            ));
+        }
+        let enabled = obj.get("enabled").and_then(|value| value.as_bool()).unwrap_or(true);
+        let action = parse_ip_range_policy_action_json(
+            format!("{}[{}]", field, index).as_str(),
+            obj.get("action"),
+        )?;
+        let redirect_url = sanitize_redirect_url(
+            format!("{}[{}]", field, index).as_str(),
+            obj.get("redirect_url"),
+        )?;
+        let custom_message = sanitize_custom_message(
+            format!("{}[{}]", field, index).as_str(),
+            obj.get("custom_message"),
+        )?;
+        validate_ip_range_action_params(
+            format!("{}[{}]", field, index).as_str(),
+            action,
+            redirect_url.as_deref(),
+            custom_message.as_deref(),
+        )?;
+
+        parsed.push(crate::config::IpRangeManagedPolicy {
+            set_id,
+            enabled,
+            action,
+            redirect_url,
+            custom_message,
+        });
+    }
+    Ok(parsed)
+}
+
 fn parse_honeypot_paths_json(field: &str, value: &serde_json::Value) -> Result<Vec<String>, String> {
     let paths = parse_string_list_json(field, value)?;
     for path in &paths {
@@ -2939,6 +3457,29 @@ fn admin_config_payload(
     obj.insert(
         "botness_maze_threshold_default".to_string(),
         serde_json::Value::Number(maze_default.into()),
+    );
+    obj.insert(
+        "ip_range_managed_catalog_version".to_string(),
+        serde_json::Value::String(crate::signals::ip_range_policy::managed_catalog_version()),
+    );
+    obj.insert(
+        "ip_range_managed_catalog_generated_at".to_string(),
+        serde_json::Value::String(crate::signals::ip_range_policy::managed_catalog_generated_at()),
+    );
+    obj.insert(
+        "ip_range_managed_catalog_generated_at_unix".to_string(),
+        serde_json::Value::Number(
+            serde_json::Number::from(crate::signals::ip_range_policy::managed_catalog_generated_at_unix()),
+        ),
+    );
+    obj.insert(
+        "ip_range_managed_sets".to_string(),
+        serde_json::to_value(
+            crate::signals::ip_range_policy::managed_set_metadata_with_staleness(
+                cfg.ip_range_managed_max_staleness_hours,
+            ),
+        )
+            .unwrap_or_else(|_| json!([])),
     );
     obj.insert(
         "defence_modes_effective".to_string(),
@@ -3134,6 +3675,79 @@ fn handle_admin_config(
                 }
                 Err(msg) => return Response::new(400, msg),
             }
+        }
+        if let Some(value) = json.get("ip_range_policy_mode") {
+            match parse_ip_range_policy_mode_json("ip_range_policy_mode", value) {
+                Ok(mode) => {
+                    cfg.ip_range_policy_mode = mode;
+                    changed = true;
+                }
+                Err(msg) => return Response::new(400, msg),
+            }
+        }
+        if let Some(value) = json.get("ip_range_emergency_allowlist") {
+            match parse_cidr_list_json(
+                "ip_range_emergency_allowlist",
+                value,
+                IP_RANGE_MAX_EMERGENCY_ALLOWLIST,
+            ) {
+                Ok(list) => {
+                    cfg.ip_range_emergency_allowlist = list;
+                    changed = true;
+                }
+                Err(msg) => return Response::new(400, msg),
+            }
+        }
+        if let Some(value) = json.get("ip_range_custom_rules") {
+            match parse_ip_range_custom_rules_json("ip_range_custom_rules", value) {
+                Ok(rules) => {
+                    cfg.ip_range_custom_rules = rules;
+                    changed = true;
+                }
+                Err(msg) => return Response::new(400, msg),
+            }
+        }
+        if let Some(value) = json.get("ip_range_managed_policies") {
+            match parse_ip_range_managed_policies_json("ip_range_managed_policies", value) {
+                Ok(policies) => {
+                    cfg.ip_range_managed_policies = policies;
+                    changed = true;
+                }
+                Err(msg) => return Response::new(400, msg),
+            }
+        }
+        if let Some(value) = json.get("ip_range_managed_max_staleness_hours") {
+            let Some(hours) = value.as_u64() else {
+                return Response::new(
+                    400,
+                    "ip_range_managed_max_staleness_hours must be an integer",
+                );
+            };
+            if !(IP_RANGE_MANAGED_MAX_STALENESS_HOURS_MIN
+                ..=IP_RANGE_MANAGED_MAX_STALENESS_HOURS_MAX)
+                .contains(&hours)
+            {
+                return Response::new(
+                    400,
+                    format!(
+                        "ip_range_managed_max_staleness_hours out of range ({}-{})",
+                        IP_RANGE_MANAGED_MAX_STALENESS_HOURS_MIN,
+                        IP_RANGE_MANAGED_MAX_STALENESS_HOURS_MAX
+                    ),
+                );
+            }
+            cfg.ip_range_managed_max_staleness_hours = hours;
+            changed = true;
+        }
+        if let Some(value) = json.get("ip_range_allow_stale_managed_enforce") {
+            let Some(allow) = value.as_bool() else {
+                return Response::new(
+                    400,
+                    "ip_range_allow_stale_managed_enforce must be true or false",
+                );
+            };
+            cfg.ip_range_allow_stale_managed_enforce = allow;
+            changed = true;
         }
 
         // Update per-type ban durations if provided

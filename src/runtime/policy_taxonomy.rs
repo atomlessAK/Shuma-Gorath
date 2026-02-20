@@ -136,6 +136,8 @@ pub enum SignalId {
     MazeThreshold,
     DecoyInteraction,
     TarpitPersistence,
+    IpRangeCustom,
+    IpRangeManaged,
 }
 
 impl SignalId {
@@ -188,6 +190,8 @@ impl SignalId {
             SignalId::MazeThreshold => "S_MAZE_THRESHOLD",
             SignalId::DecoyInteraction => "S_DECOY_INTERACTION",
             SignalId::TarpitPersistence => "S_TARPIT_PERSISTENCE",
+            SignalId::IpRangeCustom => "S_IP_RANGE_CUSTOM",
+            SignalId::IpRangeManaged => "S_IP_RANGE_MANAGED",
         }
     }
 }
@@ -243,6 +247,15 @@ pub enum DetectionId {
     MazeCheckpointMissing,
     MazeMicroPowFailed,
     MazeThresholdBan,
+    IpRangeAdvisory,
+    IpRangeForbidden,
+    IpRangeCustomMessage,
+    IpRangeDropConnection,
+    IpRangeRedirect,
+    IpRangeRateLimit,
+    IpRangeHoneypot,
+    IpRangeMaze,
+    IpRangeTarpit,
 }
 
 impl DetectionId {
@@ -298,6 +311,15 @@ impl DetectionId {
             DetectionId::MazeCheckpointMissing => "D_MAZE_CHECKPOINT_MISSING",
             DetectionId::MazeMicroPowFailed => "D_MAZE_MICRO_POW_FAILED",
             DetectionId::MazeThresholdBan => "D_MAZE_THRESHOLD_BAN",
+            DetectionId::IpRangeAdvisory => "D_IP_RANGE_ADVISORY",
+            DetectionId::IpRangeForbidden => "D_IP_RANGE_FORBIDDEN",
+            DetectionId::IpRangeCustomMessage => "D_IP_RANGE_CUSTOM_MESSAGE",
+            DetectionId::IpRangeDropConnection => "D_IP_RANGE_DROP_CONNECTION",
+            DetectionId::IpRangeRedirect => "D_IP_RANGE_REDIRECT",
+            DetectionId::IpRangeRateLimit => "D_IP_RANGE_RATE_LIMIT",
+            DetectionId::IpRangeHoneypot => "D_IP_RANGE_HONEYPOT",
+            DetectionId::IpRangeMaze => "D_IP_RANGE_MAZE",
+            DetectionId::IpRangeTarpit => "D_IP_RANGE_TARPIT",
         }
     }
 }
@@ -404,6 +426,15 @@ pub enum PolicyTransition {
     MazeCheckpointMissing,
     MazeMicroPowFailed,
     MazeThresholdBan,
+    IpRangeAdvisory(Vec<SignalId>),
+    IpRangeForbidden(Vec<SignalId>),
+    IpRangeCustomMessage(Vec<SignalId>),
+    IpRangeDropConnection(Vec<SignalId>),
+    IpRangeRedirect(Vec<SignalId>),
+    IpRangeRateLimit(Vec<SignalId>),
+    IpRangeHoneypot(Vec<SignalId>),
+    IpRangeMaze(Vec<SignalId>),
+    IpRangeTarpit(Vec<SignalId>),
 }
 
 pub fn resolve_policy_match(transition: PolicyTransition) -> PolicyMatch {
@@ -617,6 +648,51 @@ pub fn resolve_policy_match(transition: PolicyTransition) -> PolicyMatch {
             EscalationLevelId::L10DenyTemp,
             DetectionId::MazeThresholdBan,
             vec![SignalId::MazeThreshold],
+        ),
+        PolicyTransition::IpRangeAdvisory(signals) => PolicyMatch::new(
+            EscalationLevelId::L2Monitor,
+            DetectionId::IpRangeAdvisory,
+            signals,
+        ),
+        PolicyTransition::IpRangeForbidden(signals) => PolicyMatch::new(
+            EscalationLevelId::L10DenyTemp,
+            DetectionId::IpRangeForbidden,
+            signals,
+        ),
+        PolicyTransition::IpRangeCustomMessage(signals) => PolicyMatch::new(
+            EscalationLevelId::L10DenyTemp,
+            DetectionId::IpRangeCustomMessage,
+            signals,
+        ),
+        PolicyTransition::IpRangeDropConnection(signals) => PolicyMatch::new(
+            EscalationLevelId::L10DenyTemp,
+            DetectionId::IpRangeDropConnection,
+            signals,
+        ),
+        PolicyTransition::IpRangeRedirect(signals) => PolicyMatch::new(
+            EscalationLevelId::L3Shape,
+            DetectionId::IpRangeRedirect,
+            signals,
+        ),
+        PolicyTransition::IpRangeRateLimit(signals) => PolicyMatch::new(
+            EscalationLevelId::L3Shape,
+            DetectionId::IpRangeRateLimit,
+            signals,
+        ),
+        PolicyTransition::IpRangeHoneypot(signals) => PolicyMatch::new(
+            EscalationLevelId::L10DenyTemp,
+            DetectionId::IpRangeHoneypot,
+            signals,
+        ),
+        PolicyTransition::IpRangeMaze(signals) => PolicyMatch::new(
+            EscalationLevelId::L7DeceptionExplicit,
+            DetectionId::IpRangeMaze,
+            signals,
+        ),
+        PolicyTransition::IpRangeTarpit(signals) => PolicyMatch::new(
+            EscalationLevelId::L9CostImposition,
+            DetectionId::IpRangeTarpit,
+            signals,
         ),
     }
 }

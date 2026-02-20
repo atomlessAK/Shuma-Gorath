@@ -244,7 +244,7 @@ async function updateAdminConfig(request, patch, ip = "127.0.0.1") {
   return payload && payload.config ? payload.config : {};
 }
 
-async function submitConfigSave(page, button) {
+async function submitConfigSave(page, button = page.locator("#save-config-all")) {
   await expect(button).toBeEnabled();
   const [response] = await Promise.all([
     page.waitForResponse((resp) => (
@@ -362,7 +362,8 @@ test("not-a-bot browser lifecycle supports pass flow and rejects replayed submit
     await page.mouse.move(40, 40);
     await page.mouse.move(96, 64);
     await page.keyboard.press("Tab");
-    await page.waitForTimeout(800);
+    // Not-a-bot submit enforces a 1s minimum latency window; keep margin to avoid second-boundary flakes.
+    await page.waitForTimeout(2200);
 
     const submitRequestPromise = page.waitForRequest((req) =>
       req.method() === "POST" && req.url().includes("/challenge/not-a-bot-checkbox")
@@ -789,7 +790,7 @@ test("status tab resolves fail mode without requiring monitoring bootstrap", asy
   await expect(failModeCard.locator(".status-value")).not.toHaveText("UNKNOWN");
   await expect(page.locator("#status-items .status-item h3", { hasText: "Challenge Puzzle" })).toHaveCount(1);
   await expect(page.locator("#status-items .status-item h3", { hasText: "Challenge Not-A-Bot" })).toHaveCount(1);
-  await expect(page.locator("#status-items .status-item h3", { hasText: "Challenge" })).toHaveCount(0);
+  await expect(page.locator("#status-items .status-item h3", { hasText: /^Challenge$/ })).toHaveCount(0);
 
   const statusVarTables = page.locator("#status-vars-groups .status-vars-table");
   expect(await statusVarTables.count()).toBeGreaterThan(1);
@@ -842,37 +843,19 @@ test("ban form enforces IP validity and submit state", async ({ page }) => {
   await expect(banButton).toBeEnabled();
 });
 
-test("maze and duration save buttons use shared dirty-state behavior", async ({ page }) => {
+test("config save-all button reflects shared dirty-state behavior", async ({ page }) => {
   await openDashboard(page);
   await openTab(page, "config", { waitForReady: true });
 
-  const mazeSave = page.locator("#save-maze-config");
-  const durationsSave = page.locator("#save-durations-btn");
-  const powSave = page.locator("#save-pow-config");
-  const rateLimitSave = page.locator("#save-rate-limit-config");
+  const configSave = page.locator("#save-config-all");
   const testModeToggle = page.locator("#test-mode-toggle");
   const testModeToggleSwitch = page.locator("label.toggle-switch[for='test-mode-toggle']");
-  const jsRequiredSave = page.locator("#save-js-required-config");
-  const honeypotSave = page.locator("#save-honeypot-config");
   const honeypotEnabledToggle = page.locator("#honeypot-enabled-toggle");
   const honeypotEnabledSwitch = page.locator("label.toggle-switch[for='honeypot-enabled-toggle']");
-  const browserPolicySave = page.locator("#save-browser-policy-config");
-  const whitelistSave = page.locator("#save-whitelist-config");
-  const edgeModeSave = page.locator("#save-edge-integration-mode-config");
   const edgeModeSelect = page.locator("#edge-integration-mode-select");
-  const advancedSave = page.locator("#save-advanced-config");
   const advancedField = page.locator("#advanced-config-json");
 
-  await expect(mazeSave).toBeDisabled();
-  await expect(durationsSave).toBeDisabled();
-  await expect(powSave).toBeDisabled();
-  await expect(rateLimitSave).toBeDisabled();
-  await expect(jsRequiredSave).toBeDisabled();
-  await expect(honeypotSave).toBeDisabled();
-  await expect(browserPolicySave).toBeDisabled();
-  await expect(whitelistSave).toBeDisabled();
-  await expect(edgeModeSave).toBeDisabled();
-  await expect(advancedSave).toBeDisabled();
+  await expect(configSave).toBeHidden();
 
   const mazeThreshold = page.locator("#maze-threshold");
   if (!(await mazeThreshold.isVisible())) {
@@ -883,60 +866,80 @@ test("maze and duration save buttons use shared dirty-state behavior", async ({ 
   const nextMazeThreshold = String(Math.min(500, Number(initialMazeThreshold || "50") + 1));
   await mazeThreshold.fill(nextMazeThreshold);
   await mazeThreshold.dispatchEvent("input");
-  await expect(mazeSave).toBeEnabled();
+  await expect(configSave).toBeEnabled();
+  if (await testModeToggleSwitch.isVisible()) {
+    const testModeInitial = await testModeToggle.isChecked();
+    if (await testModeToggle.isEnabled()) {
+      await Promise.all([
+        page.waitForResponse((resp) => (
+          resp.url().includes("/admin/config") &&
+          resp.request().method() === "POST" &&
+          resp.status() >= 200 &&
+          resp.status() < 300
+        )),
+        testModeToggleSwitch.click()
+      ]);
+      await expect(configSave).toBeEnabled();
+      await expect(mazeThreshold).toHaveValue(nextMazeThreshold);
+      if (testModeInitial) {
+        await expect(testModeToggle).not.toBeChecked();
+      } else {
+        await expect(testModeToggle).toBeChecked();
+      }
+      if (testModeInitial !== await testModeToggle.isChecked()) {
+        await Promise.all([
+          page.waitForResponse((resp) => (
+            resp.url().includes("/admin/config") &&
+            resp.request().method() === "POST" &&
+            resp.status() >= 200 &&
+            resp.status() < 300
+          )),
+          testModeToggleSwitch.click()
+        ]);
+        if (testModeInitial) {
+          await expect(testModeToggle).toBeChecked();
+        } else {
+          await expect(testModeToggle).not.toBeChecked();
+        }
+      }
+    } else {
+      await expect(testModeToggle).toBeDisabled();
+    }
+  }
   await mazeThreshold.fill(initialMazeThreshold);
   await mazeThreshold.dispatchEvent("input");
-  await expect(mazeSave).toBeDisabled();
+  await expect(configSave).toBeHidden();
 
   const durationField = page.locator("#dur-cdp-minutes");
   const initialDuration = await durationField.inputValue();
   const nextDuration = String((Number(initialDuration || "0") + 1) % 60);
   await durationField.fill(nextDuration);
   await durationField.dispatchEvent("input");
-  await expect(durationsSave).toBeEnabled();
+  await expect(configSave).toBeEnabled();
   await durationField.fill(initialDuration);
   await durationField.dispatchEvent("input");
-  await expect(durationsSave).toBeDisabled();
+  await expect(configSave).toBeHidden();
 
   const rateLimitField = page.locator("#rate-limit-threshold");
   const initialRateLimit = await rateLimitField.inputValue();
   const nextRateLimit = String(Math.max(1, Number(initialRateLimit || "80") + 1));
   await rateLimitField.fill(nextRateLimit);
   await rateLimitField.dispatchEvent("input");
-  await expect(rateLimitSave).toBeEnabled();
+  await expect(configSave).toBeEnabled();
   await rateLimitField.fill(initialRateLimit);
   await rateLimitField.dispatchEvent("input");
-  await expect(rateLimitSave).toBeDisabled();
+  await expect(configSave).toBeHidden();
 
   const jsRequiredToggle = page.locator("#js-required-enforced-toggle");
-  if (await testModeToggleSwitch.isVisible()) {
-    const testModeInitial = await testModeToggle.isChecked();
-    if (await testModeToggle.isEnabled()) {
-      await testModeToggleSwitch.click();
-      if (testModeInitial) {
-        await expect(testModeToggle).not.toBeChecked();
-      } else {
-        await expect(testModeToggle).toBeChecked();
-      }
-      await testModeToggleSwitch.click();
-      if (testModeInitial) {
-        await expect(testModeToggle).toBeChecked();
-      } else {
-        await expect(testModeToggle).not.toBeChecked();
-      }
-    } else {
-      await expect(testModeToggle).toBeDisabled();
-    }
-  }
 
   if (await jsRequiredToggle.isVisible()) {
     const jsRequiredInitial = await jsRequiredToggle.isChecked();
     await jsRequiredToggle.click();
-    await expect(jsRequiredSave).toBeEnabled();
+    await expect(configSave).toBeEnabled();
     if (jsRequiredInitial !== await jsRequiredToggle.isChecked()) {
       await jsRequiredToggle.click();
     }
-    await expect(jsRequiredSave).toBeDisabled();
+    await expect(configSave).toBeHidden();
   }
 
   const powToggle = page.locator("#pow-enabled-toggle");
@@ -944,55 +947,55 @@ test("maze and duration save buttons use shared dirty-state behavior", async ({ 
   if (await powToggleSwitch.isVisible() && await powToggle.isEnabled()) {
     const powInitial = await powToggle.isChecked();
     await powToggleSwitch.click();
-    await expect(powSave).toBeEnabled();
+    await expect(configSave).toBeEnabled();
     if (powInitial !== await powToggle.isChecked()) {
       await powToggleSwitch.click();
     }
-    await expect(powSave).toBeDisabled();
+    await expect(configSave).toBeHidden();
   }
 
   const honeypotField = page.locator("#honeypot-paths");
   const initialHoneypots = await honeypotField.inputValue();
   await honeypotField.fill(`${initialHoneypots}\n/trap-e2e`);
   await honeypotField.dispatchEvent("input");
-  await expect(honeypotSave).toBeEnabled();
+  await expect(configSave).toBeEnabled();
   await honeypotField.fill(initialHoneypots);
   await honeypotField.dispatchEvent("input");
-  await expect(honeypotSave).toBeDisabled();
+  await expect(configSave).toBeHidden();
   if (await honeypotEnabledSwitch.isVisible() && await honeypotEnabledToggle.isEnabled()) {
     const initialHoneypotEnabled = await honeypotEnabledToggle.isChecked();
     await honeypotEnabledSwitch.click();
-    await expect(honeypotSave).toBeEnabled();
+    await expect(configSave).toBeEnabled();
     if (initialHoneypotEnabled !== await honeypotEnabledToggle.isChecked()) {
       await honeypotEnabledSwitch.click();
     }
-    await expect(honeypotSave).toBeDisabled();
+    await expect(configSave).toBeHidden();
   }
 
   const browserBlockField = page.locator("#browser-block-rules");
   const initialBrowserBlock = await browserBlockField.inputValue();
   await browserBlockField.fill(`${initialBrowserBlock}\nEdge,120`);
   await browserBlockField.dispatchEvent("input");
-  await expect(browserPolicySave).toBeEnabled();
+  await expect(configSave).toBeEnabled();
   await browserBlockField.fill(initialBrowserBlock);
   await browserBlockField.dispatchEvent("input");
-  await expect(browserPolicySave).toBeDisabled();
+  await expect(configSave).toBeHidden();
 
   const networkWhitelistField = page.locator("#network-whitelist");
   const initialNetworkWhitelist = await networkWhitelistField.inputValue();
   await networkWhitelistField.fill(`${initialNetworkWhitelist}\n198.51.100.0/24`);
   await networkWhitelistField.dispatchEvent("input");
-  await expect(whitelistSave).toBeEnabled();
+  await expect(configSave).toBeEnabled();
   await networkWhitelistField.fill(initialNetworkWhitelist);
   await networkWhitelistField.dispatchEvent("input");
-  await expect(whitelistSave).toBeDisabled();
+  await expect(configSave).toBeHidden();
 
   const initialEdgeMode = await edgeModeSelect.inputValue();
   const nextEdgeMode = initialEdgeMode === "off" ? "advisory" : "off";
   await edgeModeSelect.selectOption(nextEdgeMode);
-  await expect(edgeModeSave).toBeEnabled();
+  await expect(configSave).toBeEnabled();
   await edgeModeSelect.selectOption(initialEdgeMode);
-  await expect(edgeModeSave).toBeDisabled();
+  await expect(configSave).toBeHidden();
 
   const initialAdvanced = await advancedField.inputValue();
   let parsedAdvanced;
@@ -1007,39 +1010,36 @@ test("maze and duration save buttons use shared dirty-state behavior", async ({ 
   };
   await advancedField.fill(JSON.stringify(nextAdvanced, null, 2));
   await advancedField.dispatchEvent("input");
-  await expect(advancedSave).toBeEnabled();
+  await expect(configSave).toBeEnabled();
   await advancedField.fill("{invalid");
   await advancedField.dispatchEvent("input");
-  await expect(advancedSave).toBeDisabled();
+  await expect(configSave).toBeDisabled();
   await advancedField.fill(initialAdvanced);
   await advancedField.dispatchEvent("input");
-  await expect(advancedSave).toBeDisabled();
+  await expect(configSave).toBeHidden();
 
   const challengeTransformField = page.locator("#challenge-puzzle-transform-count");
   const challengeEnabledToggle = page.locator("#challenge-puzzle-enabled-toggle");
   const challengeEnabledSwitch = page.locator("label.toggle-switch[for='challenge-puzzle-enabled-toggle']");
-  const challengeTransformSave = page.locator("#save-challenge-puzzle-config");
   if (await challengeTransformField.isEnabled()) {
     const initialTransformCount = await challengeTransformField.inputValue();
     const nextTransformCount = String(Math.min(8, Number(initialTransformCount || "6") + 1));
     await challengeTransformField.fill(nextTransformCount);
     await challengeTransformField.dispatchEvent("input");
-    await expect(challengeTransformSave).toBeEnabled();
+    await expect(configSave).toBeEnabled();
     await challengeTransformField.fill(initialTransformCount);
     await challengeTransformField.dispatchEvent("input");
-    await expect(challengeTransformSave).toBeDisabled();
+    await expect(configSave).toBeHidden();
 
     if (await challengeEnabledSwitch.isVisible() && await challengeEnabledToggle.isEnabled()) {
       const initialEnabled = await challengeEnabledToggle.isChecked();
       await challengeEnabledSwitch.click();
-      await expect(challengeTransformSave).toBeEnabled();
+      await expect(configSave).toBeEnabled();
       if (initialEnabled !== await challengeEnabledToggle.isChecked()) {
         await challengeEnabledSwitch.click();
       }
-      await expect(challengeTransformSave).toBeDisabled();
+      await expect(configSave).toBeHidden();
     }
-  } else {
-    await expect(challengeTransformSave).toBeDisabled();
   }
 });
 
@@ -1145,11 +1145,11 @@ test("route remount preserves keyboard navigation, ban/unban, config save, and p
 
   await openTab(page, "config");
   const jsRequiredToggle = page.locator("#js-required-enforced-toggle");
-  const jsRequiredSave = page.locator("#save-js-required-config");
+  const configSave = page.locator("#save-config-all");
   if (await jsRequiredToggle.isVisible() && await jsRequiredToggle.isEnabled()) {
     const initial = await jsRequiredToggle.isChecked();
     await jsRequiredToggle.click();
-    await expect(jsRequiredSave).toBeEnabled();
+    await expect(configSave).toBeEnabled();
 
     await Promise.all([
       page.waitForResponse((resp) => (
@@ -1158,13 +1158,13 @@ test("route remount preserves keyboard navigation, ban/unban, config save, and p
         resp.status() >= 200 &&
         resp.status() < 300
       )),
-      jsRequiredSave.click()
+      configSave.click()
     ]);
-    await expect(jsRequiredSave).toBeDisabled();
+    await expect(configSave).toBeHidden();
 
     if (initial !== await jsRequiredToggle.isChecked()) {
       await jsRequiredToggle.click();
-      await expect(jsRequiredSave).toBeEnabled();
+      await expect(configSave).toBeEnabled();
       await Promise.all([
         page.waitForResponse((resp) => (
           resp.url().includes("/admin/config") &&
@@ -1172,9 +1172,9 @@ test("route remount preserves keyboard navigation, ban/unban, config save, and p
           resp.status() >= 200 &&
           resp.status() < 300
         )),
-        jsRequiredSave.click()
+        configSave.click()
       ]);
-      await expect(jsRequiredSave).toBeDisabled();
+      await expect(configSave).toBeHidden();
     }
   }
 
@@ -1527,15 +1527,15 @@ test("config save roundtrip clears dirty state after successful write", async ({
   await openTab(page, "config");
 
   const jsRequiredToggle = page.locator("#js-required-enforced-toggle");
-  const jsRequiredSave = page.locator("#save-js-required-config");
+  const configSave = page.locator("#save-config-all");
   if (!(await jsRequiredToggle.isVisible()) || !(await jsRequiredToggle.isEnabled())) {
-    await expect(jsRequiredSave).toBeDisabled();
+    await expect(configSave).toBeHidden();
     return;
   }
 
   const initial = await jsRequiredToggle.isChecked();
   await jsRequiredToggle.click();
-  await expect(jsRequiredSave).toBeEnabled();
+  await expect(configSave).toBeEnabled();
 
   await Promise.all([
     page.waitForResponse((resp) => (
@@ -1544,14 +1544,14 @@ test("config save roundtrip clears dirty state after successful write", async ({
       resp.status() >= 200 &&
       resp.status() < 300
     )),
-    jsRequiredSave.click()
+    configSave.click()
   ]);
-  await expect(page.locator("#admin-msg")).toContainText("JS Required setting saved");
-  await expect(jsRequiredSave).toBeDisabled();
+  await expect(page.locator("#admin-msg")).toContainText(/saved/i);
+  await expect(configSave).toBeHidden();
 
   if (initial !== await jsRequiredToggle.isChecked()) {
     await jsRequiredToggle.click();
-    await expect(jsRequiredSave).toBeEnabled();
+    await expect(configSave).toBeEnabled();
     await Promise.all([
       page.waitForResponse((resp) => (
         resp.url().includes("/admin/config") &&
@@ -1559,13 +1559,13 @@ test("config save roundtrip clears dirty state after successful write", async ({
         resp.status() >= 200 &&
         resp.status() < 300
       )),
-      jsRequiredSave.click()
+      configSave.click()
     ]);
-    await expect(jsRequiredSave).toBeDisabled();
+    await expect(configSave).toBeHidden();
   }
 });
 
-test("config save flows cover robots, AI policy, GEO, CDP, and botness controls", async ({ page }) => {
+test("config save-all flows cover robots, AI policy, GEO, CDP, and botness controls", async ({ page }) => {
   await openDashboard(page);
   await openTab(page, "config");
 
@@ -1574,31 +1574,31 @@ test("config save flows cover robots, AI policy, GEO, CDP, and botness controls"
     return;
   }
 
-  const saveRobots = page.locator("#save-robots-config");
+  const configSave = page.locator("#save-config-all");
+  await expect(configSave).toBeHidden();
+
   const robotsCrawlDelay = page.locator("#robots-crawl-delay");
   const robotsDelayInitial = await robotsCrawlDelay.inputValue();
   const robotsDelayNext = String(Math.min(60, Number(robotsDelayInitial || "2") + 1));
   await robotsCrawlDelay.fill(robotsDelayNext);
   await robotsCrawlDelay.dispatchEvent("input");
-  await submitConfigSave(page, saveRobots);
+  await submitConfigSave(page, configSave);
   await robotsCrawlDelay.fill(robotsDelayInitial);
   await robotsCrawlDelay.dispatchEvent("input");
-  await submitConfigSave(page, saveRobots);
+  await submitConfigSave(page, configSave);
 
-  const saveAiPolicy = page.locator("#save-ai-policy-config");
   const aiToggle = page.locator("#robots-block-training-toggle");
   const aiToggleSwitch = page.locator("label.toggle-switch[for='robots-block-training-toggle']");
   if (await aiToggleSwitch.isVisible() && await aiToggle.isEnabled()) {
     const aiInitial = await aiToggle.isChecked();
     await aiToggleSwitch.click();
-    await submitConfigSave(page, saveAiPolicy);
+    await submitConfigSave(page, configSave);
     if (aiInitial !== await aiToggle.isChecked()) {
       await aiToggleSwitch.click();
-      await submitConfigSave(page, saveAiPolicy);
+      await submitConfigSave(page, configSave);
     }
   }
 
-  const saveGeoScoring = page.locator("#save-geo-scoring-config");
   const geoRiskList = page.locator("#geo-risk-list");
   if (await geoRiskList.isVisible() && await geoRiskList.isEnabled()) {
     const geoRiskInitial = await geoRiskList.inputValue();
@@ -1607,13 +1607,12 @@ test("config save flows cover robots, AI policy, GEO, CDP, and botness controls"
       : (geoRiskInitial ? `${geoRiskInitial},CA` : "CA");
     await geoRiskList.fill(geoRiskNext);
     await geoRiskList.dispatchEvent("input");
-    await submitConfigSave(page, saveGeoScoring);
+    await submitConfigSave(page, configSave);
     await geoRiskList.fill(geoRiskInitial);
     await geoRiskList.dispatchEvent("input");
-    await submitConfigSave(page, saveGeoScoring);
+    await submitConfigSave(page, configSave);
   }
 
-  const saveGeoRouting = page.locator("#save-geo-routing-config");
   const geoAllowList = page.locator("#geo-allow-list");
   if (await geoAllowList.isVisible() && await geoAllowList.isEnabled()) {
     const geoAllowInitial = await geoAllowList.inputValue();
@@ -1622,13 +1621,12 @@ test("config save flows cover robots, AI policy, GEO, CDP, and botness controls"
       : (geoAllowInitial ? `${geoAllowInitial},GB` : "GB");
     await geoAllowList.fill(geoAllowNext);
     await geoAllowList.dispatchEvent("input");
-    await submitConfigSave(page, saveGeoRouting);
+    await submitConfigSave(page, configSave);
     await geoAllowList.fill(geoAllowInitial);
     await geoAllowList.dispatchEvent("input");
-    await submitConfigSave(page, saveGeoRouting);
+    await submitConfigSave(page, configSave);
   }
 
-  const saveCdp = page.locator("#save-cdp-config");
   const cdpThreshold = page.locator("#cdp-threshold-slider");
   const cdpInitial = await cdpThreshold.inputValue();
   const cdpNext = Number(cdpInitial || "0.6") >= 0.9
@@ -1636,12 +1634,13 @@ test("config save flows cover robots, AI policy, GEO, CDP, and botness controls"
     : (Number(cdpInitial || "0.6") + 0.1).toFixed(1);
   await cdpThreshold.fill(cdpNext);
   await cdpThreshold.dispatchEvent("input");
-  await submitConfigSave(page, saveCdp);
+  await submitConfigSave(page, configSave);
   await cdpThreshold.fill(cdpInitial);
   await cdpThreshold.dispatchEvent("input");
-  await submitConfigSave(page, saveCdp);
+  await submitConfigSave(page, configSave);
 
-  const saveBotness = page.locator("#save-botness-config");
+  await openTab(page, "tuning");
+  const tuningSave = page.locator("#save-tuning-all");
   const botnessWeight = page.locator("#weight-js-required");
   if (await botnessWeight.isVisible() && await botnessWeight.isEnabled()) {
     const botnessInitial = await botnessWeight.inputValue();
@@ -1650,10 +1649,10 @@ test("config save flows cover robots, AI policy, GEO, CDP, and botness controls"
       : String(Number(botnessInitial || "1") + 1);
     await botnessWeight.fill(nextWeight);
     await botnessWeight.dispatchEvent("input");
-    await submitConfigSave(page, saveBotness);
+    await submitConfigSave(page, tuningSave);
     await botnessWeight.fill(botnessInitial);
     await botnessWeight.dispatchEvent("input");
-    await submitConfigSave(page, saveBotness);
+    await submitConfigSave(page, tuningSave);
   }
 });
 

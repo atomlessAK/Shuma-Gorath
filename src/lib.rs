@@ -998,6 +998,7 @@ pub fn handle_bot_defence_impl(req: &Request) -> Response {
         );
         return Response::new(200, "OK (whitelisted)");
     }
+    let ip_range_evaluation = crate::signals::ip_range_policy::evaluate(&cfg, &ip);
     if let Some(response) = runtime::test_mode::maybe_handle_test_mode(
         store,
         &cfg,
@@ -1005,6 +1006,7 @@ pub fn handle_bot_defence_impl(req: &Request) -> Response {
         &ip,
         ua,
         path,
+        &ip_range_evaluation,
         geo_assessment.route,
         || js::needs_js_verification(req, store, site_id, &ip),
         || {
@@ -1014,6 +1016,18 @@ pub fn handle_bot_defence_impl(req: &Request) -> Response {
                 None,
             )
         },
+    ) {
+        return response;
+    }
+    if let Some(response) = runtime::policy_pipeline::maybe_handle_ip_range_policy(
+        req,
+        store,
+        &cfg,
+        &provider_registry,
+        site_id,
+        &ip,
+        path,
+        &ip_range_evaluation,
     ) {
         return response;
     }

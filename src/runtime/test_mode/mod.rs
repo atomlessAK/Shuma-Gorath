@@ -29,6 +29,7 @@ pub(crate) fn maybe_handle_test_mode<S, F, G>(
     ip: &str,
     ua: &str,
     path: &str,
+    ip_range_evaluation: &crate::signals::ip_range_policy::Evaluation,
     geo_route: crate::signals::geo::GeoPolicyRoute,
     needs_js_verification: F,
     record_test_mode_action: G,
@@ -44,6 +45,74 @@ where
 
     if path.starts_with("/pow") {
         return Some(Response::new(200, "TEST MODE: PoW bypassed"));
+    }
+
+    match ip_range_evaluation {
+        crate::signals::ip_range_policy::Evaluation::NoMatch => {}
+        crate::signals::ip_range_policy::Evaluation::EmergencyAllowlisted { matched_cidr } => {
+            crate::log_line(&format!(
+                "[TEST MODE] Would allow IP {ip} via IP range emergency allowlist ({matched_cidr})"
+            ));
+            log_test_mode_event(
+                store,
+                crate::admin::EventType::AdminAction,
+                ip,
+                "ip_range_emergency_allowlist [TEST MODE]",
+                format!("would_allow matched_cidr={}", matched_cidr).as_str(),
+                &record_test_mode_action,
+            );
+            return Some(Response::new(
+                200,
+                "TEST MODE: Would allow (ip range emergency allowlist)",
+            ));
+        }
+        crate::signals::ip_range_policy::Evaluation::Matched(details) => {
+            let source = match details.source {
+                crate::signals::ip_range_policy::MatchSource::CustomRule => "custom",
+                crate::signals::ip_range_policy::MatchSource::ManagedSet => "managed",
+            };
+            crate::log_line(&format!(
+                "[TEST MODE] Would apply IP range action {} for IP {} (source={} source_id={} cidr={})",
+                details.action.as_str(),
+                ip,
+                source,
+                details.source_id,
+                details.matched_cidr
+            ));
+            let event_type = match details.action {
+                crate::config::IpRangePolicyAction::Maze
+                | crate::config::IpRangePolicyAction::Tarpit
+                | crate::config::IpRangePolicyAction::Redirect308 => crate::admin::EventType::Challenge,
+                crate::config::IpRangePolicyAction::Forbidden403
+                | crate::config::IpRangePolicyAction::CustomMessage
+                | crate::config::IpRangePolicyAction::DropConnection
+                | crate::config::IpRangePolicyAction::RateLimit
+                | crate::config::IpRangePolicyAction::Honeypot => crate::admin::EventType::Block,
+            };
+            log_test_mode_event(
+                store,
+                event_type,
+                ip,
+                "ip_range_policy [TEST MODE]",
+                format!(
+                    "would_apply source={} source_id={} action={} cidr={}",
+                    source,
+                    details.source_id,
+                    details.action.as_str(),
+                    details.matched_cidr
+                )
+                .as_str(),
+                &record_test_mode_action,
+            );
+            return Some(Response::new(
+                200,
+                format!(
+                    "TEST MODE: Would apply IP range action ({})",
+                    details.action.as_str()
+                )
+                .as_str(),
+            ));
+        }
     }
 
     if cfg.honeypot_enabled && crate::enforcement::honeypot::is_honeypot(path, &cfg.honeypots) {

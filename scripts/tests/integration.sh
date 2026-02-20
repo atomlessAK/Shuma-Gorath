@@ -182,6 +182,12 @@ curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST \
   -d '{"whitelist":[],"path_whitelist":[]}' \
   "$BASE_URL/admin/config" > /dev/null || true
 
+info "Resetting IP-range policy to defaults..."
+curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"ip_range_policy_mode":"off","ip_range_emergency_allowlist":[],"ip_range_custom_rules":[],"ip_range_managed_policies":[]}' \
+  "$BASE_URL/admin/config" > /dev/null || true
+
 info "Clearing bans for integration test IPs..."
 for ip in "${TEST_CLEANUP_IPS[@]}"; do
   curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST \
@@ -479,7 +485,7 @@ if [[ -z "$not_a_bot_seed" ]]; then
 else
   not_a_bot_headers=$(mktemp)
   not_a_bot_body=$(mktemp)
-  not_a_bot_telemetry='{"has_pointer":true,"pointer_move_count":42,"pointer_path_length":560.0,"pointer_direction_changes":18,"down_up_ms":220,"focus_changes":1,"visibility_changes":0,"interaction_elapsed_ms":1800,"keyboard_used":false,"touch_used":false,"events_order_valid":true}'
+  not_a_bot_telemetry='{"has_pointer":true,"pointer_move_count":42,"pointer_path_length":560.0,"pointer_direction_changes":18,"down_up_ms":220,"focus_changes":1,"visibility_changes":0,"interaction_elapsed_ms":1800,"keyboard_used":false,"touch_used":false,"events_order_valid":true,"activation_method":"pointer","activation_trusted":true,"activation_count":1,"control_focused":true}'
   # Sequence timing guardrail: use >=2s to avoid second-boundary flakes.
   sleep 2
   not_a_bot_status=$(curl -s -D "$not_a_bot_headers" -o "$not_a_bot_body" -w "%{http_code}" \
@@ -708,7 +714,93 @@ else
   fi
 fi
 
-# Test 16: Prometheus metrics endpoint
+# Test 16: IP-range policy routing and precedence
+if [[ -z "${SHUMA_FORWARDED_IP_SECRET:-}" ]]; then
+  info "Skipping IP-range policy tests (SHUMA_FORWARDED_IP_SECRET is not set)"
+else
+  info "Testing IP-range policy advisory mode..."
+  advisory_cfg=$(curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST -H "Content-Type: application/json" \
+    -d '{"ip_range_policy_mode":"advisory","ip_range_custom_rules":[{"id":"advisory_block","enabled":true,"cidrs":["10.0.0.250/32"],"action":"forbidden_403"}]}' \
+    "$BASE_URL/admin/config")
+  if ! echo "$advisory_cfg" | grep -q '"ip_range_policy_mode":"advisory"'; then
+    fail "Failed to apply advisory IP-range policy config"
+    echo -e "${YELLOW}DEBUG advisory ip-range config:${NC} $advisory_cfg"
+  else
+    advisory_resp=$(curl -s -w "HTTPSTATUS:%{http_code}" "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 10.0.0.250" "$BASE_URL/")
+    advisory_status=$(echo "$advisory_resp" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+    if [[ "$advisory_status" == "200" ]]; then
+      pass "IP-range advisory mode logs match without blocking"
+    else
+      fail "IP-range advisory mode unexpectedly blocked request"
+      echo -e "${YELLOW}DEBUG advisory status:${NC} $advisory_status"
+    fi
+  fi
+
+  info "Testing IP-range policy enforce mode block action..."
+  enforce_cfg=$(curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST -H "Content-Type: application/json" \
+    -d '{"ip_range_policy_mode":"enforce","ip_range_custom_rules":[{"id":"enforce_block","enabled":true,"cidrs":["10.0.0.250/32"],"action":"forbidden_403"}]}' \
+    "$BASE_URL/admin/config")
+  if ! echo "$enforce_cfg" | grep -q '"ip_range_policy_mode":"enforce"'; then
+    fail "Failed to apply enforce IP-range policy config"
+    echo -e "${YELLOW}DEBUG enforce ip-range config:${NC} $enforce_cfg"
+  else
+    enforce_resp=$(curl -s -w "HTTPSTATUS:%{http_code}" "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 10.0.0.250" "$BASE_URL/")
+    enforce_status=$(echo "$enforce_resp" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+    enforce_body=$(echo "$enforce_resp" | sed -e 's/HTTPSTATUS:.*//')
+    if [[ "$enforce_status" == "403" ]] && echo "$enforce_body" | grep -qE 'Access Restricted|Access Blocked'; then
+      pass "IP-range enforce mode blocks matched custom CIDR"
+    else
+      fail "IP-range enforce mode did not block matched custom CIDR"
+      echo -e "${YELLOW}DEBUG enforce status:${NC} $enforce_status"
+      echo -e "${YELLOW}DEBUG enforce body:${NC} $enforce_body"
+    fi
+  fi
+
+  info "Testing IP-range emergency allowlist precedence..."
+  allowlist_cfg=$(curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST -H "Content-Type: application/json" \
+    -d '{"ip_range_policy_mode":"enforce","ip_range_emergency_allowlist":["10.0.0.250/32"],"ip_range_custom_rules":[{"id":"enforce_block","enabled":true,"cidrs":["10.0.0.250/32"],"action":"forbidden_403"}]}' \
+    "$BASE_URL/admin/config")
+  if ! echo "$allowlist_cfg" | grep -q '"ip_range_emergency_allowlist":\["10.0.0.250/32"\]'; then
+    fail "Failed to apply emergency allowlist for IP-range policy"
+    echo -e "${YELLOW}DEBUG allowlist ip-range config:${NC} $allowlist_cfg"
+  else
+    allowlisted_resp=$(curl -s -w "HTTPSTATUS:%{http_code}" "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 10.0.0.250" "$BASE_URL/")
+    allowlisted_status=$(echo "$allowlisted_resp" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+    if [[ "$allowlisted_status" == "200" ]]; then
+      pass "IP-range emergency allowlist overrides custom blocking rule"
+    else
+      fail "IP-range emergency allowlist did not override custom blocking rule"
+      echo -e "${YELLOW}DEBUG allowlisted status:${NC} $allowlisted_status"
+    fi
+  fi
+
+  info "Testing managed GitHub Copilot set routing..."
+  managed_cfg=$(curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST -H "Content-Type: application/json" \
+    -d '{"ip_range_policy_mode":"enforce","ip_range_emergency_allowlist":[],"ip_range_custom_rules":[],"ip_range_managed_policies":[{"set_id":"github_copilot","enabled":true,"action":"forbidden_403"}]}' \
+    "$BASE_URL/admin/config")
+  if ! echo "$managed_cfg" | grep -q '"set_id":"github_copilot"'; then
+    fail "Failed to apply managed GitHub Copilot IP-range policy config"
+    echo -e "${YELLOW}DEBUG managed ip-range config:${NC} $managed_cfg"
+  else
+    managed_resp=$(curl -s -w "HTTPSTATUS:%{http_code}" "${FORWARDED_SECRET_HEADER[@]}" -H "X-Forwarded-For: 20.85.130.105" "$BASE_URL/")
+    managed_status=$(echo "$managed_resp" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+    managed_body=$(echo "$managed_resp" | sed -e 's/HTTPSTATUS:.*//')
+    if [[ "$managed_status" == "403" ]] && echo "$managed_body" | grep -qE 'Access Restricted|Access Blocked'; then
+      pass "Managed GitHub Copilot CIDR policy blocks known managed-set IP"
+    else
+      fail "Managed GitHub Copilot CIDR policy did not block known managed-set IP"
+      echo -e "${YELLOW}DEBUG managed status:${NC} $managed_status"
+      echo -e "${YELLOW}DEBUG managed body:${NC} $managed_body"
+    fi
+  fi
+
+  info "Resetting IP-range policy lists after routing tests..."
+  curl -s "${ADMIN_REQUEST_HEADERS[@]}" -X POST -H "Content-Type: application/json" \
+    -d '{"ip_range_policy_mode":"off","ip_range_emergency_allowlist":[],"ip_range_custom_rules":[],"ip_range_managed_policies":[]}' \
+    "$BASE_URL/admin/config" > /dev/null || true
+fi
+
+# Test 17: Prometheus metrics endpoint
 info "Testing GET /metrics (Prometheus format)..."
 metrics_resp=$(curl -s "${FORWARDED_SECRET_HEADER[@]}" "$BASE_URL/metrics")
 if echo "$metrics_resp" | grep -q 'bot_defence_requests_total'; then

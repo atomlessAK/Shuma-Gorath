@@ -1,8 +1,6 @@
 <script>
   import { onDestroy, onMount } from 'svelte';
-  import IpBansTab from '$lib/components/dashboard/IpBansTab.svelte';
   import MonitoringTab from '$lib/components/dashboard/MonitoringTab.svelte';
-  import StatusTab from '$lib/components/dashboard/StatusTab.svelte';
   import {
     buildDashboardLoginPath,
     dashboardIndexPath,
@@ -65,6 +63,8 @@
   let autoRefreshEnabled = false;
   let adminMessageText = '';
   let adminMessageKind = 'info';
+  let IpBansTabComponent = null;
+  let StatusTabComponent = null;
   let ConfigTabComponent = null;
   let TuningTabComponent = null;
   const tabLinks = {};
@@ -189,10 +189,19 @@
     });
 
     try {
-      const [{ default: loadedConfigTab }, { default: loadedTuningTab }] = await Promise.all([
+      const [
+        { default: loadedIpBansTab },
+        { default: loadedStatusTab },
+        { default: loadedConfigTab },
+        { default: loadedTuningTab }
+      ] = await Promise.all([
+        import('$lib/components/dashboard/IpBansTab.svelte'),
+        import('$lib/components/dashboard/StatusTab.svelte'),
         import('$lib/components/dashboard/ConfigTab.svelte'),
         import('$lib/components/dashboard/TuningTab.svelte')
       ]);
+      IpBansTabComponent = loadedIpBansTab;
+      StatusTabComponent = loadedStatusTab;
       ConfigTabComponent = loadedConfigTab;
       TuningTabComponent = loadedTuningTab;
 
@@ -275,10 +284,13 @@
     const successMessage = options && typeof options.successMessage === 'string'
       ? options.successMessage
       : 'Configuration saved';
+    const shouldRefresh = options?.refresh !== false;
     setAdminMessage('Saving configuration...', 'info');
     try {
       const nextConfig = await updateDashboardConfig(patch || {});
-      await routeController.refreshTab(activeTabKey, 'config-save');
+      if (shouldRefresh) {
+        await routeController.refreshTab(activeTabKey, 'config-save');
+      }
       setAdminMessage(successMessage, 'success');
       return nextConfig;
     } catch (error) {
@@ -433,6 +445,7 @@
     cdpSnapshot={snapshots.cdp}
     cdpEventsSnapshot={snapshots.cdpEvents}
     monitoringSnapshot={snapshots.monitoring}
+    configSnapshot={snapshots.config}
     onFetchEventsRange={onFetchEventsRange}
   />
 
@@ -443,22 +456,50 @@
     aria-hidden={activeTabKey === 'monitoring' ? 'true' : 'false'}
   >
     <div class="admin-groups">
-      <IpBansTab
-        managed={true}
-        isActive={activeTabKey === 'ip-bans'}
-        tabStatus={tabStatus['ip-bans'] || {}}
-        bansSnapshot={snapshots.bans}
-        configSnapshot={snapshots.config}
-        onBan={onBan}
-        onUnban={onUnban}
-      />
-      <StatusTab
-        managed={true}
-        isActive={activeTabKey === 'status'}
-        runtimeTelemetry={runtimeTelemetry}
-        tabStatus={tabStatus.status || {}}
-        configSnapshot={snapshots.config}
-      />
+      {#if IpBansTabComponent}
+        <svelte:component
+          this={IpBansTabComponent}
+          managed={true}
+          isActive={activeTabKey === 'ip-bans'}
+          tabStatus={tabStatus['ip-bans'] || {}}
+          bansSnapshot={snapshots.bans}
+          configSnapshot={snapshots.config}
+          onBan={onBan}
+          onUnban={onUnban}
+        />
+      {:else}
+        <section
+          id="dashboard-panel-ip-bans"
+          class="admin-group"
+          data-dashboard-tab-panel="ip-bans"
+          aria-labelledby="dashboard-tab-ip-bans"
+          hidden={activeTabKey !== 'ip-bans'}
+          aria-hidden={activeTabKey === 'ip-bans' ? 'false' : 'true'}
+        >
+          <p class="message info">Loading ban controls...</p>
+        </section>
+      {/if}
+      {#if StatusTabComponent}
+        <svelte:component
+          this={StatusTabComponent}
+          managed={true}
+          isActive={activeTabKey === 'status'}
+          runtimeTelemetry={runtimeTelemetry}
+          tabStatus={tabStatus.status || {}}
+          configSnapshot={snapshots.config}
+        />
+      {:else}
+        <section
+          id="dashboard-panel-status"
+          class="admin-group"
+          data-dashboard-tab-panel="status"
+          aria-labelledby="dashboard-tab-status"
+          hidden={activeTabKey !== 'status'}
+          aria-hidden={activeTabKey === 'status' ? 'false' : 'true'}
+        >
+          <p class="message info">Loading status signals...</p>
+        </section>
+      {/if}
       {#if ConfigTabComponent}
         <svelte:component
           this={ConfigTabComponent}

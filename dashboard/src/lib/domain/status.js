@@ -18,6 +18,19 @@ const INITIAL_STATE = Object.freeze({
     notABotThreshold: 2,
     challengeThreshold: 3,
     mazeThreshold: 6,
+    ipRangePolicyMode: 'off',
+    ipRangeEmergencyAllowCount: 0,
+    ipRangeCustomRuleCount: 0,
+    ipRangeCustomRuleEnabledCount: 0,
+    ipRangeManagedPolicyCount: 0,
+    ipRangeManagedPolicyEnabledCount: 0,
+    ipRangeManagedSetCount: 0,
+    ipRangeManagedSetStaleCount: 0,
+    ipRangeManagedMaxStalenessHours: 168,
+    ipRangeAllowStaleManagedEnforce: false,
+    ipRangeCatalogVersion: '-',
+    ipRangeCatalogAgeHours: null,
+    ipRangeCatalogStale: false,
     rateLimit: 80,
     geoRiskCount: 0,
     geoAllowCount: 0,
@@ -61,6 +74,24 @@ const VAR_MEANINGS = Object.freeze({
     geo_block: 'Country codes forced to block routing.',
     whitelist: 'Trusted IP/CIDR allowlist that bypasses bot defenses.',
     path_whitelist: 'Trusted path allowlist that bypasses bot defenses.',
+    ip_range_policy_mode: 'IP range policy operating mode: off, advisory, or enforce.',
+    ip_range_emergency_allowlist:
+      'Emergency CIDR allowlist that bypasses IP range managed/custom policy matches.',
+    ip_range_custom_rules: 'Operator-defined CIDR rules evaluated before managed set policies.',
+    ip_range_managed_policies:
+      'Managed set action policies (for example OpenAI/GitHub crawler sets) evaluated after custom rules.',
+    ip_range_managed_max_staleness_hours:
+      'Maximum allowed managed-catalog age (hours) before managed enforcement is considered stale.',
+    ip_range_allow_stale_managed_enforce:
+      'When true, enforce mode continues applying managed policies even when catalog staleness exceeds the configured maximum.',
+    ip_range_managed_catalog_version:
+      'Version identifier for the bundled managed CIDR catalog snapshot.',
+    ip_range_managed_catalog_generated_at:
+      'Timestamp when the bundled managed CIDR catalog snapshot was generated.',
+    ip_range_managed_catalog_generated_at_unix:
+      'Unix timestamp when the bundled managed CIDR catalog snapshot was generated.',
+    ip_range_managed_sets:
+      'Managed CIDR set metadata with provider, entry counts, and staleness indicators.',
     maze_enabled: 'Turns maze routing on/off.',
     maze_auto_ban: 'Enables/disables maze-triggered auto-ban.',
     maze_auto_ban_threshold: 'Maze hit count threshold before auto-ban.',
@@ -191,6 +222,11 @@ const VAR_GROUP_DEFINITIONS = Object.freeze([
       )
     },
     {
+      key: 'ip_range_policy',
+      title: 'IP Range Policy',
+      matches: path => path.startsWith('ip_range_')
+    },
+    {
       key: 'risk_challenge',
       title: 'Risk Scoring and Challenge',
       matches: path => (
@@ -287,12 +323,39 @@ function listCount(value) {
     return Array.isArray(value) ? value.length : 0;
   }
 
+function countEnabledEntries(value) {
+    if (!Array.isArray(value)) return 0;
+    return value.filter((entry) => entry && typeof entry === 'object' && entry.enabled === true).length;
+  }
+
+function normalizeIpRangeMode(value) {
+    const mode = String(value || '').trim().toLowerCase();
+    if (mode === 'advisory' || mode === 'enforce' || mode === 'off') return mode;
+    return 'off';
+  }
+
 export function deriveStatusSnapshot(configSnapshot = {}) {
     const config = configSnapshot && typeof configSnapshot === 'object' ? configSnapshot : {};
     const base = createInitialState();
     const botnessWeights = config.botness_weights && typeof config.botness_weights === 'object'
       ? config.botness_weights
       : {};
+    const ipRangeManagedSets = Array.isArray(config.ip_range_managed_sets)
+      ? config.ip_range_managed_sets
+      : [];
+    const ipRangeManagedMaxStalenessHours = parseIntegerLike(
+      config.ip_range_managed_max_staleness_hours,
+      base.ipRangeManagedMaxStalenessHours
+    );
+    const catalogGeneratedAtUnix = parseIntegerLike(config.ip_range_managed_catalog_generated_at_unix, 0);
+    const nowUnix = Math.floor(Date.now() / 1000);
+    const ipRangeCatalogAgeHours = catalogGeneratedAtUnix > 0 && nowUnix >= catalogGeneratedAtUnix
+      ? Math.floor((nowUnix - catalogGeneratedAtUnix) / 3600)
+      : null;
+    const staleByAge = Number.isFinite(ipRangeCatalogAgeHours)
+      ? Number(ipRangeCatalogAgeHours) > ipRangeManagedMaxStalenessHours
+      : false;
+    const staleBySets = ipRangeManagedSets.some((set) => set && typeof set === 'object' && set.stale === true);
     return {
       ...base,
       failMode: parseBoolLike(config.kv_store_fail_open, true) ? 'open' : 'closed',
@@ -313,6 +376,24 @@ export function deriveStatusSnapshot(configSnapshot = {}) {
         base.challengeThreshold
       ),
       mazeThreshold: parseIntegerLike(config.botness_maze_threshold, base.mazeThreshold),
+      ipRangePolicyMode: normalizeIpRangeMode(config.ip_range_policy_mode),
+      ipRangeEmergencyAllowCount: listCount(config.ip_range_emergency_allowlist),
+      ipRangeCustomRuleCount: listCount(config.ip_range_custom_rules),
+      ipRangeCustomRuleEnabledCount: countEnabledEntries(config.ip_range_custom_rules),
+      ipRangeManagedPolicyCount: listCount(config.ip_range_managed_policies),
+      ipRangeManagedPolicyEnabledCount: countEnabledEntries(config.ip_range_managed_policies),
+      ipRangeManagedSetCount: ipRangeManagedSets.length,
+      ipRangeManagedSetStaleCount: ipRangeManagedSets.filter((set) => set?.stale === true).length,
+      ipRangeManagedMaxStalenessHours,
+      ipRangeAllowStaleManagedEnforce: parseBoolLike(
+        config.ip_range_allow_stale_managed_enforce,
+        base.ipRangeAllowStaleManagedEnforce
+      ),
+      ipRangeCatalogVersion: String(config.ip_range_managed_catalog_version || base.ipRangeCatalogVersion),
+      ipRangeCatalogAgeHours: Number.isFinite(ipRangeCatalogAgeHours)
+        ? Number(ipRangeCatalogAgeHours)
+        : null,
+      ipRangeCatalogStale: staleByAge || staleBySets,
       rateLimit: parseIntegerLike(config.rate_limit, base.rateLimit),
       geoRiskCount: listCount(config.geo_risk),
       geoAllowCount: listCount(config.geo_allow),
@@ -500,6 +581,37 @@ const STATUS_DEFINITIONS = [
         cumulativeBotnessRoutingText(snapshot)
       ),
       status: snapshot => boolStatus((snapshot.botnessWeights.geo_risk || 0) > 0)
+    },
+    {
+      title: 'IP Range Policy',
+      description: snapshot => (
+        `${envVar('SHUMA_IP_RANGE_POLICY_MODE')} controls CIDR policy execution mode ` +
+        `(<strong>${String(snapshot.ipRangePolicyMode || 'off').toUpperCase()}</strong>). ` +
+        `Emergency bypass CIDRs use ${envVar('SHUMA_IP_RANGE_EMERGENCY_ALLOWLIST')} ` +
+        `(<strong>${snapshot.ipRangeEmergencyAllowCount}</strong>). ` +
+        `Custom rule count from ${envVar('SHUMA_IP_RANGE_CUSTOM_RULES')}: ` +
+        `<strong>${snapshot.ipRangeCustomRuleCount}</strong> (enabled: <strong>${snapshot.ipRangeCustomRuleEnabledCount}</strong>). ` +
+        `Managed policy count from ${envVar('SHUMA_IP_RANGE_MANAGED_POLICIES')}: ` +
+        `<strong>${snapshot.ipRangeManagedPolicyCount}</strong> (enabled: <strong>${snapshot.ipRangeManagedPolicyEnabledCount}</strong>). ` +
+        `Catalog version <code>${snapshot.ipRangeCatalogVersion || '-'}</code>; managed sets <strong>${snapshot.ipRangeManagedSetCount}</strong> ` +
+        `(stale: <strong>${snapshot.ipRangeManagedSetStaleCount}</strong>). ` +
+        `Catalog age is ${
+          Number.isFinite(snapshot.ipRangeCatalogAgeHours)
+            ? `<strong>${snapshot.ipRangeCatalogAgeHours}h</strong>`
+            : '<strong>unknown</strong>'
+        } with max staleness ${envVar('SHUMA_IP_RANGE_MANAGED_MAX_STALENESS_HOURS')}=` +
+        `<strong>${snapshot.ipRangeManagedMaxStalenessHours}</strong>; stale enforce override ` +
+        `${envVar('SHUMA_IP_RANGE_ALLOW_STALE_MANAGED_ENFORCE')}=` +
+        `<strong>${boolStatus(snapshot.ipRangeAllowStaleManagedEnforce)}</strong>.`
+      ),
+      status: snapshot => {
+        const mode = String(snapshot.ipRangePolicyMode || 'off').toUpperCase();
+        if (mode !== 'ENFORCE') return mode;
+        if (snapshot.ipRangeCatalogStale && !snapshot.ipRangeAllowStaleManagedEnforce) {
+          return 'ENFORCE (STALE CATALOG)';
+        }
+        return 'ENFORCE';
+      }
     },
     {
       title: 'Rate Limiting',

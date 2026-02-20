@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use std::{collections::HashMap, env, sync::Mutex};
 
 use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::challenge::KeyValueStore;
 
@@ -246,6 +246,83 @@ impl RateLimiterOutageMode {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum IpRangePolicyMode {
+    Off,
+    Advisory,
+    Enforce,
+}
+
+impl IpRangePolicyMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            IpRangePolicyMode::Off => "off",
+            IpRangePolicyMode::Advisory => "advisory",
+            IpRangePolicyMode::Enforce => "enforce",
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum IpRangePolicyAction {
+    #[default]
+    Forbidden403,
+    CustomMessage,
+    DropConnection,
+    Redirect308,
+    RateLimit,
+    Honeypot,
+    Maze,
+    Tarpit,
+}
+
+impl IpRangePolicyAction {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            IpRangePolicyAction::Forbidden403 => "forbidden_403",
+            IpRangePolicyAction::CustomMessage => "custom_message",
+            IpRangePolicyAction::DropConnection => "drop_connection",
+            IpRangePolicyAction::Redirect308 => "redirect_308",
+            IpRangePolicyAction::RateLimit => "rate_limit",
+            IpRangePolicyAction::Honeypot => "honeypot",
+            IpRangePolicyAction::Maze => "maze",
+            IpRangePolicyAction::Tarpit => "tarpit",
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
+pub struct IpRangePolicyRule {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub cidrs: Vec<String>,
+    #[serde(default)]
+    pub action: IpRangePolicyAction,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub redirect_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_message: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
+pub struct IpRangeManagedPolicy {
+    #[serde(default)]
+    pub set_id: String,
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub action: IpRangePolicyAction,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub redirect_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_message: Option<String>,
+}
+
 /// Per-capability provider backend selections.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ProviderBackends {
@@ -360,6 +437,18 @@ pub struct Config {
     pub whitelist: Vec<String>,
     #[serde(default = "default_path_whitelist")]
     pub path_whitelist: Vec<String>,
+    #[serde(default = "default_ip_range_policy_mode")]
+    pub ip_range_policy_mode: IpRangePolicyMode,
+    #[serde(default = "default_ip_range_emergency_allowlist")]
+    pub ip_range_emergency_allowlist: Vec<String>,
+    #[serde(default = "default_ip_range_custom_rules")]
+    pub ip_range_custom_rules: Vec<IpRangePolicyRule>,
+    #[serde(default = "default_ip_range_managed_policies")]
+    pub ip_range_managed_policies: Vec<IpRangeManagedPolicy>,
+    #[serde(default = "default_ip_range_managed_max_staleness_hours")]
+    pub ip_range_managed_max_staleness_hours: u64,
+    #[serde(default = "default_ip_range_allow_stale_managed_enforce")]
+    pub ip_range_allow_stale_managed_enforce: bool,
     #[serde(default = "default_test_mode")]
     pub test_mode: bool,
     #[serde(default = "default_maze_enabled")]
@@ -763,6 +852,12 @@ static DEFAULT_CONFIG: Lazy<Config> = Lazy::new(|| {
         geo_block: defaults_country_list("SHUMA_GEO_BLOCK_COUNTRIES"),
         whitelist: defaults_string_list("SHUMA_WHITELIST"),
         path_whitelist: defaults_string_list("SHUMA_PATH_WHITELIST"),
+        ip_range_policy_mode: default_ip_range_policy_mode(),
+        ip_range_emergency_allowlist: defaults_string_list("SHUMA_IP_RANGE_EMERGENCY_ALLOWLIST"),
+        ip_range_custom_rules: defaults_json("SHUMA_IP_RANGE_CUSTOM_RULES"),
+        ip_range_managed_policies: defaults_json("SHUMA_IP_RANGE_MANAGED_POLICIES"),
+        ip_range_managed_max_staleness_hours: default_ip_range_managed_max_staleness_hours(),
+        ip_range_allow_stale_managed_enforce: default_ip_range_allow_stale_managed_enforce(),
         test_mode: defaults_bool("SHUMA_TEST_MODE"),
         maze_enabled: defaults_bool("SHUMA_MAZE_ENABLED"),
         maze_auto_ban: defaults_bool("SHUMA_MAZE_AUTO_BAN"),
@@ -1082,6 +1177,29 @@ pub(crate) fn parse_composability_mode(value: &str) -> Option<ComposabilityMode>
         "signal" => Some(ComposabilityMode::Signal),
         "enforce" => Some(ComposabilityMode::Enforce),
         "both" => Some(ComposabilityMode::Both),
+        _ => None,
+    }
+}
+
+pub(crate) fn parse_ip_range_policy_mode(value: &str) -> Option<IpRangePolicyMode> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "off" => Some(IpRangePolicyMode::Off),
+        "advisory" => Some(IpRangePolicyMode::Advisory),
+        "enforce" => Some(IpRangePolicyMode::Enforce),
+        _ => None,
+    }
+}
+
+pub(crate) fn parse_ip_range_policy_action(value: &str) -> Option<IpRangePolicyAction> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "forbidden_403" => Some(IpRangePolicyAction::Forbidden403),
+        "custom_message" => Some(IpRangePolicyAction::CustomMessage),
+        "drop_connection" => Some(IpRangePolicyAction::DropConnection),
+        "redirect_308" => Some(IpRangePolicyAction::Redirect308),
+        "rate_limit" => Some(IpRangePolicyAction::RateLimit),
+        "honeypot" => Some(IpRangePolicyAction::Honeypot),
+        "maze" => Some(IpRangePolicyAction::Maze),
+        "tarpit" => Some(IpRangePolicyAction::Tarpit),
         _ => None,
     }
 }
@@ -1414,6 +1532,14 @@ fn defaults_f32(key: &str) -> f32 {
         .unwrap_or_else(|_| panic!("Invalid float default for {}", key))
 }
 
+fn defaults_json<T>(key: &str) -> T
+where
+    T: DeserializeOwned,
+{
+    serde_json::from_str(defaults_raw(key).as_str())
+        .unwrap_or_else(|_| panic!("Invalid JSON default for {}", key))
+}
+
 fn parse_string_list_value(raw: &str) -> Option<Vec<String>> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -1549,6 +1675,32 @@ fn default_whitelist() -> Vec<String> {
 
 fn default_path_whitelist() -> Vec<String> {
     defaults_string_list("SHUMA_PATH_WHITELIST")
+}
+
+fn default_ip_range_policy_mode() -> IpRangePolicyMode {
+    let raw = defaults_raw("SHUMA_IP_RANGE_POLICY_MODE");
+    parse_ip_range_policy_mode(raw.as_str())
+        .unwrap_or_else(|| panic!("Invalid IP range policy mode default for {}", raw))
+}
+
+fn default_ip_range_emergency_allowlist() -> Vec<String> {
+    defaults_string_list("SHUMA_IP_RANGE_EMERGENCY_ALLOWLIST")
+}
+
+fn default_ip_range_custom_rules() -> Vec<IpRangePolicyRule> {
+    defaults_json("SHUMA_IP_RANGE_CUSTOM_RULES")
+}
+
+fn default_ip_range_managed_policies() -> Vec<IpRangeManagedPolicy> {
+    defaults_json("SHUMA_IP_RANGE_MANAGED_POLICIES")
+}
+
+fn default_ip_range_managed_max_staleness_hours() -> u64 {
+    defaults_u64("SHUMA_IP_RANGE_MANAGED_MAX_STALENESS_HOURS")
+}
+
+fn default_ip_range_allow_stale_managed_enforce() -> bool {
+    defaults_bool("SHUMA_IP_RANGE_ALLOW_STALE_MANAGED_ENFORCE")
 }
 
 fn default_test_mode() -> bool {

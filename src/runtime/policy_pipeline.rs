@@ -14,6 +14,501 @@ fn active_botness_signal_ids(
         .collect()
 }
 
+fn ip_range_signal_ids(source: &crate::signals::ip_range_policy::MatchSource) -> Vec<crate::runtime::policy_taxonomy::SignalId> {
+    match source {
+        crate::signals::ip_range_policy::MatchSource::CustomRule => {
+            vec![crate::runtime::policy_taxonomy::SignalId::IpRangeCustom]
+        }
+        crate::signals::ip_range_policy::MatchSource::ManagedSet => {
+            vec![crate::runtime::policy_taxonomy::SignalId::IpRangeManaged]
+        }
+    }
+}
+
+fn ip_range_source_label(source: &crate::signals::ip_range_policy::MatchSource) -> &'static str {
+    match source {
+        crate::signals::ip_range_policy::MatchSource::CustomRule => "custom",
+        crate::signals::ip_range_policy::MatchSource::ManagedSet => "managed",
+    }
+}
+
+pub(crate) fn maybe_handle_ip_range_policy(
+    req: &Request,
+    store: &Store,
+    cfg: &crate::config::Config,
+    provider_registry: &crate::providers::registry::ProviderRegistry,
+    site_id: &str,
+    ip: &str,
+    path: &str,
+    evaluation: &crate::signals::ip_range_policy::Evaluation,
+) -> Option<Response> {
+    match evaluation {
+        crate::signals::ip_range_policy::Evaluation::NoMatch => None,
+        crate::signals::ip_range_policy::Evaluation::EmergencyAllowlisted { matched_cidr } => {
+            crate::observability::metrics::increment(
+                store,
+                crate::observability::metrics::MetricName::WhitelistedTotal,
+                None,
+            );
+            crate::admin::log_event(
+                store,
+                &crate::admin::EventLogEntry {
+                    ts: crate::admin::now_ts(),
+                    event: crate::admin::EventType::AdminAction,
+                    ip: Some(ip.to_string()),
+                    reason: Some("ip_range_emergency_allowlist".to_string()),
+                    outcome: Some(format!("matched_cidr={}", matched_cidr)),
+                    admin: None,
+                },
+            );
+            Some(Response::new(200, "OK (ip range emergency allowlisted)"))
+        }
+        crate::signals::ip_range_policy::Evaluation::Matched(details) => {
+            let source_label = ip_range_source_label(&details.source);
+            let signal_ids = ip_range_signal_ids(&details.source);
+            let base_outcome = format!(
+                "source={} source_id={} action={} matched_cidr={}",
+                source_label,
+                details.source_id,
+                details.action.as_str(),
+                details.matched_cidr
+            );
+
+            if cfg.ip_range_policy_mode == crate::config::IpRangePolicyMode::Advisory {
+                let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
+                    crate::runtime::policy_taxonomy::PolicyTransition::IpRangeAdvisory(signal_ids),
+                );
+                crate::observability::metrics::record_policy_match(store, &policy_match);
+                crate::admin::log_event(
+                    store,
+                    &crate::admin::EventLogEntry {
+                        ts: crate::admin::now_ts(),
+                        event: crate::admin::EventType::AdminAction,
+                        ip: Some(ip.to_string()),
+                        reason: Some("ip_range_policy_advisory".to_string()),
+                        outcome: Some(policy_match.annotate_outcome(base_outcome.as_str())),
+                        admin: None,
+                    },
+                );
+                return None;
+            }
+
+            match details.action {
+                crate::config::IpRangePolicyAction::Forbidden403 => {
+                    let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
+                        crate::runtime::policy_taxonomy::PolicyTransition::IpRangeForbidden(
+                            signal_ids,
+                        ),
+                    );
+                    crate::observability::metrics::record_policy_match(store, &policy_match);
+                    crate::observability::metrics::increment(
+                        store,
+                        crate::observability::metrics::MetricName::BlocksTotal,
+                        None,
+                    );
+                    crate::admin::log_event(
+                        store,
+                        &crate::admin::EventLogEntry {
+                            ts: crate::admin::now_ts(),
+                            event: crate::admin::EventType::Block,
+                            ip: Some(ip.to_string()),
+                            reason: Some("ip_range_policy_forbidden".to_string()),
+                            outcome: Some(policy_match.annotate_outcome(base_outcome.as_str())),
+                            admin: None,
+                        },
+                    );
+                    Some(Response::new(
+                        403,
+                        crate::enforcement::block_page::render_block_page(
+                            crate::enforcement::block_page::BlockReason::IpRangePolicy,
+                        ),
+                    ))
+                }
+                crate::config::IpRangePolicyAction::CustomMessage => {
+                    let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
+                        crate::runtime::policy_taxonomy::PolicyTransition::IpRangeCustomMessage(
+                            signal_ids,
+                        ),
+                    );
+                    crate::observability::metrics::record_policy_match(store, &policy_match);
+                    crate::observability::metrics::increment(
+                        store,
+                        crate::observability::metrics::MetricName::BlocksTotal,
+                        None,
+                    );
+                    let message = details
+                        .custom_message
+                        .clone()
+                        .unwrap_or_else(|| "Access blocked by IP range policy.".to_string());
+                    crate::admin::log_event(
+                        store,
+                        &crate::admin::EventLogEntry {
+                            ts: crate::admin::now_ts(),
+                            event: crate::admin::EventType::Block,
+                            ip: Some(ip.to_string()),
+                            reason: Some("ip_range_policy_custom_message".to_string()),
+                            outcome: Some(
+                                policy_match.annotate_outcome(
+                                    format!("{} message_len={}", base_outcome, message.len())
+                                        .as_str(),
+                                ),
+                            ),
+                            admin: None,
+                        },
+                    );
+                    Some(
+                        Response::builder()
+                            .status(403)
+                            .header("Content-Type", "text/plain; charset=utf-8")
+                            .header("Cache-Control", "no-store")
+                            .body(message.as_str())
+                            .build(),
+                    )
+                }
+                crate::config::IpRangePolicyAction::DropConnection => {
+                    let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
+                        crate::runtime::policy_taxonomy::PolicyTransition::IpRangeDropConnection(
+                            signal_ids,
+                        ),
+                    );
+                    crate::observability::metrics::record_policy_match(store, &policy_match);
+                    crate::observability::metrics::increment(
+                        store,
+                        crate::observability::metrics::MetricName::BlocksTotal,
+                        None,
+                    );
+                    crate::admin::log_event(
+                        store,
+                        &crate::admin::EventLogEntry {
+                            ts: crate::admin::now_ts(),
+                            event: crate::admin::EventType::Block,
+                            ip: Some(ip.to_string()),
+                            reason: Some("ip_range_policy_drop_connection".to_string()),
+                            outcome: Some(policy_match.annotate_outcome(base_outcome.as_str())),
+                            admin: None,
+                        },
+                    );
+                    Some(
+                        Response::builder()
+                            .status(444)
+                            .header("Connection", "close")
+                            .body("")
+                            .build(),
+                    )
+                }
+                crate::config::IpRangePolicyAction::Redirect308 => {
+                    let Some(redirect_url) = details.redirect_url.clone() else {
+                        let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
+                            crate::runtime::policy_taxonomy::PolicyTransition::IpRangeForbidden(
+                                signal_ids,
+                            ),
+                        );
+                        crate::observability::metrics::record_policy_match(store, &policy_match);
+                        crate::observability::metrics::increment(
+                            store,
+                            crate::observability::metrics::MetricName::BlocksTotal,
+                            None,
+                        );
+                        crate::admin::log_event(
+                            store,
+                            &crate::admin::EventLogEntry {
+                                ts: crate::admin::now_ts(),
+                                event: crate::admin::EventType::Block,
+                                ip: Some(ip.to_string()),
+                                reason: Some("ip_range_policy_redirect_missing_url".to_string()),
+                                outcome: Some(policy_match.annotate_outcome(base_outcome.as_str())),
+                                admin: None,
+                            },
+                        );
+                        return Some(Response::new(
+                            403,
+                            crate::enforcement::block_page::render_block_page(
+                                crate::enforcement::block_page::BlockReason::IpRangePolicy,
+                            ),
+                        ));
+                    };
+                    let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
+                        crate::runtime::policy_taxonomy::PolicyTransition::IpRangeRedirect(
+                            signal_ids,
+                        ),
+                    );
+                    crate::observability::metrics::record_policy_match(store, &policy_match);
+                    crate::admin::log_event(
+                        store,
+                        &crate::admin::EventLogEntry {
+                            ts: crate::admin::now_ts(),
+                            event: crate::admin::EventType::AdminAction,
+                            ip: Some(ip.to_string()),
+                            reason: Some("ip_range_policy_redirect".to_string()),
+                            outcome: Some(
+                                policy_match.annotate_outcome(
+                                    format!("{} location={}", base_outcome, redirect_url).as_str(),
+                                ),
+                            ),
+                            admin: None,
+                        },
+                    );
+                    Some(
+                        Response::builder()
+                            .status(308)
+                            .header("Location", redirect_url.as_str())
+                            .header("Cache-Control", "no-store")
+                            .body("")
+                            .build(),
+                    )
+                }
+                crate::config::IpRangePolicyAction::RateLimit => {
+                    let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
+                        crate::runtime::policy_taxonomy::PolicyTransition::IpRangeRateLimit(
+                            signal_ids,
+                        ),
+                    );
+                    crate::observability::metrics::record_policy_match(store, &policy_match);
+                    crate::observability::metrics::increment(
+                        store,
+                        crate::observability::metrics::MetricName::BlocksTotal,
+                        None,
+                    );
+                    crate::observability::monitoring::record_rate_violation_with_path(
+                        store,
+                        ip,
+                        Some(path),
+                        "limited",
+                    );
+                    crate::admin::log_event(
+                        store,
+                        &crate::admin::EventLogEntry {
+                            ts: crate::admin::now_ts(),
+                            event: crate::admin::EventType::Block,
+                            ip: Some(ip.to_string()),
+                            reason: Some("ip_range_policy_rate_limit".to_string()),
+                            outcome: Some(policy_match.annotate_outcome(base_outcome.as_str())),
+                            admin: None,
+                        },
+                    );
+                    Some(Response::new(
+                        429,
+                        crate::enforcement::block_page::render_block_page(
+                            crate::enforcement::block_page::BlockReason::RateLimit,
+                        ),
+                    ))
+                }
+                crate::config::IpRangePolicyAction::Honeypot => {
+                    let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
+                        crate::runtime::policy_taxonomy::PolicyTransition::IpRangeHoneypot(
+                            signal_ids,
+                        ),
+                    );
+                    crate::observability::metrics::record_policy_match(store, &policy_match);
+                    provider_registry.ban_store_provider().ban_ip_with_fingerprint(
+                        store,
+                        site_id,
+                        ip,
+                        "ip_range_honeypot",
+                        cfg.get_ban_duration("honeypot"),
+                        Some(crate::enforcement::ban::BanFingerprint {
+                            score: None,
+                            signals: vec!["ip_range_policy".to_string()],
+                            summary: Some(base_outcome.clone()),
+                        }),
+                    );
+                    crate::observability::monitoring::record_rate_violation_with_path(
+                        store,
+                        ip,
+                        Some(path),
+                        "banned",
+                    );
+                    crate::observability::metrics::increment(
+                        store,
+                        crate::observability::metrics::MetricName::BansTotal,
+                        Some("ip_range_honeypot"),
+                    );
+                    crate::observability::metrics::increment(
+                        store,
+                        crate::observability::metrics::MetricName::BlocksTotal,
+                        None,
+                    );
+                    crate::admin::log_event(
+                        store,
+                        &crate::admin::EventLogEntry {
+                            ts: crate::admin::now_ts(),
+                            event: crate::admin::EventType::Ban,
+                            ip: Some(ip.to_string()),
+                            reason: Some("ip_range_policy_honeypot".to_string()),
+                            outcome: Some(policy_match.annotate_outcome(base_outcome.as_str())),
+                            admin: None,
+                        },
+                    );
+                    Some(Response::new(
+                        403,
+                        crate::enforcement::block_page::render_block_page(
+                            crate::enforcement::block_page::BlockReason::Honeypot,
+                        ),
+                    ))
+                }
+                crate::config::IpRangePolicyAction::Maze => {
+                    let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
+                        crate::runtime::policy_taxonomy::PolicyTransition::IpRangeMaze(signal_ids),
+                    );
+                    crate::observability::metrics::record_policy_match(store, &policy_match);
+                    if cfg.maze_enabled {
+                        let event_outcome =
+                            policy_match.annotate_outcome(base_outcome.as_str());
+                        return Some(
+                            provider_registry
+                                .maze_tarpit_provider()
+                                .serve_maze_with_tracking(
+                                    req,
+                                    store,
+                                    cfg,
+                                    ip,
+                                    req.header("user-agent")
+                                        .map(|v| v.as_str().unwrap_or(""))
+                                        .unwrap_or(""),
+                                    crate::maze::entry_path("ip-range-policy").as_str(),
+                                    "ip_range_policy_maze",
+                                    event_outcome.as_str(),
+                                    None,
+                                ),
+                        );
+                    }
+                    if cfg.challenge_puzzle_enabled {
+                        crate::observability::metrics::increment(
+                            store,
+                            crate::observability::metrics::MetricName::ChallengesTotal,
+                            None,
+                        );
+                        crate::observability::metrics::increment(
+                            store,
+                            crate::observability::metrics::MetricName::ChallengeServedTotal,
+                            None,
+                        );
+                        crate::admin::log_event(
+                            store,
+                            &crate::admin::EventLogEntry {
+                                ts: crate::admin::now_ts(),
+                                event: crate::admin::EventType::Challenge,
+                                ip: Some(ip.to_string()),
+                                reason: Some("ip_range_policy_maze_fallback_challenge".to_string()),
+                                outcome: Some(
+                                    policy_match.annotate_outcome(
+                                        format!("{} maze_disabled", base_outcome).as_str(),
+                                    ),
+                                ),
+                                admin: None,
+                            },
+                        );
+                        return Some(
+                            provider_registry
+                                .challenge_engine_provider()
+                                .render_challenge(req, cfg.challenge_puzzle_transform_count as usize),
+                        );
+                    }
+                    crate::observability::metrics::increment(
+                        store,
+                        crate::observability::metrics::MetricName::BlocksTotal,
+                        None,
+                    );
+                    crate::admin::log_event(
+                        store,
+                        &crate::admin::EventLogEntry {
+                            ts: crate::admin::now_ts(),
+                            event: crate::admin::EventType::Block,
+                            ip: Some(ip.to_string()),
+                            reason: Some("ip_range_policy_maze_fallback_block".to_string()),
+                            outcome: Some(
+                                policy_match.annotate_outcome(
+                                    format!("{} maze_disabled challenge_disabled", base_outcome)
+                                        .as_str(),
+                                ),
+                            ),
+                            admin: None,
+                        },
+                    );
+                    Some(Response::new(
+                        403,
+                        crate::enforcement::block_page::render_block_page(
+                            crate::enforcement::block_page::BlockReason::IpRangePolicy,
+                        ),
+                    ))
+                }
+                crate::config::IpRangePolicyAction::Tarpit => {
+                    let policy_match = crate::runtime::policy_taxonomy::resolve_policy_match(
+                        crate::runtime::policy_taxonomy::PolicyTransition::IpRangeTarpit(signal_ids),
+                    );
+                    crate::observability::metrics::record_policy_match(store, &policy_match);
+                    if let Some(response) = provider_registry
+                        .maze_tarpit_provider()
+                        .maybe_handle_tarpit(req, store, cfg, site_id, ip)
+                    {
+                        crate::admin::log_event(
+                            store,
+                            &crate::admin::EventLogEntry {
+                                ts: crate::admin::now_ts(),
+                                event: crate::admin::EventType::Challenge,
+                                ip: Some(ip.to_string()),
+                                reason: Some("ip_range_policy_tarpit".to_string()),
+                                outcome: Some(policy_match.annotate_outcome(base_outcome.as_str())),
+                                admin: None,
+                            },
+                        );
+                        return Some(response);
+                    }
+                    if cfg.maze_enabled {
+                        let event_outcome = policy_match.annotate_outcome(
+                            format!("{} tarpit_unavailable fallback=maze", base_outcome).as_str(),
+                        );
+                        return Some(
+                            provider_registry
+                                .maze_tarpit_provider()
+                                .serve_maze_with_tracking(
+                                    req,
+                                    store,
+                                    cfg,
+                                    ip,
+                                    req.header("user-agent")
+                                        .map(|v| v.as_str().unwrap_or(""))
+                                        .unwrap_or(""),
+                                    crate::maze::entry_path("ip-range-tarpit-fallback").as_str(),
+                                    "ip_range_policy_tarpit_fallback_maze",
+                                    event_outcome.as_str(),
+                                    None,
+                                ),
+                        );
+                    }
+                    crate::observability::metrics::increment(
+                        store,
+                        crate::observability::metrics::MetricName::BlocksTotal,
+                        None,
+                    );
+                    crate::admin::log_event(
+                        store,
+                        &crate::admin::EventLogEntry {
+                            ts: crate::admin::now_ts(),
+                            event: crate::admin::EventType::Block,
+                            ip: Some(ip.to_string()),
+                            reason: Some("ip_range_policy_tarpit_fallback_block".to_string()),
+                            outcome: Some(
+                                policy_match.annotate_outcome(
+                                    format!("{} tarpit_unavailable fallback=block", base_outcome)
+                                        .as_str(),
+                                ),
+                            ),
+                            admin: None,
+                        },
+                    );
+                    Some(Response::new(
+                        403,
+                        crate::enforcement::block_page::render_block_page(
+                            crate::enforcement::block_page::BlockReason::IpRangePolicy,
+                        ),
+                    ))
+                }
+            }
+        }
+    }
+}
+
 pub(crate) fn maybe_handle_honeypot(
     store: &Store,
     cfg: &crate::config::Config,

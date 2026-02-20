@@ -3,16 +3,21 @@
   import { onDestroy, onMount } from 'svelte';
   import {
     CHALLENGE_REASON_LABELS,
+    IP_RANGE_ACTION_LABELS,
+    IP_RANGE_FALLBACK_LABELS,
+    IP_RANGE_SOURCE_LABELS,
     NOT_A_BOT_OUTCOME_LABELS,
     NOT_A_BOT_LATENCY_LABELS,
     POW_REASON_LABELS,
     RATE_OUTCOME_LABELS,
+    deriveIpRangeMonitoringViewModel,
     deriveMazeStatsViewModel,
     deriveMonitoringSummaryViewModel,
     derivePrometheusHelperViewModel,
     formatMetricLabel
   } from './monitoring-view-model.js';
   import { arraysEqualShallow } from '../../domain/core/format.js';
+  import { formatIpRangeReasonLabel } from '../../domain/ip-range-policy.js';
   import TabStateMessage from './primitives/TabStateMessage.svelte';
   import OverviewStats from './monitoring/OverviewStats.svelte';
   import PrimaryCharts from './monitoring/PrimaryCharts.svelte';
@@ -24,6 +29,7 @@
   import PowSection from './monitoring/PowSection.svelte';
   import RateSection from './monitoring/RateSection.svelte';
   import GeoSection from './monitoring/GeoSection.svelte';
+  import IpRangeSection from './monitoring/IpRangeSection.svelte';
   import ExternalMonitoringSection from './monitoring/ExternalMonitoringSection.svelte';
 
   const EVENT_ROW_RENDER_LIMIT = 100;
@@ -63,6 +69,7 @@
   export let cdpSnapshot = null;
   export let cdpEventsSnapshot = null;
   export let monitoringSnapshot = null;
+  export let configSnapshot = null;
   export let onFetchEventsRange = null;
   export let autoRefreshEnabled = false;
 
@@ -216,6 +223,36 @@
       label: sanitizeText(formatMetricLabel(key, labels)),
       count: clampCount(value)
     }));
+  };
+
+  const normalizeDimensionRows = (rows, mapOrFormatter) => {
+    if (!Array.isArray(rows)) return [];
+    return rows.slice(0, MONITORING_LIST_LIMIT).map(([key, value]) => {
+      const safeKey = sanitizeText(key);
+      const label = typeof mapOrFormatter === 'function'
+        ? mapOrFormatter(safeKey)
+        : formatMetricLabel(safeKey, mapOrFormatter);
+      return {
+        key: safeKey,
+        label: sanitizeText(label, safeKey),
+        count: clampCount(value)
+      };
+    });
+  };
+
+  const normalizeTrendRows = (trend = {}) => {
+    const labels = Array.isArray(trend?.labels) ? trend.labels : [];
+    const data = Array.isArray(trend?.data) ? trend.data : [];
+    const count = Math.min(labels.length, data.length);
+    const start = Math.max(0, count - MONITORING_LIST_LIMIT);
+    const rows = [];
+    for (let index = start; index < count; index += 1) {
+      rows.push({
+        label: sanitizeText(labels[index], '-'),
+        count: clampCount(data[index])
+      });
+    }
+    return rows;
   };
 
   const normalizeTopPaths = (paths) => {
@@ -562,6 +599,9 @@
   $: cdpEventsData = cdpEventsSnapshot && typeof cdpEventsSnapshot === 'object'
     ? cdpEventsSnapshot
     : {};
+  $: config = configSnapshot && typeof configSnapshot === 'object'
+    ? configSnapshot
+    : {};
   $: monitoring = monitoringSnapshot && typeof monitoringSnapshot === 'object'
     ? monitoringSnapshot
     : {};
@@ -615,6 +655,23 @@
   $: powOutcomeRows = normalizePairRows(monitoringSummary.pow.outcomes, POW_OUTCOME_LABELS);
   $: rateOutcomeRows = normalizePairRows(monitoringSummary.rate.outcomes, RATE_OUTCOME_LABELS);
   $: geoTopCountries = normalizeTopCountries(monitoringSummary.geo.topCountries);
+  $: ipRangeSummary = deriveIpRangeMonitoringViewModel(recentEvents, config);
+  $: ipRangeReasonRows = normalizeDimensionRows(
+    ipRangeSummary.reasons,
+    (key) => formatIpRangeReasonLabel(key)
+  );
+  $: ipRangeSourceRows = normalizeDimensionRows(ipRangeSummary.sources, IP_RANGE_SOURCE_LABELS);
+  $: ipRangeActionRows = normalizeDimensionRows(ipRangeSummary.actions, IP_RANGE_ACTION_LABELS);
+  $: ipRangeDetectionRows = normalizeDimensionRows(
+    ipRangeSummary.detections,
+    (value) => value
+  );
+  $: ipRangeSourceIdRows = normalizeDimensionRows(ipRangeSummary.sourceIds, (value) => value);
+  $: ipRangeFallbackRows = normalizeDimensionRows(
+    ipRangeSummary.fallbacks,
+    IP_RANGE_FALLBACK_LABELS
+  );
+  $: ipRangeTrendRows = normalizeTrendRows(ipRangeSummary.trend);
 
   $: challengeTrendSeries = normalizeTrendSeries(monitoringSummary.challenge.trend);
   $: powTrendSeries = normalizeTrendSeries(monitoringSummary.pow.trend);
@@ -829,6 +886,18 @@
     loading={tabStatus?.loading === true}
     geoSummary={monitoringSummary.geo}
     {geoTopCountries}
+  />
+
+  <IpRangeSection
+    loading={tabStatus?.loading === true}
+    summary={ipRangeSummary}
+    reasonRows={ipRangeReasonRows}
+    sourceRows={ipRangeSourceRows}
+    actionRows={ipRangeActionRows}
+    detectionRows={ipRangeDetectionRows}
+    sourceIdRows={ipRangeSourceIdRows}
+    fallbackRows={ipRangeFallbackRows}
+    trendRows={ipRangeTrendRows}
   />
 
   <ExternalMonitoringSection

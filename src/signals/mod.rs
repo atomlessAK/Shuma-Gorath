@@ -4,6 +4,7 @@ pub(crate) mod cdp;
 pub(crate) mod fingerprint;
 pub(crate) mod geo;
 pub(crate) mod ip_identity;
+pub(crate) mod ip_range_policy;
 pub(crate) mod js_verification;
 pub(crate) mod rate_pressure;
 pub(crate) mod whitelist;

@@ -461,6 +461,7 @@ test('dashboard state and store contracts remain immutable and bounded', { concu
 test('monitoring view model and status module remain pure snapshot transforms', { concurrency: false }, async () => {
   await withBrowserGlobals({}, async () => {
     const monitoringModelModule = await importBrowserModule('dashboard/src/lib/components/dashboard/monitoring-view-model.js');
+    const ipRangePolicyModule = await importBrowserModule('dashboard/src/lib/domain/ip-range-policy.js');
     const statusModule = await importBrowserModule('dashboard/src/lib/domain/status.js');
 
     const summary = monitoringModelModule.deriveMonitoringSummaryViewModel({
@@ -533,6 +534,46 @@ test('monitoring view model and status module remain pure snapshot transforms', 
     assert.equal(helper.observabilityLink, '');
     assert.equal(helper.apiLink, 'https://example.com/api');
 
+    const parsedOutcome = ipRangePolicyModule.parseIpRangeOutcome(
+      'source=managed source_id=openai-gptbot action=forbidden_403 matched_cidr=203.0.113.0/24 taxonomy[level=L11 action=A_DENY_HARD detection=D_IP_RANGE_FORBIDDEN signals=S_IP_RANGE_MANAGED]'
+    );
+    assert.equal(parsedOutcome.source, 'managed');
+    assert.equal(parsedOutcome.sourceId, 'openai-gptbot');
+    assert.equal(parsedOutcome.action, 'forbidden_403');
+    assert.equal(parsedOutcome.detection, 'D_IP_RANGE_FORBIDDEN');
+    assert.deepEqual(toPlain(parsedOutcome.signals), ['S_IP_RANGE_MANAGED']);
+
+    const ipRangeSummary = monitoringModelModule.deriveIpRangeMonitoringViewModel([
+      {
+        ts: Math.floor(Date.now() / 1000),
+        reason: 'ip_range_policy_forbidden',
+        outcome: 'source=managed source_id=openai-gptbot action=forbidden_403 matched_cidr=203.0.113.0/24 taxonomy[level=L11 action=A_DENY_HARD detection=D_IP_RANGE_FORBIDDEN signals=S_IP_RANGE_MANAGED]'
+      },
+      {
+        ts: Math.floor(Date.now() / 1000),
+        reason: 'ip_range_policy_maze_fallback_block',
+        outcome: 'source=custom source_id=manual-bad-range action=maze matched_cidr=198.51.100.0/24 taxonomy[level=L10 action=A_DENY_TEMP detection=D_IP_RANGE_MAZE signals=S_IP_RANGE_CUSTOM]'
+      }
+    ], {
+      ip_range_policy_mode: 'enforce',
+      ip_range_emergency_allowlist: ['198.51.100.7/32'],
+      ip_range_custom_rules: [{ id: 'manual-bad-range', enabled: true }],
+      ip_range_managed_policies: [{ set_id: 'openai-gptbot', enabled: true }],
+      ip_range_managed_max_staleness_hours: 24,
+      ip_range_allow_stale_managed_enforce: false,
+      ip_range_managed_catalog_version: '2026-02-20',
+      ip_range_managed_catalog_generated_at: '2026-02-20T00:00:00Z',
+      ip_range_managed_catalog_generated_at_unix: Math.floor(Date.now() / 1000) - 3600,
+      ip_range_managed_sets: [{ set_id: 'openai-gptbot', provider: 'openai', stale: false, entry_count: 42 }]
+    });
+    assert.equal(ipRangeSummary.totalMatches, 2);
+    assert.equal(ipRangeSummary.mode, 'enforce');
+    assert.equal(
+      ipRangeSummary.actions.some(([label, count]) => label === 'forbidden_403' && Number(count) === 1),
+      true
+    );
+    assert.equal(ipRangeSummary.catalog.managedSetCount, 1);
+
     const configSnapshot = {
       kv_store_fail_open: true,
       test_mode: false,
@@ -542,6 +583,15 @@ test('monitoring view model and status module remain pure snapshot transforms', 
       challenge_puzzle_enabled: true,
       challenge_puzzle_transform_count: 6,
       challenge_puzzle_risk_threshold: 3,
+      ip_range_policy_mode: 'advisory',
+      ip_range_emergency_allowlist: ['198.51.100.0/24'],
+      ip_range_custom_rules: [{ id: 'custom-1', enabled: true }],
+      ip_range_managed_policies: [{ set_id: 'openai-gptbot', enabled: true }],
+      ip_range_managed_max_staleness_hours: 24,
+      ip_range_allow_stale_managed_enforce: false,
+      ip_range_managed_catalog_version: '2026-02-20',
+      ip_range_managed_catalog_generated_at_unix: Math.floor(Date.now() / 1000) - 7200,
+      ip_range_managed_sets: [{ set_id: 'openai-gptbot', stale: false }],
       botness_maze_threshold: 6,
       botness_weights: {
         js_required: 1,
@@ -560,10 +610,13 @@ test('monitoring view model and status module remain pure snapshot transforms', 
     const statusItems = statusModule.buildFeatureStatusItems(derived);
     const challengePuzzleItem = statusItems.find((item) => item.title === 'Challenge Puzzle');
     const challengeNotABotItem = statusItems.find((item) => item.title === 'Challenge Not-A-Bot');
+    const ipRangeItem = statusItems.find((item) => item.title === 'IP Range Policy');
     assert.equal(Boolean(challengePuzzleItem), true);
     assert.equal(Boolean(challengeNotABotItem), true);
+    assert.equal(Boolean(ipRangeItem), true);
     assert.equal(challengePuzzleItem?.status, 'ENABLED');
     assert.equal(challengeNotABotItem?.status, 'ENABLED');
+    assert.equal(ipRangeItem?.status, 'ADVISORY');
     assert.equal(statusItems.some((item) => item.title === 'Challenge'), false);
   });
 });
@@ -640,6 +693,9 @@ test('ip bans, config, and tuning tabs are declarative and callback-driven', () 
   assert.match(ipBansSource, /export let onBan = null;/);
   assert.match(ipBansSource, /export let onUnban = null;/);
   assert.match(ipBansSource, /export let configSnapshot = null;/);
+  assert.match(ipBansSource, /let banFilter = 'all';/);
+  assert.match(ipBansSource, /id="ip-ban-filter"/);
+  assert.match(ipBansSource, /isIpRangeBanLike/);
   assert.match(ipBansSource, /config\.ban_durations\.admin/);
   assert.match(ipBansSource, /applyConfiguredBanDuration\(configSnapshot\)/);
   assert.match(ipBansSource, /disabled=\{!canBan\}/);
@@ -649,26 +705,34 @@ test('ip bans, config, and tuning tabs are declarative and callback-driven', () 
   assert.match(configSource, /export let onSaveConfig = null;/);
   assert.match(configSource, /export let onFetchRobotsPreview = null;/);
   assert.match(configSource, /let testMode = false;/);
+  assert.match(configSource, /let ipRangePolicyMode = 'off';/);
   assert.match(configSource, /let restrictSearchEngines = false;/);
   assert.equal(configSource.includes('robotsAllowSearch'), false);
   assert.match(configSource, /onTestModeToggleChange/);
-  assert.match(configSource, /await submitConfigPatch\('testMode'/);
+  assert.match(configSource, /await onSaveConfig\(/);
   assert.match(configSource, /\$: testModeToggleText = testMode \? 'Test Mode On' : 'Test Mode Off';/);
   assert.match(configSource, /id="preview-challenge-puzzle-link"/);
   assert.match(configSource, /id="preview-not-a-bot-link"/);
+  assert.match(configSource, /id="save-config-all"/);
+  assert.match(configSource, /saveAllConfig\(/);
+  assert.match(configSource, /window\.addEventListener\('beforeunload'/);
+  assert.match(configSource, /id="ip-range-policy-mode"/);
+  assert.match(configSource, /ip_range_policy_mode/);
   assert.match(configSource, /\(LOGGING ONLY\)/);
   assert.match(configSource, /\(BLOCKING ACTIVE\)/);
   assert.equal(configSource.includes('Test Mode Active'), false);
   assert.equal(configSource.includes('ENABLED (LOGGING ONLY)'), false);
   assert.equal(configSource.includes('DISABLED (BLOCKING ACTIVE)'), false);
-  assert.match(configSource, /await submitConfigPatch\('jsRequired'/);
+  assert.equal(configSource.includes('id="save-js-required-config"'), false);
   assert.equal(configSource.includes('id="save-test-mode-config"'), false);
-  assert.match(configSource, /disabled=\{saveAdvancedDisabled\}/);
+  assert.equal(configSource.includes('id="save-advanced-config"'), false);
   assert.equal(configSource.includes('{@html'), false);
 
   assert.match(tuningSource, /export let onSaveConfig = null;/);
   assert.match(tuningSource, /await onSaveConfig\(payload/);
-  assert.match(tuningSource, /disabled=\{saveBotnessDisabled\}/);
+  assert.match(tuningSource, /id="save-tuning-all"/);
+  assert.match(tuningSource, /window\.addEventListener\('beforeunload'/);
+  assert.equal(tuningSource.includes('id="save-botness-config"'), false);
 });
 
 test('dashboard route lazily loads heavy tabs and keeps orchestration local', () => {
@@ -725,10 +789,12 @@ test('monitoring tab is decomposed into focused subsection components', () => {
   assert.match(source, /import PrimaryCharts from '\.\/monitoring\/PrimaryCharts\.svelte';/);
   assert.match(source, /import RecentEventsTable from '\.\/monitoring\/RecentEventsTable\.svelte';/);
   assert.match(source, /import ExternalMonitoringSection from '\.\/monitoring\/ExternalMonitoringSection\.svelte';/);
+  assert.match(source, /import IpRangeSection from '\.\/monitoring\/IpRangeSection\.svelte';/);
   assert.match(source, /<OverviewStats/);
   assert.match(source, /<PrimaryCharts/);
   assert.match(source, /<ChallengeSection/);
   assert.match(source, /<PowSection/);
+  assert.match(source, /<IpRangeSection/);
   assert.match(source, /<ExternalMonitoringSection/);
 });
 

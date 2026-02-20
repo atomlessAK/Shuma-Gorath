@@ -71,6 +71,10 @@ Shuma-Gorath exists to provide layered, practical bot defense that teams can dep
 - MUST keep core policy logic decoupled from platform adapter details.
 - MUST support self-hosted and enterprise deployment personas through profile-gated adapters/state backends, not persona-specific policy forks.
 - MUST deliver and harden Shuma-native capability paths first; enterprise/provider-specific integrations should be additive and must not block internal baseline maturity for the same capability.
+- MUST keep production/runtime request-path logic (signal evaluation, policy, enforcement, admin/API handlers) implemented in Rust.
+- MUST NOT introduce Python dependencies on runtime request paths.
+- SHOULD allow Python/Bash for setup, test, and maintenance tooling when it improves developer velocity and does not affect runtime latency/throughput.
+- SHOULD require measured evidence before migrating tooling scripts to Rust purely for performance claims.
 - SHOULD keep provider interfaces explicit and swappable.
 - SHOULD avoid tying core behavior to a single runtime unless required for performance or safety.
 

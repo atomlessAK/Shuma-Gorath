@@ -1,6 +1,13 @@
 <script>
   import TabStateMessage from './primitives/TabStateMessage.svelte';
   import TableWrapper from './primitives/TableWrapper.svelte';
+  import {
+    classifyIpRangeFallback,
+    formatIpRangeReasonLabel,
+    isIpRangeBanLike,
+    isIpRangeReason,
+    parseIpRangeOutcome
+  } from '../../domain/ip-range-policy.js';
 
   export let managed = false;
   export let isActive = false;
@@ -21,6 +28,7 @@
   let lastAppliedConfigSnapshot = null;
   let banning = false;
   let unbanning = false;
+  let banFilter = 'all';
 
   const formatTimestamp = (rawTs) => {
     const ts = Number(rawTs || 0);
@@ -80,6 +88,31 @@
 
   const isExpanded = (key) => expandedRows[key] === true;
 
+  const formatIpRangeSourceLabel = (source) => {
+    const normalized = String(source || '').trim().toLowerCase();
+    if (normalized === 'managed') return 'Managed Set';
+    if (normalized === 'custom') return 'Custom Rule';
+    return normalized ? normalized : '-';
+  };
+
+  const deriveIpRangeBanMeta = (ban = {}) => {
+    const reason = String(ban?.reason || '').trim();
+    const parsed = parseIpRangeOutcome(ban?.fingerprint?.summary);
+    const fallback = classifyIpRangeFallback(reason, parsed);
+    const isIpRange = isIpRangeBanLike(ban) || isIpRangeReason(reason);
+    return {
+      isIpRange,
+      reasonLabel: isIpRange ? formatIpRangeReasonLabel(reason) : '',
+      source: parsed.source || '',
+      sourceLabel: formatIpRangeSourceLabel(parsed.source),
+      sourceId: parsed.sourceId || '',
+      action: parsed.action || '',
+      matchedCidr: parsed.matchedCidr || '',
+      detection: parsed.detection || '',
+      fallback: fallback !== 'none' ? fallback : ''
+    };
+  };
+
   function toggleDetails(key) {
     expandedRows = {
       ...expandedRows,
@@ -92,6 +125,15 @@
     applyConfiguredBanDuration(configSnapshot);
     lastAppliedConfigSnapshot = configSnapshot;
   }
+  $: banRows = bans.map((ban, index) => ({
+    ban,
+    key: toKey(ban, index),
+    originalIndex: index,
+    meta: deriveIpRangeBanMeta(ban)
+  }));
+  $: filteredBanRows = banFilter === 'ip-range'
+    ? banRows.filter((row) => row.meta.isIpRange)
+    : banRows;
   $: banDurationSeconds = (
     (Number(banDurationDays) * 24 * 60 * 60) +
     (Number(banDurationHours) * 60 * 60) +
@@ -138,6 +180,19 @@
   tabindex="-1"
 >
           <TabStateMessage tab="ip-bans" status={tabStatus} />
+          <div class="control-group panel-soft pad-sm">
+            <div class="input-row">
+              <label class="control-label control-label--wide" for="ip-ban-filter">Ban View</label>
+              <select id="ip-ban-filter" class="input-field" aria-label="Filter ban table" bind:value={banFilter}>
+                <option value="all">All Active Bans</option>
+                <option value="ip-range">IP Range Policy Only</option>
+              </select>
+            </div>
+            <p class="control-desc text-muted">
+              {filteredBanRows.length} shown of {bans.length}. For false positives from CIDR policy,
+              add a safe CIDR to <code>ip_range_emergency_allowlist</code> or disable the offending rule in Config.
+            </p>
+          </div>
           <TableWrapper>
             <table id="bans-table" class="panel panel-border bans-table-admin">
               <thead>
@@ -151,13 +206,19 @@
                 </tr>
               </thead>
               <tbody>
-                {#if bans.length === 0}
-                  <tr><td colspan="6" style="text-align: center; color: #6b7280;">No active bans</td></tr>
+                {#if filteredBanRows.length === 0}
+                  <tr>
+                    <td colspan="6" style="text-align: center; color: #6b7280;">
+                      {banFilter === 'ip-range' ? 'No active IP range policy bans' : 'No active bans'}
+                    </td>
+                  </tr>
                 {:else}
-                  {#each bans as ban, index}
-                    {@const rowKey = toKey(ban, index)}
+                  {#each filteredBanRows as row}
+                    {@const ban = row.ban}
+                    {@const meta = row.meta}
+                    {@const rowKey = row.key}
                     {@const detailVisible = isExpanded(rowKey)}
-                    {@const detailsId = `ban-detail-${index}`}
+                    {@const detailsId = `ban-detail-${row.originalIndex}`}
                     {@const signals = Array.isArray(ban?.fingerprint?.signals) ? ban.fingerprint.signals : []}
                     {@const expiresTs = Number(ban?.expires || 0)}
                     {@const isExpired = Number.isFinite(expiresTs) && expiresTs > 0
@@ -165,7 +226,18 @@
                       : false}
                     <tr class="ban-summary-row">
                       <td><code>{ban?.ip || '-'}</code></td>
-                      <td>{ban?.reason || '-'}</td>
+                      <td>
+                        <code>{ban?.reason || '-'}</code>
+                        {#if meta.isIpRange}
+                          <div class="ban-detail-content">
+                            <span class="ban-signal-badge">IP range</span>
+                            <span class="text-muted">{meta.reasonLabel}</span>
+                            {#if meta.sourceId}
+                              <span><code>{meta.sourceId}</code></span>
+                            {/if}
+                          </div>
+                        {/if}
+                      </td>
                       <td>{formatTimestamp(ban?.banned_at)}</td>
                       <td class={isExpired ? 'expired' : ''}>
                         {isExpired ? 'Expired' : formatTimestamp(expiresTs)}
@@ -193,6 +265,16 @@
                         <div class="ban-detail-content">
                           <div><strong>Score:</strong> {Number.isFinite(Number(ban?.fingerprint?.score)) ? Number(ban.fingerprint.score) : 'n/a'}</div>
                           <div><strong>Summary:</strong> {ban?.fingerprint?.summary || 'No additional fingerprint details.'}</div>
+                          {#if meta.isIpRange}
+                            <div><strong>IP Range Source:</strong> {meta.sourceLabel}</div>
+                            <div><strong>Source ID:</strong> {meta.sourceId ? meta.sourceId : '-'}</div>
+                            <div><strong>Policy Action:</strong> {meta.action ? meta.action : '-'}</div>
+                            <div><strong>Matched CIDR:</strong> {meta.matchedCidr ? meta.matchedCidr : '-'}</div>
+                            <div><strong>Detection:</strong> {meta.detection ? meta.detection : '-'}</div>
+                            {#if meta.fallback}
+                              <div><strong>Fallback:</strong> {meta.fallback}</div>
+                            {/if}
+                          {/if}
                         </div>
                       </td>
                     </tr>

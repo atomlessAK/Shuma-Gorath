@@ -120,6 +120,61 @@ fn parse_composability_mode_accepts_expected_values() {
 }
 
 #[test]
+fn parse_ip_range_policy_mode_accepts_expected_values() {
+    assert_eq!(
+        parse_ip_range_policy_mode("off"),
+        Some(IpRangePolicyMode::Off)
+    );
+    assert_eq!(
+        parse_ip_range_policy_mode("advisory"),
+        Some(IpRangePolicyMode::Advisory)
+    );
+    assert_eq!(
+        parse_ip_range_policy_mode("enforce"),
+        Some(IpRangePolicyMode::Enforce)
+    );
+    assert_eq!(
+        parse_ip_range_policy_mode(" EnFoRcE "),
+        Some(IpRangePolicyMode::Enforce)
+    );
+    assert_eq!(parse_ip_range_policy_mode("invalid"), None);
+}
+
+#[test]
+fn parse_ip_range_policy_action_accepts_expected_values() {
+    assert_eq!(
+        parse_ip_range_policy_action("forbidden_403"),
+        Some(IpRangePolicyAction::Forbidden403)
+    );
+    assert_eq!(
+        parse_ip_range_policy_action("custom_message"),
+        Some(IpRangePolicyAction::CustomMessage)
+    );
+    assert_eq!(
+        parse_ip_range_policy_action("drop_connection"),
+        Some(IpRangePolicyAction::DropConnection)
+    );
+    assert_eq!(
+        parse_ip_range_policy_action("redirect_308"),
+        Some(IpRangePolicyAction::Redirect308)
+    );
+    assert_eq!(
+        parse_ip_range_policy_action("rate_limit"),
+        Some(IpRangePolicyAction::RateLimit)
+    );
+    assert_eq!(
+        parse_ip_range_policy_action("honeypot"),
+        Some(IpRangePolicyAction::Honeypot)
+    );
+    assert_eq!(parse_ip_range_policy_action("maze"), Some(IpRangePolicyAction::Maze));
+    assert_eq!(
+        parse_ip_range_policy_action("tarpit"),
+        Some(IpRangePolicyAction::Tarpit)
+    );
+    assert_eq!(parse_ip_range_policy_action("invalid"), None);
+}
+
+#[test]
 fn parse_provider_backend_accepts_expected_values() {
     assert_eq!(
         parse_provider_backend("internal"),
@@ -213,6 +268,12 @@ fn defaults_enable_both_signal_and_action_paths() {
     assert_eq!(cfg.defence_modes.js, ComposabilityMode::Both);
     assert_eq!(cfg.defence_modes.geo, ComposabilityMode::Both);
     assert_eq!(cfg.defence_modes.rate, ComposabilityMode::Both);
+    assert_eq!(cfg.ip_range_policy_mode, IpRangePolicyMode::Off);
+    assert!(cfg.ip_range_emergency_allowlist.is_empty());
+    assert!(cfg.ip_range_custom_rules.is_empty());
+    assert!(cfg.ip_range_managed_policies.is_empty());
+    assert_eq!(cfg.ip_range_managed_max_staleness_hours, 168);
+    assert!(!cfg.ip_range_allow_stale_managed_enforce);
     assert!(cfg.rate_signal_enabled());
     assert!(cfg.rate_action_enabled());
     assert!(cfg.geo_signal_enabled());

@@ -379,6 +379,47 @@ GEO headers are only used when forwarded headers are trusted for the request:
 - `SHUMA_FORWARDED_IP_SECRET` must be configured
 - caller must provide matching `X-Shuma-Forwarded-Secret`
 
+## 🐙 IP-Range Policy Fields (`/admin/config`)
+
+- `ip_range_policy_mode` - policy mode (`off`, `advisory`, `enforce`)
+- `ip_range_emergency_allowlist` - CIDR allowlist evaluated before all IP-range rules
+- `ip_range_managed_max_staleness_hours` - managed catalog enforce-mode freshness limit in hours
+- `ip_range_allow_stale_managed_enforce` - explicit override to allow enforce-mode managed-set actions when catalog is stale
+- `ip_range_custom_rules` - ordered custom rule objects:
+  - `id` (stable operator rule id),
+  - `enabled` (boolean),
+  - `cidrs` (CIDR array),
+  - `action` (one of `forbidden_403`, `custom_message`, `drop_connection`, `redirect_308`, `rate_limit`, `honeypot`, `maze`, `tarpit`),
+  - optional `redirect_url` (required for `redirect_308`),
+  - optional `custom_message` (required for `custom_message`)
+- `ip_range_managed_policies` - managed-set policy objects:
+  - `set_id` (for example `openai_gptbot`, `openai_oai_searchbot`, `openai_chatgpt_user`, `github_copilot`),
+  - `enabled`,
+  - `action`,
+  - optional `redirect_url`,
+  - optional `custom_message`
+  - note: `deepseek` is intentionally rejected (`official source unavailable`)
+
+Precedence:
+
+- emergency allowlist > custom rules (first match) > managed policies > default pipeline
+
+Managed-set catalog visibility in `GET /admin/config`:
+
+- `ip_range_managed_sets`
+- `ip_range_managed_catalog_version`
+- `ip_range_managed_catalog_generated_at`
+- `ip_range_managed_catalog_generated_at_unix`
+- each `ip_range_managed_sets` entry includes:
+  - `catalog_age_hours`
+  - `catalog_stale`
+  - `managed_max_staleness_hours`
+
+Operational guidance:
+
+- Managed catalog refresh command: `make ip-range-catalog-update`
+- Rollout/rollback/staleness runbook: `docs/ip-range-policy-runbook.md`
+
 ## 🐙 Maze Excellence Fields (`/admin/config`)
 
 - `maze_rollout_phase` - staged enforcement (`instrument`, `advisory`, `enforce`)

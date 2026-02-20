@@ -120,6 +120,18 @@ These keys are seeded into KV and loaded from KV at runtime.
 | `SHUMA_GEO_BLOCK_COUNTRIES` | `[]` | 2-letter countries forced to block tier. |
 | `SHUMA_WHITELIST` | `[]` | IP/CIDR allowlist bypassing bot defenses. |
 | `SHUMA_PATH_WHITELIST` | `[]` | URL path allowlist bypassing bot defenses. |
+| `SHUMA_IP_RANGE_POLICY_MODE` | `off` | IP-range policy mode (`off`, `advisory`, `enforce`). |
+| `SHUMA_IP_RANGE_EMERGENCY_ALLOWLIST` | `[]` | Emergency CIDR allowlist evaluated before custom/managed IP-range policy rules. |
+| `SHUMA_IP_RANGE_CUSTOM_RULES` | `[]` | Operator-defined IP-range rule objects (`id`, `enabled`, `cidrs`, `action`, optional `redirect_url`/`custom_message`). |
+| `SHUMA_IP_RANGE_MANAGED_POLICIES` | `[]` | Managed-set policy objects (`set_id`, `enabled`, `action`, optional `redirect_url`/`custom_message`). |
+| `SHUMA_IP_RANGE_MANAGED_MAX_STALENESS_HOURS` | `168` | Maximum allowed age (hours) for the managed catalog in enforce mode before managed-set actions are skipped. |
+| `SHUMA_IP_RANGE_ALLOW_STALE_MANAGED_ENFORCE` | `false` | Explicit override to keep enforce-mode managed-set actions active even when the managed catalog is stale. |
+
+Managed catalog operations:
+
+- Refresh built-in managed CIDR catalog from official sources with guardrails:
+  `make ip-range-catalog-update`
+- See operational rollout/rollback guidance in `docs/ip-range-policy-runbook.md`.
 | `SHUMA_MAZE_ENABLED` | `true` | Enables maze feature. |
 | `SHUMA_MAZE_AUTO_BAN` | `true` | Enables maze auto-ban when threshold is exceeded. |
 | `SHUMA_MAZE_AUTO_BAN_THRESHOLD` | `50` | Maze hit threshold for auto-ban. |
@@ -191,7 +203,7 @@ These keys are seeded into KV and loaded from KV at runtime.
 
 The following KV-backed fields are currently writable via admin API:
 
-- Core: `test_mode`, `rate_limit`, `ban_duration`, `ban_durations.{honeypot,rate_limit,browser,admin,cdp}`, `honeypot_enabled`, `honeypots`, `browser_block`, `browser_whitelist`, `whitelist`, `path_whitelist`, `js_required_enforced`.
+- Core: `test_mode`, `rate_limit`, `ban_duration`, `ban_durations.{honeypot,rate_limit,browser,admin,cdp}`, `honeypot_enabled`, `honeypots`, `browser_block`, `browser_whitelist`, `whitelist`, `path_whitelist`, `ip_range_policy_mode`, `ip_range_emergency_allowlist`, `ip_range_custom_rules`, `ip_range_managed_policies`, `ip_range_managed_max_staleness_hours`, `ip_range_allow_stale_managed_enforce`, `js_required_enforced`.
 - GEO routing/policy: `geo_risk`, `geo_allow`, `geo_challenge`, `geo_maze`, `geo_block`.
 - Maze: `maze_enabled`, `maze_auto_ban`, `maze_auto_ban_threshold`, `maze_rollout_phase`, `maze_token_ttl_seconds`, `maze_token_max_depth`, `maze_token_branch_budget`, `maze_replay_ttl_seconds`, `maze_entropy_window_seconds`, `maze_client_expansion_enabled`, `maze_checkpoint_every_nodes`, `maze_checkpoint_every_ms`, `maze_step_ahead_max`, `maze_no_js_fallback_max_depth`, `maze_micro_pow_enabled`, `maze_micro_pow_depth_start`, `maze_micro_pow_base_difficulty`, `maze_max_concurrent_global`, `maze_max_concurrent_per_ip_bucket`, `maze_max_response_bytes`, `maze_max_response_duration_ms`, `maze_server_visible_links`, `maze_max_links`, `maze_max_paragraphs`, `maze_path_entropy_segment_len`, `maze_covert_decoys_enabled`, `maze_seed_provider`, `maze_seed_refresh_interval_seconds`, `maze_seed_refresh_rate_limit_per_hour`, `maze_seed_refresh_max_sources`, `maze_seed_metadata_only`.
 - Robots/AI policy: `robots_enabled`, `robots_crawl_delay`, `ai_policy_block_training`, `ai_policy_block_search`, `ai_policy_allow_search_engines` (legacy aliases `robots_block_ai_training`, `robots_block_ai_search`, `robots_allow_search_engines` are also accepted).

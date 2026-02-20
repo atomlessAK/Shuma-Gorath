@@ -1,4 +1,5 @@
 <script>
+  import { onMount } from 'svelte';
   import TabStateMessage from './primitives/TabStateMessage.svelte';
   import {
     formatBrowserRulesTextarea,
@@ -28,32 +29,18 @@
   const MAX_DURATION_SECONDS = 31536000;
   const MIN_DURATION_SECONDS = 60;
   const EDGE_MODES = new Set(['off', 'advisory', 'authoritative']);
+  const IP_RANGE_POLICY_MODES = new Set(['off', 'advisory', 'enforce']);
+  const IP_RANGE_MANAGED_STALENESS_MIN = 1;
+  const IP_RANGE_MANAGED_STALENESS_MAX = 2160;
 
   let writable = false;
   let hasConfigSnapshot = false;
   let configLoaded = true;
   let lastAppliedConfigVersion = -1;
-
-  let saving = {
-    testMode: false,
-    jsRequired: false,
-    pow: false,
-    challenge: false,
-    notABot: false,
-    rateLimit: false,
-    honeypot: false,
-    browserPolicy: false,
-    whitelist: false,
-    maze: false,
-    cdp: false,
-    edgeMode: false,
-    geoScoring: false,
-    geoRouting: false,
-    durations: false,
-    robots: false,
-    aiPolicy: false,
-    advanced: false
-  };
+  let skipNextConfigVersionApply = false;
+  let savingTestMode = false;
+  let savingAll = false;
+  let warnOnUnload = false;
 
   let robotsPreviewOpen = false;
   let robotsPreviewLoading = false;
@@ -76,6 +63,18 @@
   let notABotMarkerTtl = 600;
   let notABotAttemptLimit = 6;
   let notABotAttemptWindow = 300;
+
+  let ipRangePolicyMode = 'off';
+  let ipRangeEmergencyAllowlist = '';
+  let ipRangeCustomRulesJson = '[]';
+  let ipRangeManagedPoliciesJson = '[]';
+  let ipRangeManagedMaxStalenessHours = 168;
+  let ipRangeAllowStaleManagedEnforce = false;
+  let ipRangeManagedSets = [];
+  let ipRangeCatalogVersion = '-';
+  let ipRangeCatalogGeneratedAt = '-';
+  let ipRangeCatalogAgeHours = null;
+  let ipRangeCatalogStale = false;
 
   let rateLimitThreshold = 80;
 
@@ -142,6 +141,14 @@
       attemptLimit: 6,
       attemptWindow: 300
     },
+    ipRange: {
+      mode: 'off',
+      emergencyAllowlist: '',
+      customRulesJson: '[]',
+      managedPoliciesJson: '[]',
+      managedMaxStalenessHours: 168,
+      allowStaleManagedEnforce: false
+    },
     rateLimit: { value: 80 },
     honeypot: { enabled: true, values: '' },
     browserPolicy: { block: '', whitelist: '' },
@@ -185,6 +192,21 @@
     return EDGE_MODES.has(normalized) ? normalized : 'off';
   };
 
+  const normalizeIpRangePolicyMode = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    return IP_RANGE_POLICY_MODES.has(normalized) ? normalized : 'off';
+  };
+
+  const normalizeJsonArrayForCompare = (value) => {
+    try {
+      const parsed = JSON.parse(String(value || '[]'));
+      if (!Array.isArray(parsed)) return null;
+      return JSON.stringify(parsed);
+    } catch (_error) {
+      return null;
+    }
+  };
+
   const durationPartsFromSeconds = (seconds, fallbackSeconds) => {
     const source = Number.parseInt(seconds, 10);
     const safe = Number.isFinite(source) && source > 0 ? source : fallbackSeconds;
@@ -220,27 +242,24 @@
     return total >= MIN_DURATION_SECONDS && total <= MAX_DURATION_SECONDS;
   };
 
-  function setSaving(key, value) {
-    saving = {
-      ...saving,
-      [key]: value === true
+  const handleBeforeUnload = (event) => {
+    if (!warnOnUnload) return;
+    event.preventDefault();
+    event.returnValue = '';
+  };
+
+  onMount(() => {
+    if (typeof window === 'undefined') return undefined;
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }
+  });
 
   function resetRobotsPreview() {
     robotsPreviewOpen = false;
     robotsPreviewLoading = false;
     robotsPreviewContent = '';
-  }
-
-  async function withSave(key, task) {
-    if (saving[key]) return null;
-    setSaving(key, true);
-    try {
-      return await task();
-    } finally {
-      setSaving(key, false);
-    }
   }
 
   function applyConfig(config = {}) {
@@ -264,6 +283,38 @@
     notABotMarkerTtl = parseInteger(config.not_a_bot_marker_ttl_seconds, 600);
     notABotAttemptLimit = parseInteger(config.not_a_bot_attempt_limit_per_window, 6);
     notABotAttemptWindow = parseInteger(config.not_a_bot_attempt_window_seconds, 300);
+
+    ipRangePolicyMode = normalizeIpRangePolicyMode(config.ip_range_policy_mode);
+    ipRangeEmergencyAllowlist = formatListTextarea(config.ip_range_emergency_allowlist);
+    ipRangeCustomRulesJson = JSON.stringify(
+      Array.isArray(config.ip_range_custom_rules) ? config.ip_range_custom_rules : [],
+      null,
+      2
+    );
+    ipRangeManagedPoliciesJson = JSON.stringify(
+      Array.isArray(config.ip_range_managed_policies) ? config.ip_range_managed_policies : [],
+      null,
+      2
+    );
+    ipRangeManagedMaxStalenessHours = parseInteger(config.ip_range_managed_max_staleness_hours, 168);
+    ipRangeAllowStaleManagedEnforce = config.ip_range_allow_stale_managed_enforce === true;
+    ipRangeManagedSets = Array.isArray(config.ip_range_managed_sets) ? config.ip_range_managed_sets : [];
+    ipRangeCatalogVersion = String(config.ip_range_managed_catalog_version || '-');
+    ipRangeCatalogGeneratedAt = String(config.ip_range_managed_catalog_generated_at || '-');
+    const catalogGeneratedAtUnix = Number(config.ip_range_managed_catalog_generated_at_unix || 0);
+    if (Number.isFinite(catalogGeneratedAtUnix) && catalogGeneratedAtUnix > 0) {
+      const nowUnix = Math.floor(Date.now() / 1000);
+      ipRangeCatalogAgeHours = nowUnix >= catalogGeneratedAtUnix
+        ? Math.floor((nowUnix - catalogGeneratedAtUnix) / 3600)
+        : 0;
+    } else {
+      ipRangeCatalogAgeHours = null;
+    }
+    const staleByAge = Number.isFinite(ipRangeCatalogAgeHours)
+      ? Number(ipRangeCatalogAgeHours) > Number(ipRangeManagedMaxStalenessHours)
+      : false;
+    ipRangeCatalogStale =
+      staleByAge || ipRangeManagedSets.some((set) => set && set.stale === true);
 
     rateLimitThreshold = parseInteger(config.rate_limit, 80);
 
@@ -354,6 +405,14 @@
         attemptLimit: Number(notABotAttemptLimit),
         attemptWindow: Number(notABotAttemptWindow)
       },
+      ipRange: {
+        mode: normalizeIpRangePolicyMode(ipRangePolicyMode),
+        emergencyAllowlist: normalizeListTextareaForCompare(ipRangeEmergencyAllowlist),
+        customRulesJson: normalizeJsonArrayForCompare(ipRangeCustomRulesJson) || '[]',
+        managedPoliciesJson: normalizeJsonArrayForCompare(ipRangeManagedPoliciesJson) || '[]',
+        managedMaxStalenessHours: Number(ipRangeManagedMaxStalenessHours),
+        allowStaleManagedEnforce: ipRangeAllowStaleManagedEnforce === true
+      },
       rateLimit: { value: Number(rateLimitThreshold) },
       honeypot: {
         enabled: honeypotEnabled,
@@ -411,184 +470,164 @@
     resetRobotsPreview();
   }
 
-  async function submitConfigPatch(sectionKey, patch, successMessage) {
-    if (typeof onSaveConfig !== 'function') return;
-    const nextConfig = await withSave(sectionKey, async () =>
-      onSaveConfig(patch, { successMessage })
-    );
-    if (nextConfig && typeof nextConfig === 'object') {
-      applyConfig(nextConfig);
-    }
-  }
-
-  async function saveJsRequiredConfig() {
-    if (saveJsRequiredDisabled) return;
-    await submitConfigPatch('jsRequired', {
-      js_required_enforced: jsRequiredEnforced
-    }, 'JS required policy saved');
-  }
-
   async function onTestModeToggleChange(event) {
     const target = event && event.currentTarget ? event.currentTarget : null;
     const nextValue = target && target.checked === true;
+    const previousValue = !nextValue;
     if (testModeToggleDisabled) {
       if (target) target.checked = testMode === true;
       return;
     }
-    try {
-      await submitConfigPatch('testMode', {
-        test_mode: nextValue
-      }, `Test mode ${nextValue ? 'enabled (logging only)' : 'disabled (blocking active)'}`);
-    } catch (_error) {
-      testMode = !nextValue;
+    if (typeof onSaveConfig !== 'function') {
       if (target) target.checked = testMode === true;
+      return;
+    }
+    if (savingTestMode) {
+      if (target) target.checked = testMode === true;
+      return;
+    }
+    savingTestMode = true;
+    skipNextConfigVersionApply = true;
+    try {
+      const nextConfig = await onSaveConfig(
+        { test_mode: nextValue },
+        {
+          successMessage: `Test mode ${nextValue ? 'enabled (logging only)' : 'disabled (blocking active)'}`,
+          refresh: false
+        }
+      );
+      const persistedValue = nextConfig && typeof nextConfig === 'object'
+        ? nextConfig.test_mode === true
+        : nextValue;
+      testMode = persistedValue;
+      baseline = {
+        ...baseline,
+        testMode: {
+          enabled: persistedValue
+        }
+      };
+      if (target) target.checked = persistedValue;
+    } catch (_error) {
+      skipNextConfigVersionApply = false;
+      testMode = previousValue;
+      if (target) target.checked = previousValue;
+    } finally {
+      savingTestMode = false;
     }
   }
 
-  async function savePowConfig() {
-    if (savePowDisabled) return;
-    await submitConfigPatch('pow', {
-      pow_enabled: powEnabled,
-      pow_difficulty: Number(powDifficulty),
-      pow_ttl_seconds: Number(powTtl)
-    }, 'PoW settings saved');
-  }
+  async function saveAllConfig() {
+    if (saveAllConfigDisabled || typeof onSaveConfig !== 'function') return;
 
-  async function saveChallengePuzzleConfig() {
-    if (saveChallengePuzzleDisabled) return;
-    await submitConfigPatch('challenge', {
-      challenge_puzzle_enabled: challengePuzzleEnabled,
-      challenge_puzzle_transform_count: Number(challengePuzzleTransformCount)
-    }, 'Challenge puzzle settings saved');
-  }
-
-  async function saveNotABotConfig() {
-    if (saveNotABotDisabled) return;
-    await submitConfigPatch('notABot', {
-      not_a_bot_enabled: notABotEnabled,
-      not_a_bot_score_pass_min: Number(notABotScorePassMin),
-      not_a_bot_score_escalate_min: Number(notABotScoreEscalateMin),
-      not_a_bot_nonce_ttl_seconds: Number(notABotNonceTtl),
-      not_a_bot_marker_ttl_seconds: Number(notABotMarkerTtl),
-      not_a_bot_attempt_limit_per_window: Number(notABotAttemptLimit),
-      not_a_bot_attempt_window_seconds: Number(notABotAttemptWindow)
-    }, 'Not-a-Bot settings saved');
-  }
-
-  async function saveRateLimitConfig() {
-    if (saveRateLimitDisabled) return;
-    await submitConfigPatch('rateLimit', {
-      rate_limit: Number(rateLimitThreshold)
-    }, 'Rate limit saved');
-  }
-
-  async function saveHoneypotConfig() {
-    if (saveHoneypotDisabled) return;
-    const honeypots = parseHoneypotPathsTextarea(honeypotPaths);
-    await submitConfigPatch('honeypot', {
-      honeypot_enabled: honeypotEnabled,
-      honeypots
-    }, 'Honeypot settings saved');
-  }
-
-  async function saveBrowserPolicyConfig() {
-    if (saveBrowserPolicyDisabled) return;
-    await submitConfigPatch('browserPolicy', {
-      browser_block: parseBrowserRulesTextarea(browserBlockRules),
-      browser_whitelist: parseBrowserRulesTextarea(browserWhitelistRules)
-    }, 'Browser policy saved');
-  }
-
-  async function saveWhitelistConfig() {
-    if (saveWhitelistDisabled) return;
-    await submitConfigPatch('whitelist', {
-      whitelist: parseListTextarea(networkWhitelist),
-      path_whitelist: parseListTextarea(pathWhitelist)
-    }, 'Bypass allowlists saved');
-  }
-
-  async function saveMazeConfig() {
-    if (saveMazeDisabled) return;
-    await submitConfigPatch('maze', {
-      maze_enabled: mazeEnabled,
-      maze_auto_ban: mazeAutoBan,
-      maze_auto_ban_threshold: Number(mazeThreshold)
-    }, 'Maze settings saved');
-  }
-
-  async function saveCdpConfig() {
-    if (saveCdpDisabled) return;
-    await submitConfigPatch('cdp', {
-      cdp_detection_enabled: cdpEnabled,
-      cdp_auto_ban: cdpAutoBan,
-      cdp_detection_threshold: Number(cdpThreshold)
-    }, 'CDP settings saved');
-  }
-
-  async function saveEdgeIntegrationModeConfig() {
-    if (saveEdgeModeDisabled) return;
-    await submitConfigPatch('edgeMode', {
-      edge_integration_mode: edgeIntegrationMode
-    }, 'Edge integration mode saved');
-  }
-
-  async function saveGeoScoringConfig() {
-    if (saveGeoScoringDisabled) return;
-    await submitConfigPatch('geoScoring', {
-      geo_risk: parseCountryCodesStrict(geoRiskList)
-    }, 'GEO scoring saved');
-  }
-
-  async function saveGeoRoutingConfig() {
-    if (saveGeoRoutingDisabled) return;
-    await submitConfigPatch('geoRouting', {
-      geo_allow: parseCountryCodesStrict(geoAllowList),
-      geo_challenge: parseCountryCodesStrict(geoChallengeList),
-      geo_maze: parseCountryCodesStrict(geoMazeList),
-      geo_block: parseCountryCodesStrict(geoBlockList)
-    }, 'GEO routing saved');
-  }
-
-  async function saveDurationsConfig() {
-    if (saveDurationsDisabled) return;
-    await submitConfigPatch('durations', {
-      ban_durations: {
+    const patch = {};
+    if (advancedDirty) {
+      const advancedPatch = JSON.parse(advancedConfigJson);
+      if (advancedPatch && typeof advancedPatch === 'object' && !Array.isArray(advancedPatch)) {
+        Object.assign(patch, advancedPatch);
+      }
+    }
+    if (jsRequiredDirty) {
+      patch.js_required_enforced = jsRequiredEnforced;
+    }
+    if (powDirty) {
+      patch.pow_enabled = powEnabled;
+      patch.pow_difficulty = Number(powDifficulty);
+      patch.pow_ttl_seconds = Number(powTtl);
+    }
+    if (challengePuzzleDirty) {
+      patch.challenge_puzzle_enabled = challengePuzzleEnabled;
+      patch.challenge_puzzle_transform_count = Number(challengePuzzleTransformCount);
+    }
+    if (notABotDirty) {
+      patch.not_a_bot_enabled = notABotEnabled;
+      patch.not_a_bot_score_pass_min = Number(notABotScorePassMin);
+      patch.not_a_bot_score_escalate_min = Number(notABotScoreEscalateMin);
+      patch.not_a_bot_nonce_ttl_seconds = Number(notABotNonceTtl);
+      patch.not_a_bot_marker_ttl_seconds = Number(notABotMarkerTtl);
+      patch.not_a_bot_attempt_limit_per_window = Number(notABotAttemptLimit);
+      patch.not_a_bot_attempt_window_seconds = Number(notABotAttemptWindow);
+    }
+    if (ipRangeDirty) {
+      patch.ip_range_policy_mode = ipRangeModeNormalized;
+      patch.ip_range_emergency_allowlist = parseListTextarea(ipRangeEmergencyAllowlist);
+      patch.ip_range_custom_rules = JSON.parse(ipRangeCustomRulesJson);
+      patch.ip_range_managed_policies = JSON.parse(ipRangeManagedPoliciesJson);
+      patch.ip_range_managed_max_staleness_hours = Number(ipRangeManagedMaxStalenessHours);
+      patch.ip_range_allow_stale_managed_enforce = ipRangeAllowStaleManagedEnforce === true;
+    }
+    if (rateLimitDirty) {
+      patch.rate_limit = Number(rateLimitThreshold);
+    }
+    if (honeypotDirty) {
+      patch.honeypot_enabled = honeypotEnabled;
+      patch.honeypots = parseHoneypotPathsTextarea(honeypotPaths);
+    }
+    if (browserPolicyDirty) {
+      patch.browser_block = parseBrowserRulesTextarea(browserBlockRules);
+      patch.browser_whitelist = parseBrowserRulesTextarea(browserWhitelistRules);
+    }
+    if (whitelistDirty) {
+      patch.whitelist = parseListTextarea(networkWhitelist);
+      patch.path_whitelist = parseListTextarea(pathWhitelist);
+    }
+    if (mazeDirty) {
+      patch.maze_enabled = mazeEnabled;
+      patch.maze_auto_ban = mazeAutoBan;
+      patch.maze_auto_ban_threshold = Number(mazeThreshold);
+    }
+    if (cdpDirty) {
+      patch.cdp_detection_enabled = cdpEnabled;
+      patch.cdp_auto_ban = cdpAutoBan;
+      patch.cdp_detection_threshold = Number(cdpThreshold);
+    }
+    if (edgeModeDirty) {
+      patch.edge_integration_mode = edgeIntegrationMode;
+    }
+    if (geoScoringDirty) {
+      patch.geo_risk = parseCountryCodesStrict(geoRiskList);
+    }
+    if (geoRoutingDirty) {
+      patch.geo_allow = parseCountryCodesStrict(geoAllowList);
+      patch.geo_challenge = parseCountryCodesStrict(geoChallengeList);
+      patch.geo_maze = parseCountryCodesStrict(geoMazeList);
+      patch.geo_block = parseCountryCodesStrict(geoBlockList);
+    }
+    if (durationsDirty) {
+      patch.ban_durations = {
         honeypot: durationSeconds(durHoneypotDays, durHoneypotHours, durHoneypotMinutes),
         rate_limit: durationSeconds(durRateLimitDays, durRateLimitHours, durRateLimitMinutes),
         browser: durationSeconds(durBrowserDays, durBrowserHours, durBrowserMinutes),
         cdp: durationSeconds(durCdpDays, durCdpHours, durCdpMinutes),
         admin: durationSeconds(durAdminDays, durAdminHours, durAdminMinutes)
+      };
+    }
+    if (robotsDirty) {
+      patch.robots_enabled = robotsEnabled;
+      patch.robots_crawl_delay = Number(robotsCrawlDelay);
+    }
+    if (aiPolicyDirty) {
+      patch.ai_policy_block_training = robotsBlockTraining;
+      patch.ai_policy_block_search = robotsBlockSearch;
+      patch.ai_policy_allow_search_engines = !restrictSearchEngines;
+    }
+
+    if (Object.keys(patch).length === 0) return;
+
+    savingAll = true;
+    try {
+      const successMessage = dirtySectionCount === 1
+        ? `${dirtySectionLabels[0]} saved`
+        : `Saved ${dirtySectionCount} configuration sections`;
+      const nextConfig = await onSaveConfig(patch, { successMessage });
+      if (nextConfig && typeof nextConfig === 'object') {
+        applyConfig(nextConfig);
       }
-    }, 'Ban durations saved');
-  }
-
-  async function saveRobotsConfig() {
-    if (saveRobotsDisabled) return;
-    await submitConfigPatch('robots', {
-      robots_enabled: robotsEnabled,
-      robots_crawl_delay: Number(robotsCrawlDelay)
-    }, 'robots.txt serving saved');
-    if (robotsPreviewOpen) {
-      await refreshRobotsPreview();
+      if (robotsPreviewOpen && (robotsDirty || aiPolicyDirty)) {
+        await refreshRobotsPreview();
+      }
+    } finally {
+      savingAll = false;
     }
-  }
-
-  async function saveAiPolicyConfig() {
-    if (saveAiPolicyDisabled) return;
-    await submitConfigPatch('aiPolicy', {
-      ai_policy_block_training: robotsBlockTraining,
-      ai_policy_block_search: robotsBlockSearch,
-      ai_policy_allow_search_engines: !restrictSearchEngines
-    }, 'AI bot policy saved');
-    if (robotsPreviewOpen) {
-      await refreshRobotsPreview();
-    }
-  }
-
-  async function saveAdvancedConfig() {
-    if (saveAdvancedDisabled) return;
-    const parsed = JSON.parse(advancedConfigJson);
-    await submitConfigPatch('advanced', parsed, 'Advanced config saved');
   }
 
   async function refreshRobotsPreview() {
@@ -627,10 +666,9 @@
       : (testMode ? 'test-mode-status--enabled' : 'test-mode-status--disabled')
   }`.trim();
 
-  $: testModeToggleDisabled = !writable || saving.testMode;
+  $: testModeToggleDisabled = !writable || savingTestMode;
 
   $: jsRequiredDirty = readBool(jsRequiredEnforced) !== baseline.jsRequired.enforced;
-  $: saveJsRequiredDisabled = !writable || !jsRequiredDirty || saving.jsRequired;
 
   $: powValid = inRange(powDifficulty, 12, 20) && inRange(powTtl, 30, 300);
   $: powDirty = (
@@ -638,14 +676,12 @@
     Number(powDifficulty) !== baseline.pow.difficulty ||
     Number(powTtl) !== baseline.pow.ttl
   );
-  $: savePowDisabled = !writable || !powDirty || !powValid || saving.pow;
 
   $: challengePuzzleValid = inRange(challengePuzzleTransformCount, 4, 8);
   $: challengePuzzleDirty = (
     readBool(challengePuzzleEnabled) !== baseline.challenge.enabled ||
     Number(challengePuzzleTransformCount) !== baseline.challenge.count
   );
-  $: saveChallengePuzzleDisabled = !writable || !challengePuzzleDirty || !challengePuzzleValid || saving.challenge;
 
   $: notABotValid = (
     inRange(notABotScorePassMin, 1, 10) &&
@@ -665,11 +701,40 @@
     Number(notABotAttemptLimit) !== baseline.notABot.attemptLimit ||
     Number(notABotAttemptWindow) !== baseline.notABot.attemptWindow
   );
-  $: saveNotABotDisabled = !writable || !notABotDirty || !notABotValid || saving.notABot;
+
+  $: ipRangeEmergencyAllowlistNormalized = normalizeListTextareaForCompare(ipRangeEmergencyAllowlist);
+  $: ipRangeCustomRulesNormalized = normalizeJsonArrayForCompare(ipRangeCustomRulesJson);
+  $: ipRangeManagedPoliciesNormalized = normalizeJsonArrayForCompare(ipRangeManagedPoliciesJson);
+  $: ipRangeModeNormalized = normalizeIpRangePolicyMode(ipRangePolicyMode);
+  $: ipRangeValid = (
+    IP_RANGE_POLICY_MODES.has(ipRangeModeNormalized) &&
+    ipRangeCustomRulesNormalized !== null &&
+    ipRangeManagedPoliciesNormalized !== null &&
+    inRange(
+      ipRangeManagedMaxStalenessHours,
+      IP_RANGE_MANAGED_STALENESS_MIN,
+      IP_RANGE_MANAGED_STALENESS_MAX
+    )
+  );
+  $: ipRangeDirty = (
+    ipRangeModeNormalized !== baseline.ipRange.mode ||
+    ipRangeEmergencyAllowlistNormalized !== baseline.ipRange.emergencyAllowlist ||
+    ipRangeCustomRulesNormalized !== baseline.ipRange.customRulesJson ||
+    ipRangeManagedPoliciesNormalized !== baseline.ipRange.managedPoliciesJson ||
+    Number(ipRangeManagedMaxStalenessHours) !== baseline.ipRange.managedMaxStalenessHours ||
+    (ipRangeAllowStaleManagedEnforce === true) !== baseline.ipRange.allowStaleManagedEnforce
+  );
+  $: ipRangeManagedSetRows = Array.isArray(ipRangeManagedSets) ? ipRangeManagedSets : [];
+  $: ipRangeManagedSetStaleCount = ipRangeManagedSetRows.filter((set) => set?.stale === true).length;
+  $: ipRangeCatalogStale = (
+    (Number.isFinite(ipRangeCatalogAgeHours)
+      ? Number(ipRangeCatalogAgeHours) > Number(ipRangeManagedMaxStalenessHours)
+      : false) ||
+    ipRangeManagedSetStaleCount > 0
+  );
 
   $: rateLimitValid = inRange(rateLimitThreshold, 1, 1000000);
   $: rateLimitDirty = Number(rateLimitThreshold) !== baseline.rateLimit.value;
-  $: saveRateLimitDisabled = !writable || !rateLimitDirty || !rateLimitValid || saving.rateLimit;
 
   $: honeypotNormalized = normalizeListTextareaForCompare(honeypotPaths);
   $: honeypotValid = (() => {
@@ -684,7 +749,6 @@
     readBool(honeypotEnabled) !== baseline.honeypot.enabled ||
     honeypotNormalized !== baseline.honeypot.values
   );
-  $: saveHoneypotDisabled = !writable || !honeypotDirty || !honeypotValid || saving.honeypot;
 
   $: browserBlockNormalized = normalizeBrowserRulesForCompare(browserBlockRules);
   $: browserWhitelistNormalized = normalizeBrowserRulesForCompare(browserWhitelistRules);
@@ -693,7 +757,6 @@
     browserBlockNormalized !== baseline.browserPolicy.block ||
     browserWhitelistNormalized !== baseline.browserPolicy.whitelist
   );
-  $: saveBrowserPolicyDisabled = !writable || !browserPolicyDirty || !browserPolicyValid || saving.browserPolicy;
 
   $: whitelistNetworkNormalized = normalizeListTextareaForCompare(networkWhitelist);
   $: whitelistPathNormalized = normalizeListTextareaForCompare(pathWhitelist);
@@ -701,7 +764,6 @@
     whitelistNetworkNormalized !== baseline.whitelist.network ||
     whitelistPathNormalized !== baseline.whitelist.path
   );
-  $: saveWhitelistDisabled = !writable || !whitelistDirty || saving.whitelist;
 
   $: mazeValid = inRange(mazeThreshold, 5, 500);
   $: mazeDirty = (
@@ -709,7 +771,6 @@
     readBool(mazeAutoBan) !== baseline.maze.autoBan ||
     Number(mazeThreshold) !== baseline.maze.threshold
   );
-  $: saveMazeDisabled = !writable || !mazeDirty || !mazeValid || saving.maze;
 
   $: cdpValid = inRange(cdpThreshold, 0.3, 1.0);
   $: cdpDirty = (
@@ -717,10 +778,8 @@
     readBool(cdpAutoBan) !== baseline.cdp.autoBan ||
     Number(cdpThreshold) !== baseline.cdp.threshold
   );
-  $: saveCdpDisabled = !writable || !cdpDirty || !cdpValid || saving.cdp;
 
   $: edgeModeDirty = normalizeEdgeMode(edgeIntegrationMode) !== baseline.edgeMode.mode;
-  $: saveEdgeModeDisabled = !writable || !edgeModeDirty || saving.edgeMode;
 
   $: geoRiskNormalized = normalizeCountryCodesForCompare(geoRiskList);
   $: geoAllowNormalized = normalizeCountryCodesForCompare(geoAllowList);
@@ -757,9 +816,6 @@
     geoBlockNormalized !== baseline.geo.block
   );
 
-  $: saveGeoScoringDisabled = !writable || !geoScoringDirty || !geoScoringValid || saving.geoScoring;
-  $: saveGeoRoutingDisabled = !writable || !geoRoutingDirty || !geoRoutingValid || saving.geoRouting;
-
   $: honeypotDurationSeconds = durationSeconds(durHoneypotDays, durHoneypotHours, durHoneypotMinutes);
   $: rateDurationSeconds = durationSeconds(durRateLimitDays, durRateLimitHours, durRateLimitMinutes);
   $: browserDurationSeconds = durationSeconds(durBrowserDays, durBrowserHours, durBrowserMinutes);
@@ -782,32 +838,68 @@
     adminDurationSeconds !== baseline.durations.admin
   );
 
-  $: saveDurationsDisabled = !writable || !durationsDirty || !durationsValid || saving.durations;
-
   $: robotsValid = inRange(robotsCrawlDelay, 0, 60);
   $: robotsDirty = (
     readBool(robotsEnabled) !== baseline.robots.enabled ||
     Number(robotsCrawlDelay) !== baseline.robots.crawlDelay
   );
-  $: saveRobotsDisabled = !writable || !robotsDirty || !robotsValid || saving.robots;
 
   $: aiPolicyDirty = (
     readBool(robotsBlockTraining) !== baseline.aiPolicy.blockTraining ||
     readBool(robotsBlockSearch) !== baseline.aiPolicy.blockSearch ||
     readBool(restrictSearchEngines) !== baseline.aiPolicy.restrictSearchEngines
   );
-  $: saveAiPolicyDisabled = !writable || !aiPolicyDirty || saving.aiPolicy;
 
   $: advancedNormalized = normalizeJsonObjectForCompare(advancedConfigJson);
   $: advancedValid = advancedNormalized !== null;
   $: advancedDirty = advancedValid && advancedNormalized !== baseline.advanced.normalized;
-  $: saveAdvancedDisabled = !writable || !advancedDirty || !advancedValid || saving.advanced;
+
+  $: dirtySections = [
+    { label: 'JS required', dirty: jsRequiredDirty, valid: true },
+    { label: 'PoW', dirty: powDirty, valid: powValid },
+    { label: 'Challenge puzzle', dirty: challengePuzzleDirty, valid: challengePuzzleValid },
+    { label: 'Not-a-Bot', dirty: notABotDirty, valid: notABotValid },
+    { label: 'IP range policy', dirty: ipRangeDirty, valid: ipRangeValid },
+    { label: 'Rate limit', dirty: rateLimitDirty, valid: rateLimitValid },
+    { label: 'Honeypots', dirty: honeypotDirty, valid: honeypotValid },
+    { label: 'Browser policy', dirty: browserPolicyDirty, valid: browserPolicyValid },
+    { label: 'Bypass allowlists', dirty: whitelistDirty, valid: true },
+    { label: 'Maze', dirty: mazeDirty, valid: mazeValid },
+    { label: 'CDP', dirty: cdpDirty, valid: cdpValid },
+    { label: 'Edge mode', dirty: edgeModeDirty, valid: true },
+    { label: 'GEO scoring', dirty: geoScoringDirty, valid: geoScoringValid },
+    { label: 'GEO routing', dirty: geoRoutingDirty, valid: geoRoutingValid },
+    { label: 'Ban durations', dirty: durationsDirty, valid: durationsValid },
+    { label: 'Robots serving', dirty: robotsDirty, valid: robotsValid },
+    { label: 'AI bot policy', dirty: aiPolicyDirty, valid: true },
+    { label: 'Advanced config', dirty: advancedDirty, valid: advancedValid }
+  ];
+  $: dirtySectionEntries = dirtySections.filter((section) => section.dirty === true);
+  $: invalidDirtySectionEntries = dirtySectionEntries.filter((section) => section.valid !== true);
+  $: dirtySectionLabels = dirtySectionEntries.map((section) => section.label);
+  $: invalidDirtySectionLabels = invalidDirtySectionEntries.map((section) => section.label);
+  $: dirtySectionCount = dirtySectionEntries.length;
+  $: hasUnsavedChanges = dirtySectionCount > 0;
+  $: hasInvalidUnsavedChanges = invalidDirtySectionEntries.length > 0;
+  $: saveAllConfigDisabled = !writable || !hasUnsavedChanges || hasInvalidUnsavedChanges || savingAll;
+  $: saveAllConfigLabel = savingAll ? 'Saving...' : 'Save all changes';
+  $: saveAllSummaryText = hasUnsavedChanges
+    ? `${dirtySectionCount} section${dirtySectionCount === 1 ? '' : 's'} with unsaved changes`
+    : 'No unsaved changes';
+  $: saveAllInvalidText = hasInvalidUnsavedChanges
+    ? `Fix invalid values in: ${invalidDirtySectionLabels.join(', ')}`
+    : '';
+  $: warnOnUnload = writable && hasUnsavedChanges;
 
   $: {
     const nextVersion = Number(configVersion || 0);
     if (nextVersion !== lastAppliedConfigVersion) {
       lastAppliedConfigVersion = nextVersion;
-      applyConfig(configSnapshot && typeof configSnapshot === 'object' ? configSnapshot : {});
+      if (skipNextConfigVersionApply) {
+        skipNextConfigVersionApply = false;
+      } else {
+        applyConfig(configSnapshot && typeof configSnapshot === 'object' ? configSnapshot : {});
+      }
     }
   }
 </script>
@@ -837,7 +929,10 @@
     {/if}
   </p>
   <div class="controls-grid controls-grid--config">
-    <div class="control-group panel-soft pad-md config-edit-pane" class:hidden={!writable}>
+    <div
+      class="control-group panel-soft pad-md config-edit-pane"
+      class:hidden={!writable}
+    >
       <h3>Test Mode</h3>
       <p class="control-desc text-muted">Use for safe tuning. Enabled logs detections without blocking; disable to enforce defenses.</p>
       <div class="admin-controls">
@@ -859,7 +954,11 @@
       <span id="test-mode-status" class={testModeStatusClass}>{testModeStatusText}</span>
     </div>
 
-    <div class="control-group panel-soft pad-md config-edit-pane" class:hidden={!writable}>
+    <div
+      class="control-group panel-soft pad-md config-edit-pane"
+      class:hidden={!writable}
+      class:config-edit-pane--dirty={jsRequiredDirty}
+    >
       <h3>JS Required</h3>
       <p class="control-desc text-muted">Toggle whether normal requests require JS verification. Disable only for non-JS clients; this weakens bot defense and bypasses PoW on normal paths.</p>
       <div class="admin-controls">
@@ -871,10 +970,13 @@
           </label>
         </div>
       </div>
-      <button id="save-js-required-config" class="btn btn-submit" disabled={saveJsRequiredDisabled} on:click={saveJsRequiredConfig}>Save JS Required</button>
     </div>
 
-    <div class="control-group panel-soft pad-md config-edit-pane" class:hidden={!writable}>
+    <div
+      class="control-group panel-soft pad-md config-edit-pane"
+      class:hidden={!writable}
+      class:config-edit-pane--dirty={powDirty}
+    >
       <h3>Proof-of-Work (PoW)</h3>
       <p class="control-desc text-muted">Set verification work cost. Higher values increase scraper cost but can add friction on slower devices.</p>
       <div class="admin-controls">
@@ -894,10 +996,13 @@
           <input class="input-field" type="number" id="pow-ttl" min="30" max="300" step="1" inputmode="numeric" aria-label="PoW seed TTL in seconds" bind:value={powTtl}>
         </div>
       </div>
-      <button id="save-pow-config" class="btn btn-submit" disabled={savePowDisabled} on:click={savePowConfig}>Save PoW Settings</button>
     </div>
 
-    <div class="control-group panel-soft pad-md config-edit-pane" class:hidden={!writable}>
+    <div
+      class="control-group panel-soft pad-md config-edit-pane"
+      class:hidden={!writable}
+      class:config-edit-pane--dirty={challengePuzzleDirty}
+    >
       <h3>Challenge: Puzzle</h3>
       <p class="control-desc text-muted">
         Set how many transform options are shown in puzzle challenges (higher values can increase solve time).
@@ -917,10 +1022,13 @@
           <input class="input-field" type="number" id="challenge-puzzle-transform-count" min="4" max="8" step="1" inputmode="numeric" aria-label="Challenge transform option count" bind:value={challengePuzzleTransformCount}>
         </div>
       </div>
-      <button id="save-challenge-puzzle-config" class="btn btn-submit" disabled={saveChallengePuzzleDisabled} on:click={saveChallengePuzzleConfig}>Save Challenge Puzzle</button>
     </div>
 
-    <div class="control-group panel-soft pad-md config-edit-pane" class:hidden={!writable}>
+    <div
+      class="control-group panel-soft pad-md config-edit-pane"
+      class:hidden={!writable}
+      class:config-edit-pane--dirty={notABotDirty}
+    >
       <h3>Challenge: Not-a-Bot</h3>
       <p class="control-desc text-muted">
         Configure lightweight verification controls (thresholds, seed/marker TTLs, and replay-attempt window caps).
@@ -960,10 +1068,151 @@
           <input class="input-field" type="number" id="not-a-bot-attempt-window" min="30" max="3600" step="1" inputmode="numeric" aria-label="Not-a-Bot attempt window in seconds" bind:value={notABotAttemptWindow}>
         </div>
       </div>
-      <button id="save-not-a-bot-config" class="btn btn-submit" disabled={saveNotABotDisabled} on:click={saveNotABotConfig}>Save Not-a-Bot</button>
     </div>
 
-    <div class="control-group panel-soft pad-md config-edit-pane" class:hidden={!writable}>
+    <div
+      class="control-group panel-soft pad-md config-edit-pane"
+      class:hidden={!writable}
+      class:config-edit-pane--dirty={ipRangeDirty}
+    >
+      <h3>IP Range Policy</h3>
+      <p class="control-desc text-muted">
+        Configure CIDR policy mode, emergency allowlist, custom rules, managed set policies, and managed-catalog staleness safeguards.
+      </p>
+      <div class="admin-controls">
+        <div class="input-row">
+          <label class="control-label control-label--wide" for="ip-range-policy-mode">Policy Mode</label>
+          <select class="input-field" id="ip-range-policy-mode" aria-label="IP range policy mode" bind:value={ipRangePolicyMode}>
+            <option value="off">off</option>
+            <option value="advisory">advisory</option>
+            <option value="enforce">enforce</option>
+          </select>
+        </div>
+        <div class="geo-field">
+          <label class="control-label" for="ip-range-emergency-allowlist">Emergency Allowlist CIDRs</label>
+          <textarea
+            class="input-field geo-textarea"
+            id="ip-range-emergency-allowlist"
+            rows="3"
+            aria-label="IP range emergency allowlist"
+            spellcheck="false"
+            bind:value={ipRangeEmergencyAllowlist}
+          ></textarea>
+        </div>
+        <div class="geo-field">
+          <label class="control-label" for="ip-range-custom-rules-json">Custom Rules JSON</label>
+          <textarea
+            class="input-field geo-textarea input-field--mono"
+            id="ip-range-custom-rules-json"
+            rows="8"
+            aria-label="IP range custom rules JSON"
+            spellcheck="false"
+            bind:value={ipRangeCustomRulesJson}
+          ></textarea>
+        </div>
+        <div class="geo-field">
+          <label class="control-label" for="ip-range-managed-policies-json">Managed Policies JSON</label>
+          <textarea
+            class="input-field geo-textarea input-field--mono"
+            id="ip-range-managed-policies-json"
+            rows="6"
+            aria-label="IP range managed policies JSON"
+            spellcheck="false"
+            bind:value={ipRangeManagedPoliciesJson}
+          ></textarea>
+        </div>
+        <div class="input-row">
+          <label class="control-label control-label--wide" for="ip-range-managed-max-staleness">
+            Managed Max Staleness (hours)
+          </label>
+          <input
+            class="input-field"
+            type="number"
+            id="ip-range-managed-max-staleness"
+            min={IP_RANGE_MANAGED_STALENESS_MIN}
+            max={IP_RANGE_MANAGED_STALENESS_MAX}
+            step="1"
+            inputmode="numeric"
+            aria-label="IP range managed max staleness hours"
+            bind:value={ipRangeManagedMaxStalenessHours}
+          >
+        </div>
+        <div class="toggle-row">
+          <label class="control-label control-label--wide" for="ip-range-allow-stale-enforce">
+            Allow stale managed enforce
+          </label>
+          <label class="toggle-switch" for="ip-range-allow-stale-enforce">
+            <input
+              type="checkbox"
+              id="ip-range-allow-stale-enforce"
+              aria-label="Allow stale managed enforce"
+              bind:checked={ipRangeAllowStaleManagedEnforce}
+            >
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+      <div class="info-panel panel-soft pad-sm">
+        <h4>Managed Catalog Snapshot</h4>
+        <div class="info-row">
+          <span class="info-label text-muted">Version</span>
+          <span><code>{ipRangeCatalogVersion}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label text-muted">Generated At</span>
+          <span>{ipRangeCatalogGeneratedAt}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label text-muted">Catalog Age</span>
+          <span>
+            {#if Number.isFinite(ipRangeCatalogAgeHours)}
+              {ipRangeCatalogAgeHours}h
+            {:else}
+              -
+            {/if}
+          </span>
+        </div>
+        <div class="info-row">
+          <span class="info-label text-muted">Managed Sets (stale)</span>
+          <span>{ipRangeManagedSetRows.length} ({ipRangeManagedSetStaleCount})</span>
+        </div>
+      </div>
+      {#if ipRangeCatalogStale}
+        <p class="message warning">Managed catalog is stale under current max staleness policy.</p>
+      {/if}
+      {#if ipRangeManagedSetRows.length > 0}
+        <div class="table-wrapper">
+          <table id="ip-range-config-managed-sets-table">
+            <thead>
+              <tr>
+                <th>Set</th>
+                <th>Provider</th>
+                <th>Version</th>
+                <th>Entries</th>
+                <th>Stale</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each ipRangeManagedSetRows as set}
+                <tr>
+                  <td><code>{set?.set_id || '-'}</code></td>
+                  <td>{set?.provider || '-'}</td>
+                  <td><code>{set?.version || '-'}</code></td>
+                  <td>{set?.entry_count ?? 0}</td>
+                  <td>{set?.stale === true ? 'YES' : 'NO'}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+    </div>
+
+    <div
+      class="control-group panel-soft pad-md config-edit-pane"
+      class:hidden={!writable}
+      class:config-edit-pane--dirty={rateLimitDirty}
+    >
       <h3>Rate Limiting</h3>
       <p class="control-desc text-muted">Set allowed requests per minute. Lower values are stricter but can affect legitimate burst traffic.</p>
       <div class="admin-controls">
@@ -972,10 +1221,13 @@
           <input class="input-field" type="number" id="rate-limit-threshold" min="1" max="1000000" step="1" inputmode="numeric" aria-label="Rate limit requests per minute" bind:value={rateLimitThreshold}>
         </div>
       </div>
-      <button id="save-rate-limit-config" class="btn btn-submit" disabled={saveRateLimitDisabled} on:click={saveRateLimitConfig}>Save Rate Limit</button>
     </div>
 
-    <div class="control-group panel-soft pad-md config-edit-pane" class:hidden={!writable}>
+    <div
+      class="control-group panel-soft pad-md config-edit-pane"
+      class:hidden={!writable}
+      class:config-edit-pane--dirty={honeypotDirty}
+    >
       <h3>Honeypot Paths</h3>
       <p class="control-desc text-muted">One path per line. Requests that hit these paths are treated as high-confidence bot behavior. Paths must start with <code>/</code>.</p>
       <div class="admin-controls">
@@ -991,10 +1243,13 @@
           <textarea class="input-field geo-textarea" id="honeypot-paths" rows="3" aria-label="Honeypot paths" spellcheck="false" bind:value={honeypotPaths}></textarea>
         </div>
       </div>
-      <button id="save-honeypot-config" class="btn btn-submit" disabled={saveHoneypotDisabled} on:click={saveHoneypotConfig}>Save Honeypots</button>
     </div>
 
-    <div class="control-group panel-soft pad-md config-edit-pane" class:hidden={!writable}>
+    <div
+      class="control-group panel-soft pad-md config-edit-pane"
+      class:hidden={!writable}
+      class:config-edit-pane--dirty={browserPolicyDirty}
+    >
       <h3>Browser Policy</h3>
       <p class="control-desc text-muted">Use one rule per line in <code>BrowserName,min_major</code> format (for example <code>Chrome,120</code>).</p>
       <div class="admin-controls">
@@ -1007,10 +1262,13 @@
           <textarea class="input-field geo-textarea" id="browser-whitelist-rules" rows="2" aria-label="Browser allowlist exceptions" spellcheck="false" bind:value={browserWhitelistRules}></textarea>
         </div>
       </div>
-      <button id="save-browser-policy-config" class="btn btn-submit" disabled={saveBrowserPolicyDisabled} on:click={saveBrowserPolicyConfig}>Save Browser Policy</button>
     </div>
 
-    <div class="control-group panel-soft pad-md config-edit-pane" class:hidden={!writable}>
+    <div
+      class="control-group panel-soft pad-md config-edit-pane"
+      class:hidden={!writable}
+      class:config-edit-pane--dirty={whitelistDirty}
+    >
       <h3>Bypass Allowlists</h3>
       <p class="control-desc text-muted">Define trusted bypass entries. Use one entry per line.</p>
       <div class="admin-controls">
@@ -1023,10 +1281,13 @@
           <textarea class="input-field geo-textarea" id="path-whitelist" rows="3" aria-label="Path allowlist" spellcheck="false" bind:value={pathWhitelist}></textarea>
         </div>
       </div>
-      <button id="save-whitelist-config" class="btn btn-submit" disabled={saveWhitelistDisabled} on:click={saveWhitelistConfig}>Save Allowlists</button>
     </div>
 
-    <div class="control-group panel-soft pad-md config-edit-pane" class:hidden={!writable}>
+    <div
+      class="control-group panel-soft pad-md config-edit-pane"
+      class:hidden={!writable}
+      class:config-edit-pane--dirty={mazeDirty}
+    >
       <h3>Maze</h3>
       <p class="control-desc text-muted">
         Control trap-page routing and optional auto-ban. Lower thresholds ban faster but may increase false positives.
@@ -1053,10 +1314,13 @@
           <input class="input-field" type="number" id="maze-threshold" min="5" max="500" step="1" inputmode="numeric" aria-label="Maze ban threshold in pages" bind:value={mazeThreshold}>
         </div>
       </div>
-      <button id="save-maze-config" class="btn btn-submit" disabled={saveMazeDisabled} on:click={saveMazeConfig}>Save Maze Settings</button>
     </div>
 
-    <div class="control-group panel-soft pad-md config-edit-pane" class:hidden={!writable}>
+    <div
+      class="control-group panel-soft pad-md config-edit-pane"
+      class:hidden={!writable}
+      class:config-edit-pane--dirty={cdpDirty}
+    >
       <h3>CDP (Detect Browser Automation)</h3>
       <p class="control-desc text-muted">Control automation-signal detection and optional auto-ban. Stricter thresholds catch more bots but may increase false positives.</p>
       <div class="admin-controls">
@@ -1086,10 +1350,13 @@
           </div>
         </div>
       </div>
-      <button id="save-cdp-config" class="btn btn-submit" disabled={saveCdpDisabled} on:click={saveCdpConfig}>Save CDP Settings</button>
     </div>
 
-    <div class="control-group panel-soft pad-md config-edit-pane" class:hidden={!writable}>
+    <div
+      class="control-group panel-soft pad-md config-edit-pane"
+      class:hidden={!writable}
+      class:config-edit-pane--dirty={edgeModeDirty}
+    >
       <h3>Edge Integration Mode</h3>
       <p class="control-desc text-muted">Control how external edge bot outcomes influence local policy: off ignores edge outcomes, advisory records them without direct enforcement, authoritative allows strong edge outcomes to short-circuit.</p>
       <div class="admin-controls">
@@ -1102,10 +1369,13 @@
           </select>
         </div>
       </div>
-      <button id="save-edge-integration-mode-config" class="btn btn-submit" disabled={saveEdgeModeDisabled} on:click={saveEdgeIntegrationModeConfig}>Save Edge Integration Mode</button>
     </div>
 
-    <div class="control-group panel-soft pad-md config-edit-pane" class:hidden={!writable}>
+    <div
+      class="control-group panel-soft pad-md config-edit-pane"
+      class:hidden={!writable}
+      class:config-edit-pane--dirty={geoScoringDirty}
+    >
       <h3>GEO Risk Based Scoring</h3>
       <p class="control-desc text-muted">Use <a href="https://www.iban.com/country-codes">2-letter country codes</a> to specify countries from where requests will be receive added botness risk to contribute to the combined score.</p>
       <div class="admin-controls geo-controls">
@@ -1114,10 +1384,13 @@
           <textarea class="input-field geo-textarea" id="geo-risk-list" rows="1" aria-label="GEO scoring countries" spellcheck="false" bind:value={geoRiskList}></textarea>
         </div>
       </div>
-      <button id="save-geo-scoring-config" class="btn btn-submit" disabled={saveGeoScoringDisabled} on:click={saveGeoScoringConfig}>Save GEO Scoring</button>
     </div>
 
-    <div class="control-group panel-soft pad-md config-edit-pane" class:hidden={!writable}>
+    <div
+      class="control-group panel-soft pad-md config-edit-pane"
+      class:hidden={!writable}
+      class:config-edit-pane--dirty={geoRoutingDirty}
+    >
       <h3>GEO Risk Based Routing</h3>
       <p class="control-desc text-muted">Use <a href="https://www.iban.com/country-codes">2-letter country codes</a> to specify countries from where requests will be automatically routed. Precedence is Block &gt; Maze &gt; Challenge &gt; Allow.</p>
       <div class="admin-controls geo-controls">
@@ -1138,10 +1411,13 @@
           <textarea class="input-field geo-textarea" id="geo-allow-list" rows="1" aria-label="GEO allow countries" spellcheck="false" bind:value={geoAllowList}></textarea>
         </div>
       </div>
-      <button id="save-geo-routing-config" class="btn btn-submit" disabled={saveGeoRoutingDisabled} on:click={saveGeoRoutingConfig}>Save GEO Routing</button>
     </div>
 
-    <div class="control-group panel-soft pad-md config-edit-pane" class:hidden={!writable}>
+    <div
+      class="control-group panel-soft pad-md config-edit-pane"
+      class:hidden={!writable}
+      class:config-edit-pane--dirty={durationsDirty}
+    >
       <h3>Ban Durations</h3>
       <p class="control-desc text-muted">Set ban length in days, hours, and minutes per trigger type. Longer bans increase deterrence but slow recovery from false positives.</p>
       <div class="duration-grid">
@@ -1231,10 +1507,13 @@
           </div>
         </div>
       </div>
-      <button id="save-durations-btn" class="btn btn-submit" disabled={saveDurationsDisabled} on:click={saveDurationsConfig}>Save Durations</button>
     </div>
 
-    <div class="control-group panel-soft pad-md config-edit-pane" class:hidden={!writable}>
+    <div
+      class="control-group panel-soft pad-md config-edit-pane"
+      class:hidden={!writable}
+      class:config-edit-pane--dirty={robotsDirty || aiPolicyDirty}
+    >
       <h3>Robots and AI Bot Policy</h3>
       <p class="control-desc text-muted">Keep robots.txt serving controls separate from AI bot policy controls.</p>
       <div class="admin-controls">
@@ -1250,7 +1529,6 @@
           <label class="control-label control-label--wide" for="robots-crawl-delay">Crawl Delay (seconds)</label>
           <input class="input-field" type="number" id="robots-crawl-delay" min="0" max="60" step="1" inputmode="numeric" aria-label="Robots crawl delay in seconds" bind:value={robotsCrawlDelay}>
         </div>
-        <button id="save-robots-config" class="btn btn-submit" disabled={saveRobotsDisabled} on:click={saveRobotsConfig}>Save robots serving</button>
         <h4 class="control-subtitle">AI Bot Policy</h4>
         <div class="toggle-row">
           <label class="control-label control-label--wide" for="robots-block-training-toggle">Opt-out AI Training</label>
@@ -1277,7 +1555,6 @@
           <span class="toggle-hint">Google, Bing, etc.</span>
         </div>
       </div>
-      <button id="save-ai-policy-config" class="btn btn-submit" disabled={saveAiPolicyDisabled} on:click={saveAiPolicyConfig}>Save AI bot policy</button>
       <button id="preview-robots" class="btn btn-subtle" on:click={toggleRobotsPreview}>{robotsPreviewOpen ? 'Hide robots.txt' : 'Show robots.txt'}</button>
       <div id="robots-preview" class="robots-preview panel pad-sm" class:hidden={!robotsPreviewOpen}>
         <h4>robots.txt Preview</h4>
@@ -1285,7 +1562,11 @@
       </div>
     </div>
 
-    <div class="control-group panel-soft pad-md config-edit-pane" class:hidden={!writable}>
+    <div
+      class="control-group panel-soft pad-md config-edit-pane"
+      class:hidden={!writable}
+      class:config-edit-pane--dirty={advancedDirty}
+    >
       <h3>Advanced Config JSON</h3>
       <p class="control-desc text-muted">Directly edit writable config keys as a JSON object. This exposes advanced keys that do not yet have dedicated pane controls.</p>
       <div class="admin-controls">
@@ -1294,7 +1575,22 @@
           <textarea class="input-field geo-textarea" id="advanced-config-json" rows="8" aria-label="Advanced config JSON patch" spellcheck="false" bind:value={advancedConfigJson}></textarea>
         </div>
       </div>
-      <button id="save-advanced-config" class="btn btn-submit" disabled={saveAdvancedDisabled} on:click={saveAdvancedConfig}>Save Advanced Config</button>
+    </div>
+
+    <div
+      id="config-save-all-bar"
+      class="config-save-bar panel panel-border"
+      class:hidden={!writable || !hasUnsavedChanges}
+    >
+      <div class="config-save-bar__meta">
+        <span id="config-unsaved-summary" class="text-unsaved-changes">{saveAllSummaryText}</span>
+        {#if saveAllInvalidText}
+          <span id="config-invalid-summary" class="config-save-bar__warning">{saveAllInvalidText}</span>
+        {/if}
+        <button id="save-config-all" class="btn btn-submit" disabled={saveAllConfigDisabled} on:click={saveAllConfig}>
+          {saveAllConfigLabel}
+        </button>
+      </div>
     </div>
   </div>
 </section>

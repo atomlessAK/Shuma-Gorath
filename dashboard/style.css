@@ -18,6 +18,7 @@
   --color-front: #0a0507;
   --color-env-var-bg: rgb(255, 205, 235);
   --status-admin-write-row-bg: #fdebf6;
+  --color-bright-pink: #fd74d6;
 
   /* Primary accent (used sparingly) */
   --color-accent: #280517;
@@ -26,7 +27,7 @@
   /* Semantic colors */
   --color-success: #27272a;
   --color-success-bg: #e4e4e7;
-  --color-error: red;
+  --color-error: var(--color-bright-pink);
   --color-error-bg: #e4e4e7;
   --color-warning: #3f3f46;
   --color-warning-bg: #f4f4f5;
@@ -36,6 +37,9 @@
 
   /* Borders */
   --border-hairline: 0.5px solid var(--color-300);
+  --striped-bg: repeating-linear-gradient(-45deg, #fffafd, #fffafd 10px, #faf2fa 10px, #faf2fa 20px);
+  --striped-bright-bg: repeating-linear-gradient(-45deg, rgba(255, 250, 253, 0.5), rgba(255, 250, 253, 0.5) 10px, #fd74d6 10px, #fd74d6 20px);
+  --striped-testmode-bg: repeating-linear-gradient(-45deg, rgba(148, 198, 136, 0.85), rgba(148, 198, 136, 0.85) 10px, #50bc40 10px, #50bc40 20px);
   /* Semantic panel colors that follow the page theme. */
   --page-bg: var(--color-back);
   --page-fg: var(--color-900);
@@ -63,7 +67,7 @@
 
   /* Typography scale */
   --text-xs: 0.8571rem;
-  --text-sm: 0.9714rem;
+  --text-sm: 1rem;
   --text-base: 1rem;
   --text-md: 1.0286rem;
   --text-lg: 1.1429rem;
@@ -220,13 +224,7 @@ html {
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background: repeating-linear-gradient(
-  -45deg,
-  #fffafd,
-  #fffafd 10px,
-  #faf2fa 10px,
-  #faf2fa 20px
-  );
+  background: var(--striped-bg);
   color: var(--page-fg);
   padding: 20px;
   min-height: 100vh;
@@ -798,7 +796,55 @@ code.env-var {
 }
 
 .controls-grid--config {
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(100%, 1fr));
+  gap: 0;
+}
+.controls-grid--config .panel-soft {
+  border-bottom: var(--border-hairline);
+}
+
+.config-edit-pane--dirty {
+  border-left: 3px solid var(--color-bright-pink);
+}
+
+.config-edit-pane--dirty > h3::after {
+  content: "Unsaved Changes";
+  float: right;
+  margin-left: 8px;
+  font-size: var(--text-xs);
+  font-weight: lighter;
+  color: var(--color-bright-pink);
+  letter-spacing: 0.02em;
+}
+
+.config-save-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  background: var(--striped-bright-bg);
+  font-size: var(--text-2xl);
+}
+
+.config-save-bar__meta {
+  width: 100%;
+  background: var(--color-back);
+  padding: 10px;
+}
+
+.config-save-bar__warning {
+  color: var(--color-error);
+}
+
+.config-save-bar .btn {
+  width: auto;
+  min-width: 180px;
+  float: right;
 }
 
 .controls-grid--tuning {
@@ -928,11 +974,12 @@ code.env-var {
   top: 0;
   left: 0;
   width: 100%;
-  background: var(--color-warning-bg);
-  color: var(--color-warning);
+  background: var(--striped-testmode-bg);
+  color: var(--color-back);
   padding: 12px 20px;
   font-weight: 600;
   text-align: center;
+  z-index: 100000000;
   animation: pulse 2s infinite;
 }
 
@@ -1054,13 +1101,19 @@ input:checked + .toggle-slider:before {
   white-space: nowrap;
 }
 
-#save-durations-btn {
-  margin-top: 5px;
-}
-
 @media (max-width: 720px) {
   .duration-inputs {
     grid-template-columns: 1fr;
+  }
+
+  .config-save-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .config-save-bar .btn {
+    width: 100%;
+    min-width: 0;
   }
 }
 
@@ -1280,6 +1333,10 @@ input:checked + .toggle-slider:before {
 .toggle-row .toggle-switch {
   justify-self: end;
   margin-right: 0;
+}
+
+#advanced-config-json {
+  min-height: 300px;
 }
 
 /* ===========================================
@@ -1545,20 +1602,13 @@ input:checked + .toggle-slider:before {
     --inline-link-focus-ring: rgba(255, 165, 216, 0.42);
     --color-env-var-bg: rgb(125, 75, 105);
     --status-admin-write-row-bg: rgba(255, 165, 216, 0.18);
+    --striped-bg: repeating-linear-gradient(-45deg,#200b24,#200b24 10px,#251e24 10px,#251e24 20px);
+    --striped-bright-bg: repeating-linear-gradient(-45deg, #200b24,#200b24 10px,#aa16a0 10px,#aa16a0 20px);
   }
 
-  body, .container, .card, .info-panel, .robots-preview {
+  .container, .card, .info-panel, .robots-preview {
     background: var(--color-100);
     color: var(--color-800);
-  }
-  body {
-    background: repeating-linear-gradient(
-    -45deg,
-    #200b24,
-    #200b24 10px,
-    #251e24 10px,
-    #251e24 20px
-    );
   }
 
   .chart-container, .maze-crawlers {

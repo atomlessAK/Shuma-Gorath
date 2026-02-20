@@ -1,4 +1,10 @@
 import { formatCompactNumber } from '../../domain/core/format.js';
+import {
+  classifyIpRangeFallback,
+  formatIpRangeReasonLabel,
+  isIpRangeReason,
+  parseIpRangeOutcome
+} from '../../domain/ip-range-policy.js';
 
 const CHALLENGE_REASON_LABELS = Object.freeze({
   incorrect: 'Incorrect',
@@ -35,6 +41,32 @@ const NOT_A_BOT_LATENCY_LABELS = Object.freeze({
   '1_3s': '1-3s',
   '3_10s': '3-10s',
   '10s_plus': '10s+'
+});
+
+const IP_RANGE_SOURCE_LABELS = Object.freeze({
+  custom: 'Custom Rule',
+  managed: 'Managed Set',
+  unknown: 'Unknown'
+});
+
+const IP_RANGE_ACTION_LABELS = Object.freeze({
+  forbidden_403: '403 Forbidden',
+  custom_message: 'Custom Message',
+  drop_connection: 'Drop Connection',
+  redirect_308: '308 Redirect',
+  rate_limit: 'Rate Limit',
+  honeypot: 'Honeypot',
+  maze: 'Maze',
+  tarpit: 'Tarpit',
+  unknown: 'Unknown'
+});
+
+const IP_RANGE_FALLBACK_LABELS = Object.freeze({
+  none: 'Direct',
+  challenge: 'Fallback Challenge',
+  maze: 'Fallback Maze',
+  block: 'Fallback Block',
+  block_missing_redirect: 'Block (Missing Redirect URL)'
 });
 
 const toNonNegativeNumber = (value) => {
@@ -88,6 +120,138 @@ const deriveTrendSeries = (trend = []) => {
   return {
     labels: points.map((point) => formatTrendTimestamp(Number(point.ts || 0))),
     data: points.map((point) => Number(point.total || 0))
+  };
+};
+
+const incrementCount = (target, key, amount = 1) => {
+  const normalizedKey = String(key || '').trim() || 'unknown';
+  target[normalizedKey] = Number(target[normalizedKey] || 0) + Number(amount || 0);
+};
+
+const toSortedCountEntries = (target) =>
+  Object.entries(target && typeof target === 'object' ? target : {})
+    .sort((left, right) => Number(right[1] || 0) - Number(left[1] || 0));
+
+const normalizeMode = (value) => {
+  const mode = String(value || '').trim().toLowerCase();
+  if (mode === 'advisory' || mode === 'enforce' || mode === 'off') return mode;
+  return 'off';
+};
+
+const TREND_POINT_LIMIT = 24;
+
+export const deriveIpRangeMonitoringViewModel = (
+  events = [],
+  configSnapshot = {},
+  nowUnix = Math.floor(Date.now() / 1000)
+) => {
+  const rows = Array.isArray(events) ? events : [];
+  const config = configSnapshot && typeof configSnapshot === 'object' ? configSnapshot : {};
+
+  const reasonCounts = {};
+  const sourceCounts = {};
+  const actionCounts = {};
+  const detectionCounts = {};
+  const sourceIdCounts = {};
+  const fallbackCounts = {};
+  const trendBuckets = {};
+  let totalMatches = 0;
+
+  rows.forEach((entry) => {
+    const reason = String(entry?.reason || '').trim().toLowerCase();
+    if (!isIpRangeReason(reason)) return;
+    totalMatches += 1;
+
+    const parsed = parseIpRangeOutcome(entry?.outcome);
+    const source = String(parsed.source || 'unknown').toLowerCase();
+    const action = String(parsed.action || 'unknown').toLowerCase();
+    const detection = String(parsed.detection || 'unknown').toUpperCase();
+    const sourceId = String(parsed.sourceId || 'unknown').toLowerCase();
+    const fallback = classifyIpRangeFallback(reason, parsed);
+
+    incrementCount(reasonCounts, reason);
+    incrementCount(sourceCounts, source);
+    incrementCount(actionCounts, action);
+    incrementCount(detectionCounts, detection);
+    incrementCount(sourceIdCounts, sourceId);
+    incrementCount(fallbackCounts, fallback);
+
+    const ts = Number(entry?.ts || 0);
+    if (Number.isFinite(ts) && ts > 0) {
+      const hour = Math.floor(ts / 3600) * 3600;
+      trendBuckets[hour] = Number(trendBuckets[hour] || 0) + 1;
+    }
+  });
+
+  const sortedHours = Object.keys(trendBuckets)
+    .map((rawHour) => Number(rawHour))
+    .filter((hour) => Number.isFinite(hour))
+    .sort((left, right) => left - right);
+  const trendStartIndex = Math.max(0, sortedHours.length - TREND_POINT_LIMIT);
+  const trendHours = sortedHours.slice(trendStartIndex);
+  const trend = {
+    labels: trendHours.map((hour) => formatTrendTimestamp(hour)),
+    data: trendHours.map((hour) => Number(trendBuckets[hour] || 0))
+  };
+
+  const managedSets = Array.isArray(config.ip_range_managed_sets)
+    ? config.ip_range_managed_sets
+    : [];
+  const managedPolicies = Array.isArray(config.ip_range_managed_policies)
+    ? config.ip_range_managed_policies
+    : [];
+  const customRules = Array.isArray(config.ip_range_custom_rules)
+    ? config.ip_range_custom_rules
+    : [];
+  const emergencyAllowlist = Array.isArray(config.ip_range_emergency_allowlist)
+    ? config.ip_range_emergency_allowlist
+    : [];
+  const managedStaleCount = managedSets.filter((set) => set?.stale === true).length;
+  const managedMaxStalenessHours = toNonNegativeNumber(config.ip_range_managed_max_staleness_hours);
+  const generatedAtUnix = toNonNegativeNumber(config.ip_range_managed_catalog_generated_at_unix);
+  const catalogAgeHours = generatedAtUnix > 0 && nowUnix >= generatedAtUnix
+    ? Math.floor((nowUnix - generatedAtUnix) / 3600)
+    : null;
+  const staleByAge = Number.isFinite(catalogAgeHours) && managedMaxStalenessHours > 0
+    ? Number(catalogAgeHours) > managedMaxStalenessHours
+    : false;
+  const catalogStale = managedStaleCount > 0 || staleByAge;
+
+  return {
+    mode: normalizeMode(config.ip_range_policy_mode),
+    totalMatches,
+    totalFallbacks: toNonNegativeNumber(totalMatches - Number(fallbackCounts.none || 0)),
+    uniqueSourceIds: Object.keys(sourceIdCounts).filter((key) => key !== 'unknown').length,
+    reasons: toSortedCountEntries(reasonCounts),
+    sources: toSortedCountEntries(sourceCounts),
+    actions: toSortedCountEntries(actionCounts),
+    detections: toSortedCountEntries(detectionCounts),
+    sourceIds: toSortedCountEntries(sourceIdCounts),
+    fallbacks: toSortedCountEntries(fallbackCounts),
+    trend,
+    catalog: {
+      version: String(config.ip_range_managed_catalog_version || '-'),
+      generatedAt: String(config.ip_range_managed_catalog_generated_at || '-'),
+      ageHours: Number.isFinite(catalogAgeHours) ? Number(catalogAgeHours) : null,
+      stale: catalogStale,
+      managedSets: managedSets.map((set) => ({
+        setId: String(set?.set_id || '-'),
+        provider: String(set?.provider || '-'),
+        version: String(set?.version || '-'),
+        generatedAt: String(set?.generated_at || '-'),
+        entryCount: toNonNegativeNumber(set?.entry_count),
+        stale: set?.stale === true
+      })),
+      managedSetCount: managedSets.length,
+      managedSetStaleCount: managedStaleCount,
+      managedPolicyCount: managedPolicies.length,
+      managedPolicyEnabledCount: managedPolicies.filter((policy) => policy?.enabled === true).length,
+      customRuleCount: customRules.length,
+      customRuleEnabledCount: customRules.filter((rule) => rule?.enabled === true).length,
+      emergencyAllowlistCount: emergencyAllowlist.length,
+      managedMaxStalenessHours,
+      allowStaleManagedEnforce: config.ip_range_allow_stale_managed_enforce === true
+    }
   };
 };
 
@@ -295,6 +459,9 @@ export const derivePrometheusHelperViewModel = (prometheusData = {}, origin = ''
 
 export {
   CHALLENGE_REASON_LABELS,
+  IP_RANGE_ACTION_LABELS,
+  IP_RANGE_FALLBACK_LABELS,
+  IP_RANGE_SOURCE_LABELS,
   NOT_A_BOT_OUTCOME_LABELS,
   NOT_A_BOT_LATENCY_LABELS,
   POW_REASON_LABELS,

@@ -1,4 +1,5 @@
 <script>
+  import { onMount } from 'svelte';
   import TabStateMessage from './primitives/TabStateMessage.svelte';
 
   export let managed = false;
@@ -16,6 +17,7 @@
   let weightRateMedium = 1;
   let weightRateHigh = 2;
   let savingBotness = false;
+  let warnOnUnload = false;
 
   let baseline = {
     notABotThreshold: 2,
@@ -96,6 +98,20 @@
     }
   }
 
+  const handleBeforeUnload = (event) => {
+    if (!warnOnUnload) return;
+    event.preventDefault();
+    event.returnValue = '';
+  };
+
+  onMount(() => {
+    if (typeof window === 'undefined') return undefined;
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  });
+
   $: writable = configSnapshot && configSnapshot.admin_config_write_enabled === true;
   $: notABotDefault = parseInteger(configSnapshot?.not_a_bot_risk_threshold_default, 2);
   $: challengeDefault = parseInteger(configSnapshot?.challenge_puzzle_risk_threshold_default, 3);
@@ -130,6 +146,15 @@
     Number(weightRateHigh) !== baseline.weightRateHigh
   );
   $: saveBotnessDisabled = !writable || !botnessDirty || !botnessValid || savingBotness;
+  $: saveAllTuningDisabled = saveBotnessDisabled;
+  $: saveAllTuningLabel = savingBotness ? 'Saving...' : 'Save all changes';
+  $: saveAllTuningSummary = botnessDirty
+    ? '1 section with unsaved changes'
+    : 'No unsaved changes';
+  $: saveAllTuningInvalidText = botnessDirty && !botnessValid
+    ? 'Fix invalid tuning values before saving.'
+    : '';
+  $: warnOnUnload = writable && botnessDirty;
 
   $: {
     const nextVersion = Number(configVersion || 0);
@@ -143,6 +168,7 @@
 <section
   id="dashboard-panel-tuning"
   class="admin-group config-edit-pane"
+  class:config-edit-pane--dirty={botnessDirty}
   data-dashboard-tab-panel="tuning"
   aria-labelledby="dashboard-tab-tuning"
   hidden={managed ? !isActive : false}
@@ -232,7 +258,21 @@
           </div>
         </div>
       </div>
-      <button id="save-botness-config" class="btn btn-submit" disabled={saveBotnessDisabled} on:click={saveBotness}>Save Botness Settings</button>
+    </div>
+    <div
+      id="tuning-save-all-bar"
+      class="config-save-bar panel panel-border"
+      class:hidden={!writable || !botnessDirty}
+    >
+      <div class="config-save-bar__meta">
+        <span id="tuning-unsaved-summary" class="text-muted">{saveAllTuningSummary}</span>
+        {#if saveAllTuningInvalidText}
+          <span id="tuning-invalid-summary" class="config-save-bar__warning">{saveAllTuningInvalidText}</span>
+        {/if}
+        <button id="save-tuning-all" class="btn btn-submit" disabled={saveAllTuningDisabled} on:click={saveBotness}>
+          {saveAllTuningLabel}
+        </button>
+      </div>
     </div>
   </div>
 </section>

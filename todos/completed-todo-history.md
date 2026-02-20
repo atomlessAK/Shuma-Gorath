@@ -2,6 +2,27 @@
 
 Moved from active TODO files on 2026-02-14.
 
+## Additional completions (2026-02-20)
+
+### P1 IP Range Policy Controls
+
+- [x] IPR-1 Add typed IP-range policy config model (`off|advisory|enforce`, emergency allowlist, custom rules, managed-set policies) with strict schema validation.
+- [x] IPR-2 Implement runtime CIDR evaluation engine with deterministic precedence:
+  emergency allowlist > operator custom rules > managed set policies > default pipeline.
+- [x] IPR-3 Implement response-action matrix for IP-range matches:
+  `403_forbidden`, `custom_message`, `drop_connection`, `redirect_308`, `rate_limit`, `honeypot`, `maze`, `tarpit` with deterministic fallback behavior.
+- [x] IPR-4 Add advisory/dry-run mode behavior: fully log/telemetry match outcomes while allowing normal request flow.
+- [x] IPR-5 Add managed built-in set catalog with provenance/version metadata and official source snapshots:
+  OpenAI (`gptbot`, `searchbot`, `chatgpt-user`) + GitHub `copilot`.
+- [x] IPR-6 Add managed-set update tooling with anti-poisoning guardrails:
+  source allowlist, HTTPS-only, schema checks, CIDR validation, broad-prefix guards, entry caps.
+- [x] IPR-7 Add explicit "official source unavailable" handling for DeepSeek managed set (research-tracked gap; no unverified defaults).
+- [x] IPR-8 Add admin API read/write + config export coverage for all IP-range policy fields.
+- [x] IPR-9 Add observability for IP-range policy (matched source/action/mode, advisory vs enforce, fallback counts).
+- [x] IPR-10 Add unit/integration coverage for precedence, action routing, advisory mode, and managed/custom override interactions.
+- [x] IPR-11 Document operator runbook: false-positive mitigation, rollout sequence, rollback, stale-feed handling, and cost controls.
+- [x] IPR-12 Enforce managed-catalog staleness controls in runtime (`ip_range_managed_max_staleness_hours`, `ip_range_allow_stale_managed_enforce`) with admin/docs visibility.
+
 ## Additional completions (2026-02-19)
 
 ### P0 Dashboard Monitoring Freshness + Efficiency Remediation (Next Priority)
